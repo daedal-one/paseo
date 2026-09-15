@@ -508,6 +508,8 @@ Use `npm run build:server` whenever you have changed any daemon/server-facing pa
 
 The app Metro config disables Watchman and uses Metro's node crawler for exports. Keep that invariant unless you have verified production app exports on machines with and without Watchman installed; distro Watchman builds can differ in capabilities and change Metro's crawl behavior.
 
+Metro resolves source files to their real filesystem paths. A symlinked dependency directory must not give React Navigation separate module identities for its provider and hooks. Keep this normalization for shared or external dependency caches; otherwise a workspace can fail to open even though the app initially renders.
+
 For tighter loops, you can rebuild a single workspace:
 
 - Changed `packages/protocol/src/*` or `packages/client/src/*`: `npm run build:client`.

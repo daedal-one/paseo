@@ -391,7 +391,16 @@ async function resolveRequestedReleaseChannel(
 // IPC registration
 // ---------------------------------------------------------------------------
 
-export function createDaemonCommandHandlers(): Record<string, DesktopCommandHandler> {
+export function createDaemonCommandHandlers(
+  options: { allowDaemonManagement: boolean } = { allowDaemonManagement: false },
+): Record<string, DesktopCommandHandler> {
+  function manageDaemon<T>(operation: () => T): T {
+    if (!options.allowDaemonManagement) {
+      throw new Error("DESKTOP_DAEMON_MANAGEMENT_DISABLED");
+    }
+    return operation();
+  }
+
   return {
     ...createDesktopSettingsCommandHandlers({ settingsStore: getDesktopSettingsStore() }),
     desktop_get_runtime_info: () => ({
@@ -399,15 +408,17 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
       runningUnderARM64Translation: isRunningUnderARM64Translation(),
     }),
     desktop_daemon_status: () => resolveDesktopDaemonStatus(),
-    start_desktop_daemon: () => startDaemon(),
+    start_desktop_daemon: () => manageDaemon(startDaemon),
     stop_desktop_daemon: (args) =>
-      stopDesktopDaemon(
-        parseDesktopDaemonStopReason(args),
-        typeof args?.pid === "number" && typeof args.startedAt === "string"
-          ? { pid: args.pid, startedAt: args.startedAt }
-          : undefined,
+      manageDaemon(() =>
+        stopDesktopDaemon(
+          parseDesktopDaemonStopReason(args),
+          typeof args?.pid === "number" && typeof args.startedAt === "string"
+            ? { pid: args.pid, startedAt: args.startedAt }
+            : undefined,
+        ),
       ),
-    restart_desktop_daemon: () => restartDaemon(),
+    restart_desktop_daemon: () => manageDaemon(restartDaemon),
     desktop_daemon_logs: () => getDaemonLogs(),
     desktop_sandbox_diagnostics: () =>
       describeSandbox({
@@ -450,7 +461,9 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
       return downloadAndInstallUpdate(
         { currentVersion, releaseChannel: await resolveRequestedReleaseChannel(args) },
         async () => {
-          await stopDesktopDaemon("app_update");
+          if (options.allowDaemonManagement) {
+            await stopDesktopDaemon("app_update");
+          }
         },
       );
     },
@@ -462,8 +475,8 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
   };
 }
 
-export function registerDaemonManager(): void {
-  const handlers = createDaemonCommandHandlers();
+export function registerDaemonManager(options: { allowDaemonManagement: boolean }): void {
+  const handlers = createDaemonCommandHandlers(options);
 
   ipcMain.handle(
     "paseo:invoke",

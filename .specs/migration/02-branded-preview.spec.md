@@ -4,9 +4,9 @@ type: task
 status: accepted
 summary: "Deliver the first branded desktop preview."
 owners: [daedal-one]
-progress: pending
+progress: in-progress
 addresses: ["REQ:frontend/brand", "REQ:frontend/desktop", "REQ:frontend/release-and-cutover"]
-blocked_by: ["TASK:migration/01-contract-baseline"]
+blocked_by: []
 ---
 
 # Deliver the first branded desktop preview

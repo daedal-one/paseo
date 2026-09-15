@@ -2,16 +2,15 @@
   "name": "@getpaseo/desktop",
   "version": "0.8.0",
   "private": true,
-  "description": "Paseo desktop app (Electron wrapper)",
-  "homepage": "https://paseo.sh",
+  "description": "Daedal DSH desktop interface for DeepSeek Harness",
+  "homepage": "https://github.com/daedal-one/paseo",
   "license": "Apache-2.0",
   "author": {
-    "name": "Mohamed Boudra",
-    "email": "hello@moboudra.com"
+    "name": "daedal-one"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/getpaseo/paseo.git"
+    "url": "https://github.com/daedal-one/paseo.git"
   },
   "main": "dist/main.js",
   "scripts": {
@@ -46,5 +45,5 @@
     "vitest": "^4.1.6",
     "wait-on": "8.0.5"
   },
-  "desktopName": "Paseo.desktop"
+  "desktopName": "Daedal DSH.desktop"
 }

@@ -4,7 +4,7 @@ type: task
 status: accepted
 summary: "Approve the migration baseline."
 owners: [daedal-one]
-progress: pending
+progress: in-progress
 addresses:
   [
     "INV:frontend/dsh-authority",

@@ -42,11 +42,19 @@ Open <http://localhost:8083>, connect directly to `127.0.0.1:6769`, and choose *
 
 The mobile app in this fork includes structured question answers; use it for multi-select choices containing commas. Older clients can answer single-choice and free-text questions, but the DSH provider rejects ambiguous multi-select answers.
 
+## Desktop preview
+
+Daedal DSH desktop connects to the existing companion at `127.0.0.1:6769`. The preview uses the current DSH bridge; native DSH client integration remains a separate migration task. Keep the companion host running before opening the desktop app.
+
+The shell does not start, stop, restart or upgrade a local Paseo daemon, and closing it leaves the external DSH host running. If the companion is unavailable, the app does not fall back to an unrelated daemon on port 6767. Saved remote hosts can still be selected in the app.
+
+The desktop product uses daedal-one assets and the fork-owned GitHub update destination. A local ad-hoc-signed preview is not a notarized release or proof of TestFlight behavior. Directory-only packages have no update manifest; automatic-update qualification requires a release artifact. The installed iPhone app retains its bundle identifier and Expo project.
+
 ## Test on an iPhone
 
 ### Pair once, discover other hosts
 
-With Tailscale connected on the Mac and iPhone, run `npm run companion:pair` on the Mac. Open the generated `.dev/companion-pair.png`, then choose **Scan QR code** in DSH Companion. Confirm the host name and connect. The matching `.txt` file can also be pasted into **Paste pairing link**. The QR contains a private address and expected host identity; a host password, if configured, is entered separately on the phone.
+With Tailscale connected on the Mac and iPhone, run `npm run companion:pair` on the Mac. Open the generated `.dev/companion-pair.png`, then choose **Scan QR code** in Daedal DSH. Confirm the host name and connect. The matching `.txt` file can also be pasted into **Paste pairing link**. The QR contains a private address and expected host identity; a host password, if configured, is entered separately on the phone.
 
 After pairing, **Settings → Add host** searches automatically through connected hosts that support discovery. Tap a discovered name to connect. The phone verifies both reachability and host identity before saving it. Existing saved hosts remain available when discovery cannot run. At least one paired host must be online to search; the phone does not need a Tailscale admin credential.
 
@@ -74,7 +82,7 @@ For hosts outside this tailnet, use Paseo's existing [encrypted relay and pairin
 
 ### Native TestFlight build
 
-The `companion` build profile uses **DSH Companion**, bundle ID `com.cavenditti.dshcompanion`, URL scheme `dsh-companion`, Apple team `PN9822BHR7`, and the [cavenditti/dsh-companion Expo project](https://expo.dev/accounts/cavenditti/projects/dsh-companion). Expo manages signing and increments the remote iOS build number. Build and submit with the companion command so the fork uses this app identity:
+The `companion` build profile uses **Daedal DSH**, bundle ID `com.cavenditti.dshcompanion`, URL scheme `dsh-companion`, Apple team `PN9822BHR7`, and the [cavenditti/dsh-companion Expo project](https://expo.dev/accounts/cavenditti/projects/dsh-companion). Expo manages signing and increments the remote iOS build number. Build and submit with the companion command so the fork uses this app identity:
 
 ```sh
 npm run companion:testflight
@@ -82,7 +90,7 @@ npm run companion:testflight
 
 This builds on EAS and submits the result to App Store Connect. Use `npm run companion:ios:build` to build separately, then `npm run companion:ios:submit` to submit the latest companion iOS build. EAS needs a distribution certificate, an App Store provisioning profile for this bundle ID, and an App Store Connect app record. The first setup is interactive; Apple sign-in and two-factor authentication happen through Apple's/EAS's login flow. Subsequent releases reuse EAS-managed credentials. Never put passwords, verification codes, or signing keys in this repository.
 
-The [App Store Connect record](https://appstoreconnect.apple.com/apps/6812239241/testflight/ios) is `6812239241`. Its internal group **Team (Expo)** grants access to the Apple account used for signing. After Apple processes the upload, install **DSH Companion** from TestFlight, pair using the QR above, and choose **Import session**. The custom URL scheme keeps the fork distinct from Paseo. Direct connection remains available for hosts outside the discovery setup.
+The [App Store Connect record](https://appstoreconnect.apple.com/apps/6812239241/testflight/ios) is `6812239241`. Its internal group **Team (Expo)** grants access to the Apple account used for signing. After Apple processes the upload, install **Daedal DSH** from TestFlight, pair using the QR above, and choose **Import session**. The custom URL scheme keeps the fork distinct from Paseo. Direct connection remains available for hosts outside the discovery setup.
 
 An EAS build completing and an EAS submission succeeding are separate steps. Apple then processes the upload before it becomes installable in TestFlight. Check the exact version and build number on the app's TestFlight page; a successful JavaScript export does not establish native-device behavior. See [Expo's TestFlight guide](https://docs.expo.dev/submit/testflight/) for the current processing steps.
 

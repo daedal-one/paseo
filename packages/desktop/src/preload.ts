@@ -29,8 +29,14 @@ interface AttachedBrowserRegistration {
   webContentsId: number;
 }
 
+contextBridge.exposeInMainWorld("__PASEO_INITIAL_DAEMON_CONNECTION__", {
+  listen: "127.0.0.1:6769",
+  useTls: false,
+});
+
 contextBridge.exposeInMainWorld("paseoDesktop", {
   platform: process.platform,
+  managesDaemon: false,
   windowChromeMode: readWindowChromeMode(),
   invoke: (command: string, args?: Record<string, unknown>) =>
     ipcRenderer.invoke("paseo:invoke", command, args),

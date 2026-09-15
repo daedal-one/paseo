@@ -1,9 +1,9 @@
 npmRebuild: false
-appId: sh.paseo.desktop
-productName: Paseo
-executableName: Paseo
+appId: one.daedal.dsh
+productName: Daedal DSH
+executableName: Daedal DSH
 protocols:
-  - name: Paseo agent link
+  - name: Daedal DSH agent link
     schemes:
       - paseo
 afterPack: ./scripts/after-pack.js
@@ -33,10 +33,10 @@ extraResources:
     to: editor-target-icons
 publish:
   provider: github
-  owner: getpaseo
+  owner: daedal-one
   repo: paseo
 mac:
-  artifactName: "Paseo-${version}-${arch}.${ext}"
+  artifactName: "Daedal DSH-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
@@ -55,9 +55,9 @@ mac:
 linux:
   category: Development
   icon: assets
-  artifactName: "Paseo-${version}-${arch}.${ext}"
-  maintainer: "Mohamed Boudra <hello@moboudra.com>"
-  vendor: "Paseo"
+  artifactName: "Daedal DSH-${version}-${arch}.${ext}"
+  maintainer: "daedal-one"
+  vendor: "Daedal DSH"
   extraResources:
     - from: bin/paseo
       to: bin/paseo
@@ -72,15 +72,15 @@ rpm:
   afterInstall: scripts/linux-sandbox/after-install.tpl
 appImage:
   # A nonempty argument list replaces builder's hardcoded --no-sandbox default.
-  executableArgs: ["--class=Paseo"]
+  executableArgs: ["--class=Daedal DSH"]
   # Keep the AppImage filename stable across versions (no ${version}) so
   # electron-updater overwrites the file in place instead of renaming it to a new
   # versioned path. A rename orphans the old binary, breaks desktop shortcuts, and
   # dangles the ~/.local/bin/paseo CLI symlink, which points at $APPIMAGE. The
   # version stays discoverable via the release tag and the in-app version.
-  artifactName: "Paseo-${arch}.${ext}"
+  artifactName: "Daedal DSH-${arch}.${ext}"
 win:
-  artifactName: "Paseo-Setup-${version}-${arch}.${ext}"
+  artifactName: "Daedal DSH-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
   extraResources:
     - from: bin/paseo.cmd

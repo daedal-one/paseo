@@ -862,7 +862,7 @@ export const ptBR: TranslationResources = {
           mergePrNoGithub:
             "Merge da PR não está disponível agora porque o GitHub não está conectado",
           archiveNotWorktree:
-            "Arquivar não está disponível aqui porque este workspace não foi criado como um worktree do Paseo",
+            "Arquivar não está disponível aqui porque este workspace não foi criado como um worktree do Daedal DSH",
           mergePrNoForge:
             "Merge da {{noun}} não está disponível agora porque o {{brand}} não está conectado",
           mergePrMissing: "Merge da PR não está disponível porque ainda não há uma pull request",
@@ -1157,7 +1157,7 @@ export const ptBR: TranslationResources = {
       discord: "Discord",
       github: "Criar issue no GitHub",
       whatsNew: "Novidades",
-      appName: "Paseo",
+      appName: "Daedal DSH",
     },
     sections: {
       sessions: "Histórico",
@@ -1304,7 +1304,7 @@ export const ptBR: TranslationResources = {
       close: "Fechar janela",
     },
     quitting: {
-      title: "Saindo do Paseo...",
+      title: "Saindo do Daedal DSH...",
       detail: "Parando o daemon local.",
     },
     daemon: {
@@ -1319,20 +1319,20 @@ export const ptBR: TranslationResources = {
       },
       management: {
         title: "Gerenciar daemon integrado",
-        hint: "Permitir que o Paseo inicie e pare o daemon integrado",
+        hint: "Permitir que o Daedal DSH inicie e pare o daemon integrado",
         pauseTitle: "Pausar daemon integrado",
         pauseMessage:
           "Isso vai parar o daemon integrado imediatamente. Agentes e terminais em execução conectados ao daemon integrado serão interrompidos.",
         pauseAndStop: "Pausar e parar",
         registrationFailed:
-          "O daemon integrado foi iniciado, mas o Paseo não conseguiu salvar a conexão localhost. Desative e reative o gerenciamento do daemon ou adicione localhost manualmente.",
+          "O daemon integrado foi iniciado, mas o Daedal DSH não conseguiu salvar a conexão localhost. Desative e reative o gerenciamento do daemon ou adicione localhost manualmente.",
         pausedStopFailed:
-          "O gerenciamento do daemon integrado foi pausado, mas o Paseo não conseguiu parar o daemon.",
+          "O gerenciamento do daemon integrado foi pausado, mas o Daedal DSH não conseguiu parar o daemon.",
         updateFailed: "Não foi possível atualizar o gerenciamento do daemon integrado.",
       },
       keepRunning: {
         title: "Manter daemon em execução ao sair",
-        hint: "O daemon continua em execução quando você sai do Paseo",
+        hint: "O daemon continua em execução quando você sai do Daedal DSH",
       },
       logs: {
         title: "Arquivo de log",
@@ -1402,7 +1402,8 @@ export const ptBR: TranslationResources = {
     },
     rosetta: {
       title: "Baixar a build para Apple Silicon",
-      runningIntel: "Você está executando a build Intel do Paseo pelo Rosetta no Apple Silicon.",
+      runningIntel:
+        "Você está executando a build Intel do Daedal DSH pelo Rosetta no Apple Silicon.",
       highCpu: "Isso causa alto uso de CPU. Baixe a build para Apple Silicon para corrigir.",
       download: "Baixar",
     },
@@ -1444,7 +1445,7 @@ export const ptBR: TranslationResources = {
         microphone: "O status do microfone ainda não foi verificado.",
       },
       testNotification: {
-        title: "Teste de notificação do Paseo",
+        title: "Teste de notificação do Daedal DSH",
         body: "Se você consegue ver isto, as notificações desktop funcionam.",
         notDelivered:
           "A notificação não foi entregue. Verifique Ajustes do Sistema > Notificações.",
@@ -1454,12 +1455,12 @@ export const ptBR: TranslationResources = {
     integrations: {
       cli: {
         statusFailed: "Não foi possível verificar o status de instalação da CLI.",
-        installFailed: "Não foi possível instalar a CLI do Paseo.",
+        installFailed: "Não foi possível instalar a CLI do Daedal DSH.",
       },
     },
   },
   rootError: {
-    title: "O Paseo encontrou um problema.",
+    title: "O Daedal DSH encontrou um problema.",
     body: "Tente novamente para recarregar o app. Se isso continuar acontecendo, inclua os detalhes abaixo ao relatar o problema.",
     details: "Detalhes",
   },
@@ -1554,7 +1555,7 @@ export const ptBR: TranslationResources = {
     },
   },
   onboarding: {
-    title: "Bem-vindo ao Paseo",
+    title: "Bem-vindo ao Daedal DSH",
     subtitle: "Conecte seu computador para começar",
     actions: {
       settings: "Configurações",
@@ -1643,7 +1644,7 @@ export const ptBR: TranslationResources = {
     },
     direct: {
       title: "Conexão direta",
-      helper: "Informe o endereço de um servidor Paseo.",
+      helper: "Informe o endereço de um servidor Daedal DSH.",
       fields: {
         host: "Host",
         port: "Porta",
@@ -1686,7 +1687,7 @@ export const ptBR: TranslationResources = {
     },
     remoteSsh: {
       title: "SSH remoto",
-      helper: "Conecte-se a um daemon Paseo no host remoto.",
+      helper: "Conecte-se a um daemon Daedal DSH no host remoto.",
       fields: {
         target: "Host SSH",
       },
@@ -1743,15 +1744,15 @@ export const ptBR: TranslationResources = {
       enableDescription:
         "O relay permite conectar este dispositivo de qualquer lugar. O tráfego de pareamento é criptografado de ponta a ponta.",
       relayDocs: "Como o relay funciona",
-      relayDocsAccessibility: "Leia como o relay do Paseo funciona",
+      relayDocsAccessibility: "Leia como o relay do Daedal DSH funciona",
       enableRelay: "Ativar relay",
       enablingRelay: "Ativando...",
       notNow: "Agora não",
       directConnectionHint:
         "Sem relay, conecte diretamente por TCP, Tailscale ou outra VPN. Nenhum código QR é criado.",
-      updateRequired: "Atualize o host para ativar o relay pelo Paseo Desktop.",
+      updateRequired: "Atualize o host para ativar o relay pelo Daedal DSH Desktop.",
       unavailable: "Oferta de pareamento indisponível.",
-      hint: "Escaneie este QR code com o Paseo no seu celular ou copie o link abaixo.",
+      hint: "Escaneie este QR code com o Daedal DSH no seu celular ou copie o link abaixo.",
       securityWarning:
         "Trate este link de pareamento como uma senha. Qualquer pessoa com o link pode acessar este daemon.",
       qrUnavailable: "QR code indisponível.",
@@ -1786,7 +1787,7 @@ export const ptBR: TranslationResources = {
   serviceUrl: {
     title: "Abrir URL do serviço",
     message: "Abrir {{url}}?",
-    inPaseo: "No Paseo",
+    inPaseo: "No Daedal DSH",
     externalBrowser: "Navegador externo",
     dontAskAgain: "Não perguntar novamente",
   },
@@ -1906,8 +1907,8 @@ export const ptBR: TranslationResources = {
       other: "usou {{count}} outras ferramentas",
     },
     paseoCalls: {
-      one: "chamou o Paseo {{count}} vez",
-      other: "chamou o Paseo {{count}} vezes",
+      one: "chamou o Daedal DSH {{count}} vez",
+      other: "chamou o Daedal DSH {{count}} vezes",
     },
     and: "e",
   },
@@ -1988,7 +1989,7 @@ export const ptBR: TranslationResources = {
       send: "Enviar",
       sending: "Enviando...",
       sentTitle: "Notificação de teste enviada",
-      sentDescription: "O Paseo entregou a notificação ao sistema operacional.",
+      sentDescription: "O Daedal DSH entregou a notificação ao sistema operacional.",
       sendFailedTitle: "Não foi possível enviar a notificação de teste",
     },
     hostSections: {
@@ -2007,14 +2008,14 @@ export const ptBR: TranslationResources = {
     metadataGeneration: {
       title: "Geração de metadados",
       description:
-        "Escolha o modelo usado pelo Paseo para títulos de espaços de trabalho, nomes de branches, mensagens de commit e rascunhos de pull request",
+        "Escolha o modelo usado pelo Daedal DSH para títulos de espaços de trabalho, nomes de branches, mensagens de commit e rascunhos de pull request",
       selection: "Seleção de modelo",
       automatic: "Automática",
       preferred: "Manual",
-      automaticHint: "O Paseo escolhe um modelo rápido disponível",
-      preferredHint: "Escolha o modelo que o Paseo usa",
+      automaticHint: "O Daedal DSH escolhe um modelo rápido disponível",
+      preferredHint: "Escolha o modelo que o Daedal DSH usa",
       model: "Modelo",
-      fallbackHint: "Se ele não estiver disponível, o Paseo usa outro modelo disponível",
+      fallbackHint: "Se ele não estiver disponível, o Daedal DSH usa outro modelo disponível",
       docs: "Documentação",
       saveError: "Não foi possível atualizar a geração de metadados",
     },
@@ -2023,7 +2024,7 @@ export const ptBR: TranslationResources = {
       browserData: {
         title: "Dados do navegador",
         siteData: "Cookies e dados de sites",
-        description: "As abas do navegador compartilham logins e dados de sites no Paseo.",
+        description: "As abas do navegador compartilham logins e dados de sites no Daedal DSH.",
         clear: "Limpar dados do navegador",
         clearing: "Limpando...",
         confirmTitle: "Limpar dados do navegador?",
@@ -2052,7 +2053,7 @@ export const ptBR: TranslationResources = {
         description: "Onde abrir URLs de scripts em execução",
         options: {
           ask: "Perguntar",
-          inApp: "No Paseo",
+          inApp: "No Daedal DSH",
           external: "Navegador externo",
         },
       },
@@ -2138,7 +2139,7 @@ export const ptBR: TranslationResources = {
         label: "Atualizações do app",
         readyToInstall: "Pronta para instalar: {{version}}",
         installTitle: "Instalar atualização desktop",
-        installMessage: "Isso atualiza o Paseo neste computador",
+        installMessage: "Isso atualiza o Daedal DSH neste computador",
         installConfirm: "Instalar atualização",
         update: "Atualizar",
         updateTo: "Atualizar para {{version}}",
@@ -2369,11 +2370,11 @@ export const ptBR: TranslationResources = {
         title: "Skills de orquestração",
         description: "Ensine seus agentes a orquestrar pela CLI",
         updateAvailable: "Atualização disponível",
-        updateTitle: "Atualizar Paseo skills?",
+        updateTitle: "Atualizar Daedal DSH skills?",
         updateFallback: "Sincronize as skills incluídas com sua máquina.",
-        uninstallTitle: "Desinstalar Paseo skills?",
+        uninstallTitle: "Desinstalar Daedal DSH skills?",
         uninstallMessage:
-          "Remove todas as skills de orquestração do Paseo de ~/.agents, ~/.claude e ~/.codex.",
+          "Remove todas as skills de orquestração do Daedal DSH de ~/.agents, ~/.claude e ~/.codex.",
         choose: "Escolher skills",
         chooseAll: "Todas as skills",
         chooseAllHint:
@@ -2410,9 +2411,9 @@ export const ptBR: TranslationResources = {
         title: "Orquestração",
         unavailable: "Conecte-se a este host para gerenciar a orquestração",
         enableTools: {
-          title: "Ativar ferramentas do Paseo",
+          title: "Ativar ferramentas do Daedal DSH",
           hint: "Agentes poderão gerenciar worktrees, agentes e agendamentos",
-          accessibilityLabel: "Injetar ferramentas do Paseo",
+          accessibilityLabel: "Injetar ferramentas do Daedal DSH",
         },
         systemPrompt: {
           title: "Prompt do sistema",
@@ -2517,15 +2518,15 @@ export const ptBR: TranslationResources = {
             "Este host não está conectado. Aguarde até ele ficar online antes de reiniciar.",
           offlineTitle: "Host offline",
           offlineMessage:
-            "Este host está offline. O Paseo reconecta automaticamente. Aguarde ele voltar a ficar online antes de reiniciar.",
+            "Este host está offline. O Daedal DSH reconecta automaticamente. Aguarde ele voltar a ficar online antes de reiniciar.",
           requestFailedTitle: "Erro",
           requestFailedMessage:
-            "Falha ao enviar a solicitação de reinício. O Paseo reconecta automaticamente. Tente novamente quando o host aparecer como online.",
+            "Falha ao enviar a solicitação de reinício. O Daedal DSH reconecta automaticamente. Tente novamente quando o host aparecer como online.",
           dialogFailedMessage: "Não foi possível abrir o diálogo de confirmação de reinício.",
         },
         update: {
           desktopManagedHint:
-            "Este daemon é gerenciado pelo Paseo Desktop. Atualize o Paseo Desktop no host.",
+            "Este daemon é gerenciado pelo Daedal DSH Desktop. Atualize o Daedal DSH Desktop no host.",
           title: "Atualizar daemon",
           hint: "Atualiza o daemon para a versão mais recente e o reinicia",
           confirm: "Atualizar",
@@ -2687,7 +2688,7 @@ export const ptBR: TranslationResources = {
         newScript: "Novo script",
         editScript: "Editar {{name}}",
         runAsService: "Executar como serviço",
-        serviceHint: "O Paseo supervisiona o processo e atribui uma porta via $PASEO_PORT",
+        serviceHint: "O Daedal DSH supervisiona o processo e atribui uma porta via $PASEO_PORT",
         actions: {
           add: "Adicionar script",
           edit: "Editar",
@@ -2696,7 +2697,7 @@ export const ptBR: TranslationResources = {
       },
       metadata: {
         title: "Geração de metadados",
-        info: "Instruções específicas do projeto injetadas nos prompts de IA que o Paseo usa para gerar metadados. Use-as para aplicar convenções da sua equipe, como nomes de branch, estilo de commit ou formato de PR",
+        info: "Instruções específicas do projeto injetadas nos prompts de IA que o Daedal DSH usa para gerar metadados. Use-as para aplicar convenções da sua equipe, como nomes de branch, estilo de commit ou formato de PR",
         branchName: "Nomes de branch",
         branchNamePlaceholder: "Prefixe branches com feat/ ou fix/, mb/ para branches pessoais",
         commitMessage: "Mensagens de commit",

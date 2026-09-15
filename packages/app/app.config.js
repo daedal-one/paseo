@@ -6,7 +6,7 @@ const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const { getNativeReleaseVersion } = require("./native-release-version");
-const appVariant = process.env.APP_VARIANT ?? "production";
+const appVariant = process.env.APP_VARIANT ?? "companion";
 const isCompanion = appVariant === "companion";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
@@ -67,11 +67,11 @@ function resolveSecretFile(params) {
 
 const variants = {
   companion: {
-    name: "DSH Companion",
+    name: "Daedal DSH",
     packageId: "com.cavenditti.dshcompanion",
   },
   production: {
-    name: "Paseo",
+    name: "Daedal DSH",
     packageId: "sh.paseo",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
@@ -83,7 +83,7 @@ const variants = {
     }),
   },
   development: {
-    name: "Paseo Debug",
+    name: "Daedal DSH Debug",
     packageId: "sh.paseo.debug",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
@@ -96,7 +96,7 @@ const variants = {
   },
 };
 
-const variant = variants[appVariant] ?? variants.production;
+const variant = variants[appVariant] ?? variants.companion;
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
 export default {
@@ -124,7 +124,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#000000",
+        backgroundColor: "#333333",
         foregroundImage: "./assets/images/android-icon-foreground.png",
       },
       edgeToEdgeEnabled: true,
@@ -157,7 +157,8 @@ export default {
           resizeMode: "contain",
           backgroundColor: "#ffffff",
           dark: {
-            backgroundColor: "#000000",
+            image: "./assets/brand/daedal-mark-light.png",
+            backgroundColor: "#333333",
           },
         },
       ],
