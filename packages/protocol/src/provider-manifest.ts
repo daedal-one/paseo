@@ -196,6 +196,14 @@ const MOCK_SLOW_MODES: AgentProviderModeDefinition[] = [
 
 export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
   {
+    id: "dsh",
+    label: "DeepSeek Harness",
+    description: "Connect to existing DeepSeek Harness Web sessions",
+    enabledByDefault: false,
+    defaultModeId: null,
+    modes: [],
+  },
+  {
     id: "claude",
     label: "Claude",
     description: "Anthropic's multi-tool assistant with MCP support, streaming, and deep reasoning",

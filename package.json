@@ -34,6 +34,9 @@
     "packages/cli"
   ],
   "scripts": {
+    "companion:setup": "tsx scripts/companion-setup.ts",
+    "companion:ios:build": "cd packages/app && APP_VARIANT=companion eas build --platform ios --profile companion --local --output ../../.dev/dsh-companion.ipa",
+    "companion:ios:submit": "cd packages/app && APP_VARIANT=companion eas submit --platform ios --profile companion --path ../../.dev/dsh-companion.ipa",
     "dev": "npm run dev:server",
     "dev:win": "powershell ./scripts/dev.ps1",
     "dev:server": "cross-env PASEO_LISTEN=127.0.0.1:6768 ./scripts/dev-daemon.sh",

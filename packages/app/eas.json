@@ -4,6 +4,15 @@
     "appVersionSource": "local"
   },
   "build": {
+    "companion": {
+      "distribution": "store",
+      "env": {
+        "APP_VARIANT": "companion"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
@@ -33,6 +42,9 @@
     }
   },
   "submit": {
+    "companion": {
+      "ios": {}
+    },
     "production": {
       "ios": {
         "ascAppId": "6758887924"

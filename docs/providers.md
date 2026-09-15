@@ -51,6 +51,8 @@ ACP permission options are rendered as ordered actions and Paseo returns the sel
 
 ### Direct
 
+The [DSH companion](dsh-companion.md) uses the existing DSH Web RPC and live-event interfaces to attach native sessions. Its adapter lives under `providers/dsh/`.
+
 Implement the `AgentClient` and `AgentSession` interfaces from `agent-sdk-types.ts` yourself. This gives full control but requires you to handle process management, streaming, permissions, and session persistence from scratch.
 
 Existing direct providers: `claude` (in `providers/claude/agent.ts`), `codex` (`codex-app-server-agent.ts`), `opencode` (`opencode-agent.ts`), `pi` (`providers/pi/agent.ts`), and `omp` (`providers/omp/agent.ts`). The dev-only `mock` provider (`mock-load-test-agent.ts`) is also direct.

@@ -7,6 +7,7 @@ const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
+const isCompanion = appVariant === "companion";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
 
@@ -65,6 +66,10 @@ function resolveSecretFile(params) {
 }
 
 const variants = {
+  companion: {
+    name: "DSH Companion",
+    packageId: "com.cavenditti.dshcompanion",
+  },
   production: {
     name: "Paseo",
     packageId: "sh.paseo",
@@ -97,11 +102,11 @@ const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 export default {
   expo: {
     name: variant.name,
-    slug: "voice-mobile",
+    slug: isCompanion ? "dsh-companion" : "voice-mobile",
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "paseo",
+    scheme: isCompanion ? "dsh-companion" : "paseo",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -188,9 +193,11 @@ export default {
       profileBuild: isProfileBuild,
       router: {},
       eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
+        projectId: isCompanion
+          ? "773deae9-13cd-4e9c-b34e-ddc936d13832"
+          : "0e7f65ce-0367-46c8-a238-2b65963d235a",
       },
     },
-    owner: "getpaseo",
+    owner: isCompanion ? "cavenditti" : "getpaseo",
   },
 };
