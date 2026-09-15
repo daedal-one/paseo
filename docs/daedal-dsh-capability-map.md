@@ -63,7 +63,7 @@ Commands retain confirmed success, confirmed rejection or unknown outcome. Lost 
 
 The packed Gateway service keeps Cordis as a shared dependency. Cordis's normal ESM artifact contains class static blocks; the Expo 54 Babel pipeline requires `@babel/plugin-transform-class-static-block` before its other class transforms. The app declares that transform directly and applies it before the Expo preset's class-property transforms, following the [Babel ordering requirement](https://babeljs.io/docs/babel-plugin-transform-class-static-block). This is a syntax transform, not a runtime implementation of browser APIs.
 
-The complete Gateway service still requires abort reasons, `AbortSignal.any()` and `throwIfAborted()`. React Native 0.81.5's bundled `abort-controller` does not provide these. A carrier-only native probe does not establish full Gateway activation or an authenticated session. Expo already supplies its URL implementation through `whatwg-url-without-unicode`; native probes must use that implementation rather than substitute Node's URL class.
+Pass `createDshAbortController` as the controller factory to both Connection and Gateway. It adds abort reasons and `throwIfAborted()` to DSH-owned controller instances while retaining React Native's cancellation events and leaving globals and prototypes unchanged. Gateway releases composed-signal listeners at operation completion and does not require `AbortSignal.any()`. Native bundle checks remain separate from authenticated session and physical-device acceptance. Expo already supplies its URL implementation through `whatwg-url-without-unicode`; native probes must use that implementation rather than substitute Node's URL class.
 
 ## Work ownership
 
