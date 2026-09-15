@@ -1,5 +1,7 @@
 # Protocol Compatibility
 
+The rules below govern the transitional Paseo daemon protocol. Native DSH connections use the [DSH compatibility requirements and remaining qualification gates](daedal-dsh-capability-map.md#native-integration-decision-gates); incompatible Session data is refused explicitly. Keep the installed bridge path compatible while the native path is qualified.
+
 The app and the daemon are separate products that ship separately. A user updates the app from an app store or a desktop auto-update; they update the daemon when they feel like it. Every combination happens in the wild: new app against an old daemon, old app against a new daemon, and both sides months apart.
 
 In development both sides are always the same version, which is why this is the constraint contributors miss most often.
