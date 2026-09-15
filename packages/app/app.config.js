@@ -111,6 +111,7 @@ export default {
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
+      ...(isCompanion ? { appleTeamId: "PN9822BHR7" } : {}),
       infoPlist: {
         NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
         ITSAppUsesNonExemptEncryption: false,

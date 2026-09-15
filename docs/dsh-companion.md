@@ -54,18 +54,17 @@ For hosts outside this tailnet, use Paseo's existing [encrypted relay and pairin
 
 ### Native TestFlight build
 
-The `companion` build profile uses **DSH Companion**, bundle ID `com.cavenditti.dshcompanion`, URL scheme `dsh-companion`, and the [cavenditti/dsh-companion Expo project](https://expo.dev/accounts/cavenditti/projects/dsh-companion). Build and submit with the companion commands so the fork uses this app identity:
+The `companion` build profile uses **DSH Companion**, bundle ID `com.cavenditti.dshcompanion`, URL scheme `dsh-companion`, Apple team `PN9822BHR7`, and the [cavenditti/dsh-companion Expo project](https://expo.dev/accounts/cavenditti/projects/dsh-companion). Expo manages signing and increments the remote iOS build number. Build and submit with the companion command so the fork uses this app identity:
 
 ```sh
-npm run companion:ios:build
-npm run companion:ios:submit
+npm run companion:testflight
 ```
 
-The first command builds locally with Xcode, CocoaPods, and Fastlane and writes `.dev/dsh-companion.ipa`. EAS needs an Apple Developer Program account, a distribution certificate, and an App Store provisioning profile. Submission needs an App Store Connect app record for this bundle ID; the companion submit profile prompts for it. Apple sign-in and two-factor authentication happen through Apple's/EAS's login flow. Never put passwords or signing keys in this repository.
+This builds on EAS and submits the result to App Store Connect. Use `npm run companion:ios:build` to build separately, then `npm run companion:ios:submit` to submit the latest companion iOS build. EAS needs a distribution certificate, an App Store provisioning profile for this bundle ID, and an App Store Connect app record. The first setup is interactive; Apple sign-in and two-factor authentication happen through Apple's/EAS's login flow. Subsequent releases reuse EAS-managed credentials. Never put passwords, verification codes, or signing keys in this repository.
 
-After Apple processes the upload, add your account to an internal TestFlight group and install **DSH Companion** from TestFlight. In the app, choose **Direct connection**, enter `100.110.130.124:6769` with TLS off while Tailscale is connected, then choose **Import session**. The custom URL scheme keeps the fork distinct from Paseo; use direct connection or paste a pairing payload rather than opening a `paseo://` link.
+The [App Store Connect record](https://appstoreconnect.apple.com/apps/6812239241/testflight/ios) is `6812239241`. Its internal group **Team (Expo)** grants access to the Apple account used for signing. After Apple processes the upload, install **DSH Companion** from TestFlight. In the app, choose **Direct connection**, enter `100.110.130.124:6769` with TLS off while Tailscale is connected, then choose **Import session**. The custom URL scheme keeps the fork distinct from Paseo; use direct connection or paste a pairing payload rather than opening a `paseo://` link.
 
-The profile is configured, but no signed IPA or TestFlight upload has been produced. Apple distribution access and physical-device validation are still required. See [Expo's TestFlight guide](https://docs.expo.dev/submit/testflight/) for the current account and processing steps.
+An EAS build completing and an EAS submission succeeding are separate steps. Apple then processes the upload before it becomes installable in TestFlight. Check the exact version and build number on the app's TestFlight page; a successful JavaScript export does not establish native-device behavior. See [Expo's TestFlight guide](https://docs.expo.dev/submit/testflight/) for the current processing steps.
 
 ## Ownership and recovery
 
