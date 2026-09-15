@@ -1,0 +1,9 @@
+baseline = "forge-spec-v0.7.0"
+project = "PROJECT:daedal-dsh"
+intellect_provider = "forge-intellect"
+
+[[documentation]]
+id = "migration"
+title = "Daedal DSH migration plan"
+root = "docs"
+include = ["daedal-dsh-migration-plan.md"]

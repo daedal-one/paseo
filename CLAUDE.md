@@ -17,7 +17,9 @@ This is an npm workspace monorepo:
 
 ## Docs
 
-`docs/` is the source of truth for system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
+Accepted `.specs/` documents are the authority for durable product intent. Use Forge Spec to inspect impact, render the affected intent, and update TASK progress before behavior changes; run `spec lint` and add accurate `Spec-Ref` commit trailers. Forge Intellect retains attributable action and adherence evidence.
+
+`docs/` holds explanatory system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
 
 At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
 
