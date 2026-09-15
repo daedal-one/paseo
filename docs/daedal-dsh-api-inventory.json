@@ -1,0 +1,1623 @@
+{
+  "rows": [
+    {
+      "package": "@deepseek-ai/dsh-agent-default-model",
+      "owner": "packages/core/agent-default-model",
+      "methods": [
+        {
+          "namespace": "agentModels",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/core/agent-default-model/src/index.ts",
+            "line": 409,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentModels",
+          "method": "reset",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/core/agent-default-model/src/index.ts",
+            "line": 469,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentModels",
+          "method": "save",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/core/agent-default-model/src/index.ts",
+            "line": 449,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-agent-presets",
+      "owner": "packages/preset/agent-presets",
+      "methods": [
+        {
+          "namespace": "agentPresets",
+          "method": "copy",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/preset/agent-presets/src/index.ts",
+            "line": 566,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentPresets",
+          "method": "deletePreset",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/preset/agent-presets/src/index.ts",
+            "line": 604,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentPresets",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/preset/agent-presets/src/index.ts",
+            "line": 262,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentPresets",
+          "method": "read",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/preset/agent-presets/src/index.ts",
+            "line": 514,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "agentPresets",
+          "method": "select",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/preset/agent-presets/src/index.ts",
+            "line": 696,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-commands",
+      "owner": "packages/interaction/commands",
+      "methods": [
+        {
+          "namespace": "commands",
+          "method": "execute",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/interaction/commands/src/index.ts",
+            "line": 356,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "commands",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/interaction/commands/src/index.ts",
+            "line": 310,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-api-settings-controller",
+      "owner": "packages/api/settings-controller",
+      "methods": [
+        {
+          "namespace": "authorization",
+          "method": "answer",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/authorization.ts",
+            "line": 185,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "authorization",
+          "method": "cancel",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/authorization.ts",
+            "line": 196,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "authorization",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/authorization.ts",
+            "line": 74,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "authorization",
+          "method": "signIn",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "stream",
+          "source": {
+            "file": "packages/api/settings-controller/src/authorization.ts",
+            "line": 94,
+            "column": 10
+          }
+        },
+        {
+          "namespace": "authorization",
+          "method": "signOut",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/authorization.ts",
+            "line": 203,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "credentials",
+          "method": "describe",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/credentials.ts",
+            "line": 83,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "credentials",
+          "method": "set",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/credentials.ts",
+            "line": 100,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "credentials",
+          "method": "unset",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/credentials.ts",
+            "line": 113,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "canOpenAgentPresetDirectory",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 137,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "describe",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 123,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "mutate",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 186,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "openAgentPresetDirectory",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 232,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "openSettingsDocument",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 201,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "replace",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 167,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "settings",
+          "method": "update",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/settings-controller/src/index.ts",
+            "line": 150,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-goal",
+      "owner": "packages/goal/goal",
+      "methods": [
+        {
+          "namespace": "goals",
+          "method": "clear",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 433,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "complete",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 391,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "create",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 647,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "edit",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 329,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "get",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 277,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "pause",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 352,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "goals",
+          "method": "resume",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/goal/goal/src/index.ts",
+            "line": 364,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-llm",
+      "owner": "packages/llm/llm",
+      "methods": [
+        {
+          "namespace": "llm",
+          "method": "discoverModels",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/llm/llm/src/index.ts",
+            "line": 628,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "llm",
+          "method": "listConfigurableProviders",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/llm/llm/src/index.ts",
+            "line": 541,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "llm",
+          "method": "listProviders",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/llm/llm/src/index.ts",
+            "line": 469,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-cordis-host-runner",
+      "owner": "packages/extensions/cordis-host-runner",
+      "methods": [
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "getClientCode",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 384,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "inventory",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 525,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "invoke",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 741,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "reportClientGuardFailure",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 718,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "reportRenderFailure",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 684,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "resolveInspectQuery",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 511,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "resolveRequestRun",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 413,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "runHostHalf",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 325,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "settleUserRun",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 438,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "stopFromPanel",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 480,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "syncInspectManifest",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 498,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "dynamicCordisRunner",
+          "method": "undefineFromPanel",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/extensions/cordis-host-runner/src/index.ts",
+            "line": 227,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-host-plugin-inventory",
+      "owner": "packages/host/plugin-inventory",
+      "methods": [
+        {
+          "namespace": "pluginInventory",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/host/plugin-inventory/src/index.ts",
+            "line": 68,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-message-feedback",
+      "owner": "packages/feedback/message-feedback",
+      "methods": [
+        {
+          "namespace": "messageFeedback",
+          "method": "delete",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/feedback/message-feedback/src/index.ts",
+            "line": 207,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "messageFeedback",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/feedback/message-feedback/src/index.ts",
+            "line": 155,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "messageFeedback",
+          "method": "put",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/feedback/message-feedback/src/index.ts",
+            "line": 167,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-command-feedback",
+      "owner": "packages/feedback/command-feedback",
+      "methods": [
+        {
+          "namespace": "sessionFeedback",
+          "method": "record",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/feedback/command-feedback/src/index.ts",
+            "line": 101,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-file-upload",
+      "owner": "packages/client/file-upload",
+      "methods": [
+        {
+          "namespace": "fileUploads",
+          "method": "upload",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/client/file-upload/src/index.ts",
+            "line": 106,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-session-reference",
+      "owner": "packages/context/session-reference",
+      "methods": [
+        {
+          "namespace": "sessionReferenceResolver",
+          "method": "candidates",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/context/session-reference/src/index.ts",
+            "line": 274,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-subagent",
+      "owner": "packages/subagent/subagent",
+      "methods": [
+        {
+          "namespace": "subagents",
+          "method": "interruptByParent",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/subagent/subagent/src/index.ts",
+            "line": 490,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "subagents",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/subagent/subagent/src/index.ts",
+            "line": 396,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "subagents",
+          "method": "prompt",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/subagent/subagent/src/index.ts",
+            "line": 423,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-api-session-controller",
+      "owner": "packages/api/session-controller",
+      "methods": [
+        {
+          "namespace": "fileReferences",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/file-references.ts",
+            "line": 33,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "attachment",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 398,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "cancel",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 418,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "canOpenWorkspacePath",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 313,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "control",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "stream",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 462,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "create",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 285,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "follow",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "stream",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 452,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "fork",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 376,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "historyDetail",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 429,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 236,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "modelCatalog",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 304,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "openWorkspacePath",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 334,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "page",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 440,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "prompt",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 387,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "rename",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 366,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "search",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 275,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "selectModel",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 295,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "session",
+          "method": "updateQueue",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/index.ts",
+            "line": 408,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "skills",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/session-controller/src/skill-catalog.ts",
+            "line": 36,
+            "column": 9
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-api-workspace-controller",
+      "owner": "packages/api/workspace-controller",
+      "methods": [
+        {
+          "namespace": "directoryPicker",
+          "method": "createDirectory",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/directory-picker.ts",
+            "line": 88,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "directoryPicker",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/directory-picker.ts",
+            "line": 72,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "directoryPicker",
+          "method": "pick",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/directory-picker.ts",
+            "line": 55,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "archiveSession",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 108,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "create",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 58,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "delete",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 78,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "follow",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "stream",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 118,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "insertBefore",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 88,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "insertSessionBefore",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 98,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspace",
+          "method": "rename",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-controller/src/index.ts",
+            "line": 68,
+            "column": 3
+          }
+        }
+      ]
+    },
+    {
+      "package": "@deepseek-ai/dsh-api-workspace-files",
+      "owner": "packages/api/workspace-files",
+      "methods": [
+        {
+          "namespace": "workspaceFiles",
+          "method": "changes",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "stream",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 365,
+            "column": 3
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "list",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 337,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "read",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 232,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "readAll",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 278,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "readBytes",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 257,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "readRelated",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 300,
+            "column": 9
+          }
+        },
+        {
+          "namespace": "workspaceFiles",
+          "method": "stat",
+          "invocation": {
+            "kind": "direct"
+          },
+          "mode": "unary",
+          "source": {
+            "file": "packages/api/workspace-files/src/index.ts",
+            "line": 324,
+            "column": 9
+          }
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "event": "agent-preset/selected",
+      "mode": "emit"
+    },
+    {
+      "event": "agent-models/directory-updated",
+      "mode": "emit"
+    },
+    {
+      "event": "approval/request",
+      "mode": "waterfall"
+    },
+    {
+      "event": "api-session/activity",
+      "mode": "emit"
+    },
+    {
+      "event": "api-session/added",
+      "mode": "emit"
+    },
+    {
+      "event": "api-session/error",
+      "mode": "emit"
+    },
+    {
+      "event": "api-session/removed",
+      "mode": "emit"
+    },
+    {
+      "event": "api-session/status",
+      "mode": "emit"
+    },
+    {
+      "event": "commands/change",
+      "mode": "emit"
+    },
+    {
+      "event": "credentials/reference-updated",
+      "mode": "emit"
+    },
+    {
+      "event": "credentials/record-updated",
+      "mode": "emit"
+    },
+    {
+      "event": "goal/activation-changed",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/request-run",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/request-run-resolved",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/dynamic-package",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/dynamic-retract",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/inspect-query",
+      "mode": "emit"
+    },
+    {
+      "event": "cordis/inspect-query-resolved",
+      "mode": "emit"
+    },
+    {
+      "event": "llm/adapters-updated",
+      "mode": "emit"
+    },
+    {
+      "event": "settings/document-updated",
+      "mode": "emit"
+    },
+    {
+      "event": "user-questions/request",
+      "mode": "waterfall"
+    }
+  ],
+  "ui": [
+    {
+      "package": "@deepseek-ai/dsh-client-ui-agent-preset",
+      "owner": "packages/client/ui-agent-preset",
+      "description": "Agent-preset surfaces: the default for later sessions, this session's seat, and the composition editor"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-approval",
+      "owner": "packages/client/ui-approval",
+      "description": "Approval composer takeover over the scoped Remote Event waterfall"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-attachment",
+      "owner": "packages/client/ui-attachment",
+      "description": "Dynamic attachment presentation plugin for conversation input, message-image, and trajectory image slots"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-brand-official",
+      "owner": "packages/client/ui-brand-official",
+      "description": "Official DeepSeek Harness brand occupants for the Web client's sidebar slots"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-chat",
+      "owner": "packages/client/ui-chat",
+      "description": "Chat Conversation target, node definitions, renderers, and details surface"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-commands",
+      "owner": "packages/client/ui-commands",
+      "description": "Client command surface: global directory cache, '/' source, three command UI kinds, popupSelect registry"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-conversation",
+      "owner": "packages/client/ui-conversation",
+      "description": "Target-neutral Conversation assembly, shell, composer, queue, and view navigation"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-deliverables",
+      "owner": "packages/client/ui-deliverables",
+      "description": "Produced-files turn tail and clickable final-response file references for Web"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-directory-picker-browse",
+      "owner": "packages/client/ui-directory-picker-browse",
+      "description": "In-app directory browsing surface: the workspace directory-flow owner rendering the host's listing and creation primitives"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-directory-picker-native",
+      "owner": "packages/client/ui-directory-picker-native",
+      "description": "Native directory-picker surface: the renderless workspace directory-flow occupant driving the host's OS chooser"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-dockkit",
+      "owner": "packages/client/ui-dockkit",
+      "description": "Docking layout kit: split-tree engine with invertible operations, and the React components that render and drive it (zero cordis)"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-goal",
+      "owner": "packages/client/ui-goal",
+      "description": "Session goal surface: GoalBar docked above the composer, read from the goal session projection"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-input-trigger",
+      "owner": "packages/client/ui-input-trigger",
+      "description": "Input trigger pipeline: '/' and '@' detection, candidate menu, pick routing to registered sources"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-jobs",
+      "owner": "packages/client/ui-jobs",
+      "description": "Session-header background-job list: live registry state mirrored from session/jobs frames"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-layout",
+      "owner": "packages/client/ui-layout",
+      "description": "Shell plugin: three-column AppFrame with drag handles, ctx.layout viewing-state service (navigation + panels)"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-message-feedback",
+      "owner": "packages/client/ui-message-feedback",
+      "description": "The Web feedback surface: per-message Like/Dislike in the assistant-message action strip and the feedback dialog behind Dislike and /feedback, backed by the messageFeedback and sessionFeedback Host Remotes"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-model-selection",
+      "owner": "packages/client/ui-model-selection",
+      "description": "Model selection over the shared model catalog, Session projection, and session.selectModel"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-open-in-app",
+      "owner": "packages/client/ui-open-in-app",
+      "description": "Web Session-header \"Open In...\" split button opening the session workspace directory in a locally installed application"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-permission-presets",
+      "owner": "packages/client/ui-permission-presets",
+      "description": "Permission surfaces: a new-session default in General settings and a current-session /permission popup over the permissions projection"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-plan",
+      "owner": "packages/client/ui-plan",
+      "description": "Plan-mode composer control: the conversation.input.plan seat over the plan projection and the /plan command channel"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-primitives",
+      "owner": "packages/client/ui-primitives",
+      "description": "Pure React atoms for the dsh web UI: controls, icons, markdown, and JSON inspectors (zero cordis)"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-reference",
+      "owner": "packages/client/ui-reference",
+      "description": "Unified Web @file and @session reference source"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-renderer",
+      "owner": "packages/client/ui-renderer",
+      "description": "Browser UI renderer: React slot bindings, ctx.uiRenderer, and the assembled application root"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-schedule",
+      "owner": "packages/client/ui-schedule",
+      "description": "Read-only active Schedule catalog in the Web Session header"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-session",
+      "owner": "packages/client/ui-session",
+      "description": "Session Controller adapter for React and session-scoped slots"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-settings",
+      "owner": "packages/client/ui-settings",
+      "description": "Settings domain base plugin: the settings-namespace scope service and the canonical settings slot-type contract"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-settings-general",
+      "owner": "packages/client/ui-settings-general",
+      "description": "Settings ownerless-copy and product onboarding plugin: the General section, shell trigger/header chrome content, settings dictionaries, and the versioned welcome notice"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-settings-models",
+      "owner": "packages/client/ui-settings-models",
+      "description": "Models settings and shared product-onboarding dialogs over existing settings and credential joins"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-settings-plugin-inventory",
+      "owner": "packages/client/ui-settings-plugin-inventory",
+      "description": "Read-only Cordis Loader inventory tab in Web Plugins settings"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-settings-plugins",
+      "owner": "packages/client/ui-settings-plugins",
+      "description": "Plugins settings section with feature-owned tabs and configurable host-plane plugin cards"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-sidebar",
+      "owner": "packages/client/ui-sidebar",
+      "description": "Sidebar plugin: session multi-level tree, search, grouping, state dots"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+      "owner": "packages/client/ui-sidebar-documentpreview",
+      "description": "Extensible document previews for Sidebar files: Markdown, highlighted code, images, PDF, HTML, and plain text"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-sidebar-files",
+      "owner": "packages/client/ui-sidebar-files",
+      "description": "Workspace file tree tab type for the right Sidebar: lazy directory listing over the workspaceFiles Remote namespace, opening files into the Sidebar"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-sidebar-right",
+      "owner": "packages/client/ui-sidebar-right",
+      "description": "Right Sidebar: the docking surface's session-bound state, its panel and header expand control, and the navigation service over it"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-skill",
+      "owner": "packages/client/ui-skill",
+      "description": "Web skill references and the dedicated skill tool row"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-slots",
+      "owner": "packages/client/ui-slots",
+      "description": "Slot registry pure core: SlotMap declaration merging, single register composition API, four-share props types, store-seat types, renderer install seam"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-subagent",
+      "owner": "packages/client/ui-subagent",
+      "description": "Subagent conversation catalog, continuation routing UI, and '@' reference source"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-theme",
+      "owner": "packages/client/ui-theme",
+      "description": "Theme plugin: Host bootstrap for the pre-plugin palette; DOM-free ThemeRuntime for light/dark/system state; --dsw-* token styles and Appearance settings row"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-tool",
+      "owner": "packages/client/ui-tool",
+      "description": "Client Tool call-tree renderer and keyed per-tool presentation slot"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-trajectory",
+      "owner": "packages/client/ui-trajectory",
+      "description": "Trajectory event ledger with an interactive timing overview: pure-consumer plugin registering into the conversation ViewMap (no service)"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-user-questions",
+      "owner": "packages/client/ui-user-questions",
+      "description": "Web ask_user_question composer takeover and plan-review presentation UI"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-workflow-run",
+      "owner": "packages/client/ui-workflow-run",
+      "description": "Durable workflow-run Conversation Node and nested member disclosure for dsh web"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-workspace",
+      "owner": "packages/client/ui-workspace",
+      "description": "Workspace picker plugin: one WorkspacePicker registered into the sidebar and empty-state workspace slots"
+    },
+    {
+      "package": "@deepseek-ai/dsh-client-ui-cordis",
+      "owner": "packages/extensions/ui-cordis",
+      "description": "Cordis dynamic-plugin definition card: the keyed cordis_define tool row with its run/stop switch"
+    }
+  ],
+  "baseline": {
+    "backendCommit": "6d05318ace06e41478c1e14335587a823c7240d7",
+    "frontendCommit": "8fffd9c1",
+    "observedOn": "2026-09-15",
+    "kind": "generated descriptor and source inventory, not runtime capability advertisement"
+  }
+}

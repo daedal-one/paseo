@@ -27,7 +27,7 @@ Deferred from the first release: hosted multi-tenant accounts, a public device r
 
 ## 2. Verified starting point
 
-The fork was inspected on `main` at `180b4ed795cc60ead97f013b9d7e6bc1f7ffde59`, version 0.8.0, with `origin` pointing at `daedal-one/paseo`. The main DSH source checkout was inspected at `d4d63d120a3ff9611c26bc38869a520869e9a38b`, version 0.1.5-alpha.2, with concurrent local modifications. DSH observations therefore describe inspected source, not an exact released binary. These baselines must be refreshed before implementation.
+The fork was inspected on `main` at `180b4ed795cc60ead97f013b9d7e6bc1f7ffde59`, version 0.8.0, with `origin` pointing at `daedal-one/paseo`. The main DSH source checkout was inspected at `d4d63d120a3ff9611c26bc38869a520869e9a38b`, version 0.1.5-alpha.2, with concurrent local modifications. DSH observations therefore describe inspected source, not an exact released binary. The [capability baseline](daedal-dsh-capability-map.md) records refreshed implementation commits, generated methods/events, source owners and remaining decision gates.
 
 | Surface           | Existing evidence                                                                                                                                                               | Migration implication                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |

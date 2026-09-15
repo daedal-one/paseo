@@ -6,4 +6,4 @@ intellect_provider = "forge-intellect"
 id = "migration"
 title = "Daedal DSH migration plan"
 root = "docs"
-include = ["daedal-dsh-migration-plan.md"]
+include = ["daedal-dsh-migration-plan.md", "daedal-dsh-capability-map.md"]

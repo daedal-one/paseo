@@ -26,3 +26,5 @@ Refresh both repositories and runtime evidence; inventory DSH methods/events/UI 
 Carlo reviews the plan; required durable specs are accepted or revised; every integration row has an owner and scenario; managed-runtime ownership and portable-client assumptions have explicit decision gates. No product implementation is implied by this pending task.
 
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
+
+[Capability owners and acceptance scenarios](spec:doc:docs/daedal-dsh-capability-map.md). The authenticated compatibility handshake remains an open decision gate.
