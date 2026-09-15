@@ -13,6 +13,7 @@ module.exports = function (api) {
   return {
     presets: [expoPreset],
     plugins: [
+      "@babel/plugin-transform-class-static-block",
       [
         "react-native-unistyles/plugin",
         {

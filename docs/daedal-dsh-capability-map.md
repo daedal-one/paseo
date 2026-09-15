@@ -59,6 +59,12 @@ Device enrollment must exchange a short-lived single-use challenge for a revocab
 
 Commands retain confirmed success, confirmed rejection or unknown outcome. Lost responses never trigger an automatic mutation retry. The backend must expose deduplication/reconciliation where supported; otherwise the UI retains the uncertainty and requires a deliberate decision. Resolved interactions reject late replies. No compatibility workaround may discard required DSH events to fit a Paseo timeline.
 
+## Native build requirements
+
+The packed Gateway service keeps Cordis as a shared dependency. Cordis's normal ESM artifact contains class static blocks; the Expo 54 Babel pipeline requires `@babel/plugin-transform-class-static-block` before its other class transforms. The app declares that transform directly and applies it before the Expo preset's class-property transforms, following the [Babel ordering requirement](https://babeljs.io/docs/babel-plugin-transform-class-static-block). This is a syntax transform, not a runtime implementation of browser APIs.
+
+The complete Gateway service still requires abort reasons, `AbortSignal.any()` and `throwIfAborted()`. React Native 0.81.5's bundled `abort-controller` does not provide these. A carrier-only native probe does not establish full Gateway activation or an authenticated session. Expo already supplies its URL implementation through `whatwg-url-without-unicode`; native probes must use that implementation rather than substitute Node's URL class.
+
 ## Work ownership
 
 Backend accepted tasks are `daedal-dsh-native-client`, `daedal-dsh-device-access`, `daedal-dsh-host-operations`, `daedal-dsh-configuration-workflows` and `daedal-dsh-desktop-runtime` under `.specs/tasks/`. This fork's ordered tasks remain under `.specs/migration/`. The [approved migration plan](daedal-dsh-migration-plan.md) owns ordering and release gates. No missing control in the map is permission to add an independent frontend execution server.
