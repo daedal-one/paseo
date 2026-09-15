@@ -1,5 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -8,7 +8,10 @@ import { useTranslation } from "react-i18next";
 import type { PendingPermission } from "@/types/shared";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { isWeb } from "@/constants/platform";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
+import {
+  EditingTextInput as TextInput,
+  type EditingTextInputHandle,
+} from "@/components/ui/text-input";
 import {
   areQuestionsAnswered,
   buildQuestionFormUpdatedInput,
@@ -276,6 +279,10 @@ function QuestionOtherInput({
   onSubmit,
 }: QuestionOtherInputProps) {
   const { theme } = useUnistyles();
+  const inputRef = useRef<EditingTextInputHandle>(null);
+  useEffect(() => {
+    if (inputRef.current?.getText() !== value) inputRef.current?.replaceText(value);
+  }, [qIndex, value]);
   const handleChange = useCallback(
     (text: string) => {
       onChange(qIndex, text);
@@ -308,6 +315,7 @@ function QuestionOtherInput({
       accessibilityLabel={accessibilityLabel}
       placeholder={placeholder}
       placeholderTextColor={theme.colors.foregroundMuted}
+      ref={inputRef}
       initialValue={value}
       onChangeText={handleChange}
       onSubmitEditing={onSubmit}
@@ -326,6 +334,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
     [permission.request.input],
   );
 
+  const acceptsStructuredAnswers = permission.request.input?.answerFormat === "structured";
   const [selections, setSelections] = useState<Record<number, Set<number>>>({});
   const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
   const [respondingAction, setRespondingAction] = useState<"submit" | "dismiss" | null>(null);
@@ -349,29 +358,34 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
       }
 
       setSelections((prev) => ({ ...prev, [qIndex]: next }));
-      setOtherTexts((prev) => {
-        if (!prev[qIndex]) return prev;
-        const nextTexts = { ...prev };
-        delete nextTexts[qIndex];
-        return nextTexts;
-      });
+      if (!acceptsStructuredAnswers || !multiSelect) {
+        setOtherTexts((prev) => {
+          if (!prev[qIndex]) return prev;
+          const nextTexts = { ...prev };
+          delete nextTexts[qIndex];
+          return nextTexts;
+        });
+      }
 
       if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
         setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
       }
     },
-    [activeQuestionIndex, questions, selections],
+    [acceptsStructuredAnswers, activeQuestionIndex, questions, selections],
   );
 
-  const setOtherText = useCallback((qIndex: number, text: string) => {
-    setOtherTexts((prev) => ({ ...prev, [qIndex]: text }));
-    if (text.length > 0) {
-      setSelections((prev) => {
-        if (!prev[qIndex] || prev[qIndex].size === 0) return prev;
-        return { ...prev, [qIndex]: new Set<number>() };
-      });
-    }
-  }, []);
+  const setOtherText = useCallback(
+    (qIndex: number, text: string) => {
+      setOtherTexts((prev) => ({ ...prev, [qIndex]: text }));
+      if (text.length > 0 && !(acceptsStructuredAnswers && questions?.[qIndex]?.multiSelect)) {
+        setSelections((prev) => {
+          if (!prev[qIndex] || prev[qIndex].size === 0) return prev;
+          return { ...prev, [qIndex]: new Set<number>() };
+        });
+      }
+    },
+    [acceptsStructuredAnswers, questions],
+  );
 
   const allAnswered = areQuestionsAnswered(questions, selections, otherTexts);
   const resolvedActiveQuestionIndex = questions

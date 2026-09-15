@@ -40,7 +40,7 @@ PASEO_LISTEN=127.0.0.1:6769 EXPO_PORT=8083 ./scripts/dev-app.sh
 
 Open <http://localhost:8083>, connect directly to `127.0.0.1:6769`, and choose **Open DSH session**. Search the DSH session titles, select a session, and use the normal chat and approval controls. A failed connection keeps an error visible; refresh the importer after restoring the connection.
 
-The mobile app in this fork includes structured question answers; use it for multi-select choices containing commas. Older clients can answer single-choice and free-text questions, but the DSH provider rejects ambiguous multi-select answers.
+The desktop and mobile app preserve selected options and custom text together for DSH multi-select questions, including commas within labels or custom text. Older clients can answer single-choice and free-text questions, but the DSH provider rejects ambiguous multi-select answers.
 
 ## Desktop preview
 
