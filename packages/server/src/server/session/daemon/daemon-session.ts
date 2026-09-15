@@ -1,4 +1,5 @@
 import type pino from "pino";
+import type { CompanionDiscoveryResult } from "@getpaseo/protocol/companion-discovery";
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import { getPidLockInfo } from "../../pid-lock.js";
@@ -14,6 +15,7 @@ import type { HubRelationshipManagement } from "../../hub/relationship-controlle
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
 
 export interface DaemonRuntimeConfig {
+  discoverCompanions?: () => Promise<CompanionDiscoveryResult>;
   listen: string | null;
   worktreesRoot?: string;
   appBaseUrl?: string;
@@ -242,6 +244,30 @@ export class DaemonSession {
           requestId: msg.requestId,
           requestType: "daemon.get_pairing_offer.request",
           error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  async handleCompanionDiscoverRequest(
+    msg: Extract<SessionInboundMessage, { type: "companion.tailscale.discover.request" }>,
+  ): Promise<void> {
+    try {
+      if (!this.daemonRuntimeConfig?.discoverCompanions)
+        throw new Error("Companion discovery is unavailable on this host.");
+      const result = await this.daemonRuntimeConfig.discoverCompanions();
+      this.host.emit({
+        type: "companion.tailscale.discover.response",
+        payload: { requestId: msg.requestId, ...result },
+      });
+    } catch (error) {
+      this.logger.warn({ err: error }, "Companion discovery failed");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Companion discovery failed. Try again.",
         },
       });
     }

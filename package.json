@@ -35,6 +35,7 @@
   ],
   "scripts": {
     "companion:setup": "tsx scripts/companion-setup.ts",
+    "companion:pair": "tsx scripts/companion-pair.ts",
     "companion:ios:build": "cd packages/app && APP_VARIANT=companion eas build --platform ios --profile companion",
     "companion:ios:submit": "cd packages/app && APP_VARIANT=companion eas submit --platform ios --profile companion --latest",
     "companion:testflight": "cd packages/app && APP_VARIANT=companion eas build --platform ios --profile companion --auto-submit --non-interactive",

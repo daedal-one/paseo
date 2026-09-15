@@ -8,6 +8,8 @@ import { isFdroidBuild } from "@/constants/build-profile";
 import { isNative } from "@/constants/platform";
 import { isElectronRuntime } from "@/desktop/host";
 import type { Theme } from "@/styles/theme";
+import { CompanionDiscoverySection } from "./companion-discovery-section";
+import type { HostProfile } from "@/types/host-connection";
 
 const ThemedQrCode = withUnistyles(QrCode);
 const ThemedLink2 = withUnistyles(Link2);
@@ -48,6 +50,7 @@ export interface AddHostMethodModalProps {
   onRemoteSsh: () => void;
   onScanQr: () => void;
   onPasteLink: () => void;
+  onHostConnected?: (profile: HostProfile) => void;
 }
 
 export function AddHostMethodModal({
@@ -57,8 +60,16 @@ export function AddHostMethodModal({
   onRemoteSsh,
   onScanQr,
   onPasteLink,
+  onHostConnected,
 }: AddHostMethodModalProps) {
   const { t } = useTranslation();
+  const handleConnected = useCallback(
+    (profile: HostProfile) => {
+      onClose();
+      onHostConnected?.(profile);
+    },
+    [onClose, onHostConnected],
+  );
   const header = useMemo<SheetHeader>(() => ({ title: t("pairing.connectionMethods.title") }), [t]);
 
   const handleDirect = useCallback(() => {
@@ -84,6 +95,7 @@ export function AddHostMethodModal({
       onClose={onClose}
       testID="add-host-method-modal"
     >
+      {visible ? <CompanionDiscoverySection onConnected={handleConnected} /> : null}
       <Pressable
         style={styles.option}
         onPress={handleDirect}

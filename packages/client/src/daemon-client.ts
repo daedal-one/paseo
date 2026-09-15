@@ -4766,6 +4766,14 @@ export class DaemonClient {
     });
   }
 
+  async discoverCompanions() {
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "companion.tailscale.discover.request" },
+      responseType: "companion.tailscale.discover.response",
+      timeout: 15_000,
+    });
+  }
+
   async collectDiagnostics(requestId?: string): Promise<DiagnosticsPayload> {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,

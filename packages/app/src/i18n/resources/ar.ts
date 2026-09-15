@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1573,6 +1574,7 @@ export const ar: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.ar,
     connectionMethods: {
       title: "إضافة اتصال",
       direct: {

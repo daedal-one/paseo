@@ -2381,6 +2381,8 @@ export class Session {
         return this.daemonSession.handleGetStatusRequest(msg);
       case "daemon.get_pairing_offer.request":
         return this.daemonSession.handleGetPairingOfferRequest(msg);
+      case "companion.tailscale.discover.request":
+        return this.daemonSession.handleCompanionDiscoverRequest(msg);
       case "daemon.config.reload.request":
         this.daemonSession.handleConfigReloadRequest(msg);
         return undefined;

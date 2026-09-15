@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 export const en = {
   common: {
     back: "Back",
@@ -1583,6 +1584,7 @@ export const en = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.en,
     connectionMethods: {
       title: "Add connection",
       direct: {

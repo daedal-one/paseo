@@ -1544,6 +1544,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
         onRemoteSsh={handleSelectRemoteSsh}
         onPasteLink={handleSelectPasteLink}
         onScanQr={handleScanQr}
+        onHostConnected={handleHostAdded}
       />
       <AddHostModal
         visible={isDirectHostVisible}

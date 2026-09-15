@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1583,6 +1584,7 @@ export const ko: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.ko,
     connectionMethods: {
       title: "연결 추가",
       direct: {
