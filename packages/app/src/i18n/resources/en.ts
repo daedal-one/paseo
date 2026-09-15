@@ -1469,23 +1469,28 @@ export const en = {
       loadFailed: "Unable to load daemon logs: {{message}}",
     },
   },
+  productLinks: {
+    source: "Source",
+    help: "Help",
+    reportIssue: "Report an issue",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "Add a project",
-        description: "Open a folder on your machine",
+        description: "Open a folder on your DSH host",
       },
       importSession: {
-        title: "Import session",
-        description: "Open a Claude Code, Codex or other session you started in a terminal",
+        title: "Open DSH session",
+        description: "Continue an existing DeepSeek Harness conversation",
       },
-      setupProviders: {
-        title: "Setup providers",
-        description: "Configure Claude Code, Codex, and more",
+      connectHost: {
+        title: "Connect DSH host",
+        description: "Pair a host or discover DSH hosts on Tailscale",
       },
       pairDevice: {
         title: "Pair device",
-        description: "Connect your phone to this daemon",
+        description: "Connect your phone to this DSH host",
       },
     },
   },

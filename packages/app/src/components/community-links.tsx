@@ -1,26 +1,26 @@
 import { useCallback } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { Heart } from "lucide-react-native";
+import { BookOpen, CircleHelp } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { GitHubIcon } from "@/components/icons/github-icon";
-import { DiscordIcon } from "@/components/icons/discord-icon";
+import { useTranslation } from "react-i18next";
 import { openExternalUrl } from "@/utils/open-external-url";
 
 const renderGitHubIcon = (color: string) => <GitHubIcon color={color} size={14} />;
-const renderDiscordIcon = (color: string) => <DiscordIcon color={color} size={14} />;
 
 export function CommunityLinks() {
+  const { t } = useTranslation();
   const handleOpenGitHub = useCallback(() => {
-    void openExternalUrl("https://github.com/getpaseo/paseo");
+    void openExternalUrl("https://github.com/daedal-one/paseo");
   }, []);
 
-  const handleOpenSponsor = useCallback(() => {
-    void openExternalUrl("https://github.com/sponsors/boudra");
+  const handleOpenHelp = useCallback(() => {
+    void openExternalUrl("https://github.com/daedal-one/paseo/blob/main/docs/dsh-companion.md");
   }, []);
 
-  const handleOpenDiscord = useCallback(() => {
-    void openExternalUrl("https://discord.gg/jz8T2uahpH");
+  const handleReportIssue = useCallback(() => {
+    void openExternalUrl("https://github.com/daedal-one/paseo/issues");
   }, []);
 
   return (
@@ -30,27 +30,27 @@ export function CommunityLinks() {
         size="sm"
         leftIcon={renderGitHubIcon}
         onPress={handleOpenGitHub}
-        testID="community-links-github-star"
+        testID="product-links-source"
       >
-        Star
+        {t("productLinks.source")}
       </Button>
       <Button
         variant="ghost"
         size="sm"
-        leftIcon={Heart}
-        onPress={handleOpenSponsor}
-        testID="community-links-sponsor"
+        leftIcon={BookOpen}
+        onPress={handleOpenHelp}
+        testID="product-links-help"
       >
-        Sponsor
+        {t("productLinks.help")}
       </Button>
       <Button
         variant="ghost"
         size="sm"
-        leftIcon={renderDiscordIcon}
-        onPress={handleOpenDiscord}
-        testID="community-links-discord"
+        leftIcon={CircleHelp}
+        onPress={handleReportIssue}
+        testID="product-links-issues"
       >
-        Community
+        {t("productLinks.reportIssue")}
       </Button>
     </View>
   );

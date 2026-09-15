@@ -1470,23 +1470,28 @@ export const ru: TranslationResources = {
       loadFailed: "Не удалось загрузить журналы демона: {{message}}",
     },
   },
+  productLinks: {
+    source: "Исходный код",
+    help: "Помощь",
+    reportIssue: "Сообщить о проблеме",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "Добавить проект",
-        description: "Откройте папку на своем компьютере",
+        description: "Откройте папку на хосте DSH",
       },
       importSession: {
-        title: "Импортировать сессию",
-        description: "Импортируйте недавние сессии из внешних CLI",
+        title: "Открыть сессию DSH",
+        description: "Продолжите существующий разговор в DeepSeek Harness",
       },
-      setupProviders: {
-        title: "Настроить провайдеров",
-        description: "Настройте Claude Code, Codex и другие провайдеры",
+      connectHost: {
+        title: "Подключить хост DSH",
+        description: "Выполните сопряжение или найдите хосты DSH в Tailscale",
       },
       pairDevice: {
         title: "Подключить устройство",
-        description: "Подключите свой телефон к этому демону",
+        description: "Подключите телефон к этому хосту DSH",
       },
     },
   },

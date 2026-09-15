@@ -1488,23 +1488,28 @@ export const es: TranslationResources = {
       loadFailed: "No se pueden cargar registros de demonio:{{message}}",
     },
   },
+  productLinks: {
+    source: "Código fuente",
+    help: "Ayuda",
+    reportIssue: "Informar de un problema",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "Agregar un proyecto",
-        description: "Abra una carpeta en su máquina",
+        description: "Abre una carpeta en tu host DSH",
       },
       importSession: {
-        title: "Importar sesión",
-        description: "Incorporar sesionesCLIexternas recientes",
+        title: "Abrir sesión DSH",
+        description: "Continúa una conversación existente de DeepSeek Harness",
       },
-      setupProviders: {
-        title: "Proveedores de configuración",
-        description: "ConfigurarClaude Code,Codexy más",
+      connectHost: {
+        title: "Conectar host DSH",
+        description: "Vincula un host o descubre hosts DSH en Tailscale",
       },
       pairDevice: {
         title: "Emparejar dispositivo",
-        description: "Conecta tu teléfono a este demonio",
+        description: "Conecta tu teléfono a este host DSH",
       },
     },
   },

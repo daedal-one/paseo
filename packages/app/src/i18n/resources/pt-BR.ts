@@ -1474,23 +1474,28 @@ export const ptBR: TranslationResources = {
       loadFailed: "Não foi possível carregar logs do daemon: {{message}}",
     },
   },
+  productLinks: {
+    source: "Código-fonte",
+    help: "Ajuda",
+    reportIssue: "Relatar um problema",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "Adicionar um projeto",
-        description: "Abra uma pasta na sua máquina",
+        description: "Abra uma pasta no seu host DSH",
       },
       importSession: {
-        title: "Importar sessão",
-        description: "Importe sessões externas recentes da CLI",
+        title: "Abrir sessão DSH",
+        description: "Continue uma conversa existente do DeepSeek Harness",
       },
-      setupProviders: {
-        title: "Configurar provedores",
-        description: "Configure Claude Code, Codex e outros",
+      connectHost: {
+        title: "Conectar host DSH",
+        description: "Pareie um host ou descubra hosts DSH no Tailscale",
       },
       pairDevice: {
         title: "Parear dispositivo",
-        description: "Conecte seu celular a este daemon",
+        description: "Conecte seu celular a este host DSH",
       },
     },
   },

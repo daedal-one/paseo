@@ -1491,23 +1491,28 @@ export const fr: TranslationResources = {
       loadFailed: "Impossible de charger les journaux du démon:{{message}}",
     },
   },
+  productLinks: {
+    source: "Code source",
+    help: "Aide",
+    reportIssue: "Signaler un problème",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "Ajouter un projet",
-        description: "Ouvrez un dossier sur votre machine",
+        description: "Ouvrez un dossier sur votre hôte DSH",
       },
       importSession: {
-        title: "Session d'importation",
-        description: "Apportez des sessionsCLIexternes récentes",
+        title: "Ouvrir une session DSH",
+        description: "Reprenez une conversation DeepSeek Harness existante",
       },
-      setupProviders: {
-        title: "Fournisseurs d'installation",
-        description: "ConfigurezClaude Code,Codexet plus",
+      connectHost: {
+        title: "Connecter un hôte DSH",
+        description: "Associez un hôte ou découvrez les hôtes DSH sur Tailscale",
       },
       pairDevice: {
         title: "Associer un appareil",
-        description: "Connectez votre téléphone à ce démon",
+        description: "Connectez votre téléphone à cet hôte DSH",
       },
     },
   },

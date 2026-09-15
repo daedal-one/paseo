@@ -1427,23 +1427,28 @@ export const zhCN: TranslationResources = {
       loadFailed: "无法加载 daemon 日志：{{message}}",
     },
   },
+  productLinks: {
+    source: "源代码",
+    help: "帮助",
+    reportIssue: "报告问题",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "添加 project",
-        description: "打开此机器上的文件夹",
+        description: "打开 DSH 主机上的文件夹",
       },
       importSession: {
-        title: "导入会话",
-        description: "导入最近的外部 CLI 会话",
+        title: "打开 DSH 会话",
+        description: "继续现有的 DeepSeek Harness 对话",
       },
-      setupProviders: {
-        title: "设置 providers",
-        description: "配置 Claude Code、Codex 等",
+      connectHost: {
+        title: "连接 DSH 主机",
+        description: "配对主机或发现 Tailscale 上的 DSH 主机",
       },
       pairDevice: {
         title: "配对设备",
-        description: "将手机连接到此 daemon",
+        description: "将手机连接到此 DSH 主机",
       },
     },
   },

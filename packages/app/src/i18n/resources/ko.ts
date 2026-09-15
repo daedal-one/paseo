@@ -1454,23 +1454,28 @@ export const ko: TranslationResources = {
       loadFailed: "데몬 로그를 불러올 수 없습니다: {{message}}",
     },
   },
+  productLinks: {
+    source: "소스 코드",
+    help: "도움말",
+    reportIssue: "문제 신고",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "프로젝트 추가",
-        description: "내 컴퓨터의 폴더를 엽니다",
+        description: "DSH 호스트의 폴더 열기",
       },
       importSession: {
-        title: "세션 가져오기",
-        description: "최근 외부 CLI 세션을 가져옵니다",
+        title: "DSH 세션 열기",
+        description: "기존 DeepSeek Harness 대화 이어가기",
       },
-      setupProviders: {
-        title: "프로바이더 설정",
-        description: "Claude Code, Codex 등을 구성합니다",
+      connectHost: {
+        title: "DSH 호스트 연결",
+        description: "호스트를 페어링하거나 Tailscale에서 DSH 호스트 찾기",
       },
       pairDevice: {
         title: "기기 페어링",
-        description: "휴대폰을 이 데몬에 연결합니다",
+        description: "휴대폰을 이 DSH 호스트에 연결",
       },
     },
   },

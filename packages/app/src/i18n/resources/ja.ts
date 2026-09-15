@@ -1459,23 +1459,28 @@ export const ja: TranslationResources = {
       loadFailed: "デーモンログの読み込みに失敗しました: {{message}}",
     },
   },
+  productLinks: {
+    source: "ソースコード",
+    help: "ヘルプ",
+    reportIssue: "問題を報告",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "プロジェクトを追加",
-        description: "マシン上のフォルダを開く",
+        description: "DSH ホスト上のフォルダーを開く",
       },
       importSession: {
-        title: "セッションをインポート",
-        description: "最近の外部CLIセッションを取り込む",
+        title: "DSH セッションを開く",
+        description: "既存の DeepSeek Harness の会話を続ける",
       },
-      setupProviders: {
-        title: "プロバイダーをセットアップ",
-        description: "Claude Code、Codexなどを設定",
+      connectHost: {
+        title: "DSH ホストに接続",
+        description: "ホストをペアリングするか Tailscale 上の DSH ホストを検索",
       },
       pairDevice: {
         title: "デバイスをペアリング",
-        description: "このデーモンにスマートフォンを接続",
+        description: "スマートフォンをこの DSH ホストに接続",
       },
     },
   },

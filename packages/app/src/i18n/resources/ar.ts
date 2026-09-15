@@ -1444,23 +1444,28 @@ export const ar: TranslationResources = {
       loadFailed: "غير قادر على تحميل سجلات البرنامج الخفي:{{message}}",
     },
   },
+  productLinks: {
+    source: "المصدر",
+    help: "المساعدة",
+    reportIssue: "الإبلاغ عن مشكلة",
+  },
   openProject: {
     tiles: {
       addProject: {
         title: "أضف مشروعًا",
-        description: "افتح مجلدًا على جهازك",
+        description: "افتح مجلدًا على مضيف DSH",
       },
       importSession: {
-        title: "جلسة الاستيراد",
-        description: "أحضر جلسات CLI الخارجية الأخيرة",
+        title: "فتح جلسة DSH",
+        description: "تابع محادثة حالية في DeepSeek Harness",
       },
-      setupProviders: {
-        title: "موفري الإعداد",
-        description: "قم بتكوين Claude Code و Codex والمزيد",
+      connectHost: {
+        title: "توصيل مضيف DSH",
+        description: "اقرن مضيفًا أو اكتشف مضيفي DSH على Tailscale",
       },
       pairDevice: {
         title: "إقران الجهاز",
-        description: "قم بتوصيل هاتفك بهذا البرنامج الخفي",
+        description: "وصّل هاتفك بمضيف DSH هذا",
       },
     },
   },

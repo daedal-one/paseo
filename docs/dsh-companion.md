@@ -1,6 +1,6 @@
 # DeepSeek Harness companion
 
-This fork adds a DSH provider to Paseo. Run the Paseo daemon on the same Mac as DSH Web, then use **Import session** to connect an existing DSH session. DSH owns its session, workspace, tools, and permission policy. Closing a Paseo session detaches the companion and leaves DSH running.
+This fork adds a DSH provider to Paseo. Run the Paseo daemon on the same Mac as DSH Web, then use **Open DSH session** to connect an existing DSH session. DSH owns its session, workspace, tools, and permission policy. Closing a Paseo session detaches the companion and leaves DSH running.
 
 The provider reads paginated history, streams assistant text and reasoning, displays tool calls and results, sends messages, stops turns, answers approvals and questions, and reconnects after a dropped connection. The original DSH session ID is preserved. DSH model and reasoning selections are available in the existing Paseo controls.
 
@@ -38,7 +38,7 @@ export PASEO_HOME="$PWD/.dev/dsh-companion"
 PASEO_LISTEN=127.0.0.1:6769 EXPO_PORT=8083 ./scripts/dev-app.sh
 ```
 
-Open <http://localhost:8083>, connect directly to `127.0.0.1:6769`, and choose **Import session**. Search the DSH session titles, select a session, and use the normal chat and approval controls. A failed connection keeps an error visible; refresh the importer after restoring the connection.
+Open <http://localhost:8083>, connect directly to `127.0.0.1:6769`, and choose **Open DSH session**. Search the DSH session titles, select a session, and use the normal chat and approval controls. A failed connection keeps an error visible; refresh the importer after restoring the connection.
 
 The mobile app in this fork includes structured question answers; use it for multi-select choices containing commas. Older clients can answer single-choice and free-text questions, but the DSH provider rejects ambiguous multi-select answers.
 
@@ -46,7 +46,7 @@ The mobile app in this fork includes structured question answers; use it for mul
 
 Daedal DSH desktop connects to the existing companion at `127.0.0.1:6769`. The preview uses the current DSH bridge; native DSH client integration remains a separate migration task. Keep the companion host running before opening the desktop app.
 
-The shell does not start, stop, restart or upgrade a local Paseo daemon, and closing it leaves the external DSH host running. If the companion is unavailable, the app does not fall back to an unrelated daemon on port 6767. Saved remote hosts can still be selected in the app.
+The shell does not start, stop, restart or upgrade a local Paseo daemon, and closing it leaves the external DSH host running. If the companion is unavailable, the app does not fall back to an unrelated daemon on port 6767. Use **Connect DSH host** on the home screen to open pairing and Tailscale discovery. Saved remote hosts can still be selected in the app.
 
 The desktop product uses daedal-one assets and the fork-owned GitHub update destination. A local ad-hoc-signed preview is not a notarized release or proof of TestFlight behavior. Directory-only packages have no update manifest; automatic-update qualification requires a release artifact. The installed iPhone app retains its bundle identifier and Expo project.
 
@@ -72,7 +72,7 @@ The public `/.well-known/dsh-companion` response contains only the service versi
 
 ### Browser access
 
-The Mac's companion runs as `local.dsh-companion`, with the built web client enabled and a private Tailscale TCP route from port 6769 to `127.0.0.1:6769`. Connect the iPhone to the same tailnet and open <http://100.110.130.124:6769/> in Safari. Choose **Import session**, select an existing DSH conversation, and send a short message. You can add the page to the Home Screen from Safari's Share menu. Keep the Mac awake.
+The Mac's companion runs as `local.dsh-companion`, with the built web client enabled and a private Tailscale TCP route from port 6769 to `127.0.0.1:6769`. Connect the iPhone to the same tailnet and open <http://100.110.130.124:6769/> in Safari. Choose **Open DSH session**, select an existing DSH conversation, and send a short message. You can add the page to the Home Screen from Safari's Share menu. Keep the Mac awake.
 
 This route uses Tailscale access controls. The DSH browser credential stays on the Mac. The companion home allows only the configured hostnames and browser origins; keep the listener on loopback. The submitted background job survives terminal exit but needs starting again after logout or reboot. Its log is `/private/tmp/dsh-companion-daemon.log`.
 
@@ -90,7 +90,7 @@ npm run companion:testflight
 
 This builds on EAS and submits the result to App Store Connect. Use `npm run companion:ios:build` to build separately, then `npm run companion:ios:submit` to submit the latest companion iOS build. EAS needs a distribution certificate, an App Store provisioning profile for this bundle ID, and an App Store Connect app record. The first setup is interactive; Apple sign-in and two-factor authentication happen through Apple's/EAS's login flow. Subsequent releases reuse EAS-managed credentials. Never put passwords, verification codes, or signing keys in this repository.
 
-The [App Store Connect record](https://appstoreconnect.apple.com/apps/6812239241/testflight/ios) is `6812239241`. Its internal group **Team (Expo)** grants access to the Apple account used for signing. After Apple processes the upload, install **Daedal DSH** from TestFlight, pair using the QR above, and choose **Import session**. The custom URL scheme keeps the fork distinct from Paseo. Direct connection remains available for hosts outside the discovery setup.
+The [App Store Connect record](https://appstoreconnect.apple.com/apps/6812239241/testflight/ios) is `6812239241`. Its internal group **Team (Expo)** grants access to the Apple account used for signing. After Apple processes the upload, install **Daedal DSH** from TestFlight, pair using the QR above, and choose **Open DSH session**. The custom URL scheme keeps the fork distinct from Paseo. Direct connection remains available for hosts outside the discovery setup.
 
 An EAS build completing and an EAS submission succeeding are separate steps. Apple then processes the upload before it becomes installable in TestFlight. Check the exact version and build number on the app's TestFlight page; a successful JavaScript export does not establish native-device behavior. See [Expo's TestFlight guide](https://docs.expo.dev/submit/testflight/) for the current processing steps.
 
