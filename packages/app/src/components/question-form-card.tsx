@@ -11,7 +11,7 @@ import { isWeb } from "@/constants/platform";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import {
   areQuestionsAnswered,
-  buildQuestionFormAnswers,
+  buildQuestionFormUpdatedInput,
   isQuestionAnswered,
   parseQuestionFormQuestions,
   questionShowsTextInput,
@@ -388,10 +388,12 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
     setRespondingAction("submit");
     onRespond({
       behavior: "allow",
-      updatedInput: {
-        ...permission.request.input,
-        answers: buildQuestionFormAnswers(questions, selections, otherTexts),
-      },
+      updatedInput: buildQuestionFormUpdatedInput(
+        permission.request.input,
+        questions,
+        selections,
+        otherTexts,
+      ),
     });
   }, [
     questions,
@@ -409,10 +411,12 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
     if (shouldSubmitEmptyOnDismiss(questions)) {
       onRespond({
         behavior: "allow",
-        updatedInput: {
-          ...permission.request.input,
-          answers: buildQuestionFormAnswers(questions, selections, otherTexts),
-        },
+        updatedInput: buildQuestionFormUpdatedInput(
+          permission.request.input,
+          questions,
+          selections,
+          otherTexts,
+        ),
       });
       return;
     }

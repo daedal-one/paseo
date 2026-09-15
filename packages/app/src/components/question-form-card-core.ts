@@ -106,7 +106,44 @@ export function buildQuestionFormAnswers(
   selections: QuestionSelections,
   otherTexts: QuestionOtherTexts,
 ): Record<string, string> {
-  const answers: Record<string, string> = {};
+  return Object.fromEntries(
+    Object.entries(buildStructuredQuestionFormAnswers(questions, selections, otherTexts)).map(
+      ([id, answer]) => [id, answer.custom ?? answer.selected.join(", ")],
+    ),
+  );
+}
+
+export interface StructuredQuestionAnswer {
+  selected: string[];
+  custom?: string;
+}
+
+export function buildQuestionFormUpdatedInput(
+  input: Record<string, unknown> | undefined,
+  questions: QuestionFormQuestion[],
+  selections: QuestionSelections,
+  otherTexts: QuestionOtherTexts,
+): Record<string, unknown> {
+  const updated: Record<string, unknown> = {
+    ...input,
+    answers: buildQuestionFormAnswers(questions, selections, otherTexts),
+  };
+  if (input?.answerFormat === "structured") {
+    updated.structuredAnswers = buildStructuredQuestionFormAnswers(
+      questions,
+      selections,
+      otherTexts,
+    );
+  }
+  return updated;
+}
+
+export function buildStructuredQuestionFormAnswers(
+  questions: QuestionFormQuestion[],
+  selections: QuestionSelections,
+  otherTexts: QuestionOtherTexts,
+): Record<string, StructuredQuestionAnswer> {
+  const answers: Record<string, StructuredQuestionAnswer> = {};
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const selected = selections[i];
@@ -114,18 +151,18 @@ export function buildQuestionFormAnswers(
 
     if (questionShowsTextInput(q)) {
       if (otherText && otherText.length > 0) {
-        answers[q.header] = otherText;
+        answers[q.header] = { selected: [], custom: otherText };
         continue;
       }
       if (q.allowEmpty && q.options.length === 0) {
-        answers[q.header] = "";
+        answers[q.header] = { selected: [], custom: "" };
         continue;
       }
     }
 
     if (selected && selected.size > 0) {
       const labels = Array.from(selected).map((idx) => q.options[idx].label);
-      answers[q.header] = labels.join(", ");
+      answers[q.header] = { selected: labels };
     }
   }
   return answers;

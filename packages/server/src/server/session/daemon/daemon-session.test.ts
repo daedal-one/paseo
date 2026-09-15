@@ -78,6 +78,66 @@ function makeSubsystem(overrides: {
 }
 
 describe("DaemonSession", () => {
+  test("returns discovery results through the requesting session", async () => {
+    const result = {
+      status: "ready" as const,
+      hosts: [
+        {
+          service: "dsh-companion" as const,
+          version: 1 as const,
+          serverId: "other-mac",
+          hostname: "Other Mac",
+          address: "100.64.0.2",
+          passwordRequired: true,
+        },
+      ],
+      truncated: false,
+    };
+    const { subsystem, emitted } = makeSubsystem({
+      daemonRuntimeConfig: {
+        listen: null,
+        getRelayConfig: () => null,
+        discoverCompanions: async () => result,
+      },
+    });
+    await subsystem.handleCompanionDiscoverRequest({
+      type: "companion.tailscale.discover.request",
+      requestId: "discovery-1",
+    });
+    expect(emitted).toEqual([
+      {
+        type: "companion.tailscale.discover.response",
+        payload: { requestId: "discovery-1", ...result },
+      },
+    ]);
+  });
+
+  test("discovery failures complete the request without exposing subprocess errors", async () => {
+    const { subsystem, emitted } = makeSubsystem({
+      daemonRuntimeConfig: {
+        listen: null,
+        getRelayConfig: () => null,
+        discoverCompanions: async () => {
+          throw new Error("private command details");
+        },
+      },
+    });
+    await subsystem.handleCompanionDiscoverRequest({
+      type: "companion.tailscale.discover.request",
+      requestId: "discovery-2",
+    });
+    expect(emitted).toEqual([
+      {
+        type: "rpc_error",
+        payload: {
+          requestId: "discovery-2",
+          requestType: "companion.tailscale.discover.request",
+          error: "Companion discovery failed. Try again.",
+        },
+      },
+    ]);
+  });
+
   test("config reload returns the daemon-owned classification", () => {
     const { subsystem, emitted } = makeSubsystem({
       reloadConfig: () => ({

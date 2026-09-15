@@ -1,9 +1,20 @@
 {
   "cli": {
     "version": ">= 14.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
+    "companion": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "APP_VARIANT": "companion"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
@@ -33,6 +44,12 @@
     }
   },
   "submit": {
+    "companion": {
+      "ios": {
+        "appleTeamId": "PN9822BHR7",
+        "ascAppId": "6812239241"
+      }
+    },
     "production": {
       "ios": {
         "ascAppId": "6758887924"

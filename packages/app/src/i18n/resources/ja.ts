@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1606,6 +1607,7 @@ export const ja: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.ja,
     connectionMethods: {
       title: "接続を追加",
       direct: {

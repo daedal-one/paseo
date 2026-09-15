@@ -12,6 +12,11 @@ import { ConnectionOfferSchema } from "@getpaseo/protocol/connection-offer";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
+import {
+  decodeCompanionPairingUrl,
+  type CompanionHost,
+} from "@getpaseo/protocol/companion-discovery";
+import { CompanionConnectForm } from "./companion-connect-form";
 
 const FLEX_ONE_STYLE = { flex: 1 } as const;
 
@@ -71,8 +76,10 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
   const inputRef = useRef<EditingTextInputHandle>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [companion, setCompanion] = useState<CompanionHost | null>(null);
 
   const clearInput = useCallback(() => {
+    setCompanion(null);
     offerUrlRef.current = "";
     inputRef.current?.replaceText("");
   }, []);
@@ -101,6 +108,14 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
     const raw = offerUrlRef.current.trim();
     if (!raw) {
       setErrorMessage(t("pairing.link.errors.required"));
+      return;
+    }
+    if (raw.startsWith("dsh-companion://pair#companion=")) {
+      try {
+        setCompanion(decodeCompanionPairingUrl(raw));
+      } catch {
+        setErrorMessage(t("pairing.discovery.invalidHost"));
+      }
       return;
     }
     if (!raw.includes("#offer=")) {
@@ -172,6 +187,21 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
   }, [handleSave]);
 
   const header = useMemo<SheetHeader>(() => ({ title: t("pairing.link.title") }), [t]);
+  const handleCompanionConnected = useCallback(
+    (profile: HostProfile) => {
+      onSaved?.({
+        profile,
+        serverId: profile.serverId,
+        hostname: profile.label,
+        isNewHost: !daemons.some((host) => host.serverId === profile.serverId),
+      });
+      handleClose();
+    },
+    [daemons, handleClose, onSaved],
+  );
+  const cancelCompanion = useCallback(() => {
+    setCompanion(null);
+  }, []);
 
   return (
     <AdaptiveModalSheet
@@ -180,52 +210,63 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
       onClose={handleClose}
       testID="pair-link-modal"
     >
-      <Text style={styles.helper}>{t("pairing.link.helper")}</Text>
-
-      <View style={styles.field}>
-        <Text style={styles.label}>{t("pairing.link.label")}</Text>
-        <AdaptiveTextInput
-          ref={inputRef}
-          testID="pair-link-input"
-          nativeID="pair-link-input"
-          accessibilityLabel={t("pairing.link.label")}
-          onChangeText={handleChangeOfferUrl}
-          placeholder="https://app.paseo.sh/#offer=..."
-          placeholderTextColor={theme.colors.foregroundMuted}
-          style={styles.input}
-          autoFocus
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
+      {companion ? (
+        <CompanionConnectForm
+          key={companion.serverId}
+          host={companion}
+          onConnected={handleCompanionConnected}
+          onCancel={cancelCompanion}
         />
-        {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-      </View>
+      ) : (
+        <>
+          <Text style={styles.helper}>{t("pairing.link.helper")}</Text>
 
-      <View style={styles.actions}>
-        <Button
-          style={FLEX_ONE_STYLE}
-          variant="secondary"
-          onPress={handleCancel}
-          disabled={isSaving}
-          testID="pair-link-cancel"
-          accessibilityRole="button"
-          accessibilityLabel={t("pairing.link.actions.cancel")}
-        >
-          {t("pairing.link.actions.cancel")}
-        </Button>
-        <Button
-          style={FLEX_ONE_STYLE}
-          variant="default"
-          onPress={handleSavePress}
-          disabled={isSaving}
-          testID="pair-link-submit"
-          accessibilityRole="button"
-          accessibilityLabel={t("pairing.link.actions.pair")}
-          leftIcon={pairIcon}
-        >
-          {isSaving ? t("pairing.link.actions.pairing") : t("pairing.link.actions.pair")}
-        </Button>
-      </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>{t("pairing.link.label")}</Text>
+            <AdaptiveTextInput
+              ref={inputRef}
+              testID="pair-link-input"
+              nativeID="pair-link-input"
+              accessibilityLabel={t("pairing.link.label")}
+              onChangeText={handleChangeOfferUrl}
+              placeholder="https://app.paseo.sh/#offer=..."
+              placeholderTextColor={theme.colors.foregroundMuted}
+              style={styles.input}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+          </View>
+
+          <View style={styles.actions}>
+            <Button
+              style={FLEX_ONE_STYLE}
+              variant="secondary"
+              onPress={handleCancel}
+              disabled={isSaving}
+              testID="pair-link-cancel"
+              accessibilityRole="button"
+              accessibilityLabel={t("pairing.link.actions.cancel")}
+            >
+              {t("pairing.link.actions.cancel")}
+            </Button>
+            <Button
+              style={FLEX_ONE_STYLE}
+              variant="default"
+              onPress={handleSavePress}
+              disabled={isSaving}
+              testID="pair-link-submit"
+              accessibilityRole="button"
+              accessibilityLabel={t("pairing.link.actions.pair")}
+              leftIcon={pairIcon}
+            >
+              {isSaving ? t("pairing.link.actions.pairing") : t("pairing.link.actions.pair")}
+            </Button>
+          </View>
+        </>
+      )}
     </AdaptiveModalSheet>
   );
 }

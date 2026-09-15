@@ -35,6 +35,7 @@ import type {
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
 import { ClaudeAgentClient } from "./providers/claude/agent.js";
+import { DshAgentClient } from "./providers/dsh/agent.js";
 import { CodexAppServerAgentClient } from "./providers/codex-app-server-agent.js";
 import { CopilotACPAgentClient } from "./providers/copilot-acp-agent.js";
 import { CursorACPAgentClient } from "./providers/cursor-acp-agent.js";
@@ -194,6 +195,7 @@ const HUB_E2E_PROVIDER_CONTRACT: ProviderContract = {
 };
 
 const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
+  dsh: (_logger, _runtimeSettings, options) => new DshAgentClient(options?.providerParams),
   claude: (logger, runtimeSettings) =>
     new ClaudeAgentClient({
       logger,

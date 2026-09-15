@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1618,6 +1619,7 @@ export const ru: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.ru,
     connectionMethods: {
       title: "Добавить подключение",
       direct: {

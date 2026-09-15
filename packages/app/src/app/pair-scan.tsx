@@ -13,6 +13,12 @@ import { ConnectionOfferSchema } from "@getpaseo/protocol/connection-offer";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { isWeb } from "@/constants/platform";
 import { BackHeader } from "@/components/headers/back-header";
+import {
+  decodeCompanionPairingUrl,
+  type CompanionHost,
+} from "@getpaseo/protocol/companion-discovery";
+import { CompanionConnectForm } from "@/components/companion-connect-form";
+import type { HostProfile } from "@/types/host-connection";
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -115,6 +121,7 @@ function extractOfferUrlFromScan(result: BarcodeScanningResult): string | null {
   if (!raw) return null;
 
   if (raw.includes("#offer=")) return raw;
+  if (raw.startsWith("dsh-companion://pair#companion=")) return raw;
 
   return null;
 }
@@ -132,6 +139,7 @@ export default function PairScanScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [isPairing, setIsPairing] = useState(false);
+  const [companion, setCompanion] = useState<CompanionHost | null>(null);
   const lastScannedRef = useRef<string | null>(null);
 
   const navigateToPairedHost = useCallback(
@@ -170,6 +178,10 @@ export default function PairScanScreen() {
 
       try {
         setIsPairing(true);
+        if (offerUrl.startsWith("dsh-companion://pair#companion=")) {
+          setCompanion(decodeCompanionPairingUrl(offerUrl));
+          return;
+        }
         const idx = offerUrl.indexOf("#offer=");
         const encoded = offerUrl.slice(idx + "#offer=".length).trim();
         const offerPayload = decodeOfferFragmentPayload(encoded);
@@ -202,6 +214,16 @@ export default function PairScanScreen() {
   );
 
   const handleRouterBack = useCallback(() => router.back(), [router]);
+  const handleCompanionConnected = useCallback(
+    (profile: HostProfile) => {
+      navigateToPairedHost(profile.serverId);
+    },
+    [navigateToPairedHost],
+  );
+  const cancelCompanion = useCallback(() => {
+    setCompanion(null);
+    lastScannedRef.current = null;
+  }, []);
   const handleRequestPermission = useCallback(() => {
     void requestPermission();
   }, [requestPermission]);
@@ -239,7 +261,15 @@ export default function PairScanScreen() {
       <BackHeader title={t("pairing.scan.title")} onBack={closeToSource} />
 
       <View style={bodyStyle}>
-        {!granted ? (
+        {companion ? (
+          <CompanionConnectForm
+            key={companion.serverId}
+            host={companion}
+            onConnected={handleCompanionConnected}
+            onCancel={cancelCompanion}
+          />
+        ) : null}
+        {!companion && !granted ? (
           <View style={styles.permissionCard}>
             <Text style={styles.permissionTitle}>{t("pairing.scan.cameraPermissionTitle")}</Text>
             <Text style={styles.permissionBody}>{t("pairing.scan.cameraPermissionBody")}</Text>
@@ -247,7 +277,8 @@ export default function PairScanScreen() {
               <Text style={styles.permissionButtonText}>{t("pairing.scan.grantPermission")}</Text>
             </Pressable>
           </View>
-        ) : (
+        ) : null}
+        {!companion && granted ? (
           <View style={styles.cameraWrap}>
             <CameraView
               style={styles.camera}
@@ -265,7 +296,7 @@ export default function PairScanScreen() {
               {isPairing ? <Text style={helperTextStyle}>{t("pairing.scan.pairing")}</Text> : null}
             </View>
           </View>
-        )}
+        ) : null}
       </View>
     </View>
   );

@@ -1,5 +1,7 @@
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
 import express from "express";
+import { COMPANION_DISCOVERY_PATH } from "@getpaseo/protocol/companion-discovery";
+import { createCompanionDiscovery } from "./companion-discovery.js";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
 import { constants, existsSync, unlinkSync } from "fs";
 import { open, rm } from "fs/promises";
@@ -756,6 +758,34 @@ export async function createPaseoDaemon(
     createTerminalActivityRouteHandler(terminalManager),
   );
 
+  const discoverCompanions = createCompanionDiscovery();
+  let advertisementCheck: { until: number; promise: Promise<boolean> } | null = null;
+  // Minimal service identity is public to allowed hosts. Sessions and credentials remain authenticated.
+  app.get(COMPANION_DISCOVERY_PATH, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const client = providerSnapshotManager.getAgentManagerProviderState().clients.dsh;
+    if (!client) {
+      res.sendStatus(404);
+      return;
+    }
+    if (!advertisementCheck || advertisementCheck.until <= Date.now()) {
+      advertisementCheck = {
+        until: Date.now() + 5_000,
+        promise: client.isAvailable(AbortSignal.timeout(2_500)).catch(() => false),
+      };
+    }
+    if (!(await advertisementCheck.promise)) {
+      res.sendStatus(503);
+      return;
+    }
+    res.json({
+      service: "dsh-companion",
+      version: 1,
+      serverId,
+      hostname: getHostname(),
+      passwordRequired: Boolean(config.auth?.password),
+    });
+  });
   // Serve the bundled browser web UI when enabled. Mounted after service-proxy
   // classification and host/CORS handling, but before daemon bearer auth, so
   // static app files load without the daemon password while API/WebSocket calls
@@ -1701,6 +1731,7 @@ export async function createPaseoDaemon(
                   return appBaseUrl;
                 },
                 desktopManaged: config.desktopManaged === true,
+                discoverCompanions,
                 getRelayConfig: () =>
                   relayRuntime?.getConfig() ?? {
                     enabled: daemonConfigStore.get().relay?.enabled ?? relayEnabled,

@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1620,6 +1621,7 @@ export const ptBR: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.ptBR,
     connectionMethods: {
       title: "Adicionar conexão",
       direct: {

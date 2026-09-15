@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CompanionDiscoveryResultSchema } from "./companion-discovery.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
@@ -1420,6 +1421,11 @@ export const DaemonGetStatusRequestSchema = z.object({
 
 export const DaemonGetPairingOfferRequestSchema = z.object({
   type: z.literal("daemon.get_pairing_offer.request"),
+  requestId: z.string(),
+});
+
+export const CompanionDiscoverRequestSchema = z.object({
+  type: z.literal("companion.tailscale.discover.request"),
   requestId: z.string(),
 });
 
@@ -3180,6 +3186,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WaitForFinishRequestSchema,
   DaemonGetStatusRequestSchema,
   DaemonGetPairingOfferRequestSchema,
+  CompanionDiscoverRequestSchema,
   DaemonConfigReloadRequestSchema,
   HubManagementDaemonConnectRequestSchema,
   HubManagementDaemonGetStatusRequestSchema,
@@ -3554,6 +3561,8 @@ export const ServerInfoStatusPayloadSchema = z
         forgeSearch: z.boolean().optional(),
         // COMPAT(daemonStatusRpc): added in v0.1.76, remove gate after 2026-11-18.
         daemonStatusRpc: z.boolean().optional(),
+        // COMPAT(companionDiscovery): added in the companion fork v0.7.2; remove gate after 2027-09-15.
+        companionDiscovery: z.boolean().optional(),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
@@ -4980,6 +4989,11 @@ export const DaemonGetPairingOfferResponseSchema = z.object({
       relayEnabled: z.boolean(),
     })
     .passthrough(),
+});
+
+export const CompanionDiscoverResponseSchema = z.object({
+  type: z.literal("companion.tailscale.discover.response"),
+  payload: CompanionDiscoveryResultSchema.extend({ requestId: z.string() }),
 });
 
 export const DaemonConfigReloadResponseSchema = z.object({
@@ -6752,6 +6766,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetVoiceModeResponseMessageSchema,
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
+  CompanionDiscoverResponseSchema,
   DaemonConfigReloadResponseSchema,
   HubManagementDaemonConnectResponseSchema,
   HubManagementDaemonGetStatusResponseSchema,

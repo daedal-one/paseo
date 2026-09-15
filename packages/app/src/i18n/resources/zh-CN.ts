@@ -1,3 +1,4 @@
+import { companionDiscovery } from "./companion-discovery";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -1573,6 +1574,7 @@ export const zhCN: TranslationResources = {
     },
   },
   pairing: {
+    discovery: companionDiscovery.zhCN,
     connectionMethods: {
       title: "添加连接",
       direct: {

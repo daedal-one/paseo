@@ -4,6 +4,8 @@
 
 <h1 align="center">Paseo</h1>
 
+This fork adds a [DeepSeek Harness companion](docs/dsh-companion.md) for connecting to existing DSH sessions from Paseo.
+
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="README.zh-CN.md">简体中文</a> ·

@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   areQuestionsAnswered,
   buildQuestionFormAnswers,
+  buildStructuredQuestionFormAnswers,
+  buildQuestionFormUpdatedInput,
   parseQuestionFormQuestions,
   questionShowsTextInput,
   resolveDismissLabel,
@@ -9,6 +11,51 @@ import {
 } from "./question-form-card-core";
 
 describe("question form card core", () => {
+  test("only adds structured answers when the requesting provider asks for them", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [{ question: "Choose", header: "Color", options: [{ label: "Blue" }] }],
+    });
+    if (!questions) throw new Error("questions did not parse");
+    expect(buildQuestionFormUpdatedInput({}, questions, { 0: new Set([0]) }, {})).toEqual({
+      answers: { Color: "Blue" },
+    });
+    expect(
+      buildQuestionFormUpdatedInput(
+        { answerFormat: "structured" },
+        questions,
+        { 0: new Set([0]) },
+        {},
+      ),
+    ).toEqual({
+      answerFormat: "structured",
+      answers: { Color: "Blue" },
+      structuredAnswers: { Color: { selected: ["Blue"] } },
+    });
+  });
+  test("preserves selected labels containing commas and custom answers separately", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          header: "choice",
+          question: "Choose",
+          options: [{ label: "A, B" }, { label: "C" }],
+          multiSelect: true,
+        },
+        { header: "comment", question: "Explain", options: [], allowOther: true },
+      ],
+    });
+    if (!questions) throw new Error("questions did not parse");
+    expect(
+      buildStructuredQuestionFormAnswers(
+        questions,
+        { 0: new Set([0, 1]) },
+        { 1: "  Because, yes  " },
+      ),
+    ).toEqual({
+      choice: { selected: ["A, B", "C"] },
+      comment: { selected: [], custom: "Because, yes" },
+    });
+  });
   test("treats optional input prompts as skippable empty answers", () => {
     const questions = parseQuestionFormQuestions({
       questions: [
