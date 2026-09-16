@@ -173,7 +173,10 @@ interface ConversationProps {
 
 export function Conversation({ model, runtime, view, busy }: ConversationProps) {
   const { t } = useTranslation();
-  const state = useSyncExternalStore(view.session.subscribe, view.session.getSnapshot);
+  const session = view.session;
+  const subscribe = useCallback((listener: () => void) => session.subscribe(listener), [session]);
+  const getSnapshot = useCallback(() => session.getSnapshot(), [session]);
+  const state = useSyncExternalStore(subscribe, getSnapshot);
   const list = useSyncExternalStore(
     runtime.sessions.list.subscribe,
     runtime.sessions.list.getSnapshot,
