@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "sourceCommit": "c7440be3327d50e553c95713a34c133599dc7376",
+  "entry": "@deepseek-ai/dsh-api-remotes-client",
+  "archives": [
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.0.2",
+      "file": "deepseek-ai-cordis-4.0.2.tgz",
+      "sha256": "02fd258a5e644c906202d0c783f53a8857eeb963e2bb1ecffc110705242c39c3"
+    },
+    {
+      "name": "@deepseek-ai/cosmokit",
+      "version": "1.8.3",
+      "file": "deepseek-ai-cosmokit-1.8.3.tgz",
+      "sha256": "69647a14229708b2c168294c8daec07884c74d95c1a8f03efecfcfa97150d3b4"
+    },
+    {
+      "name": "@deepseek-ai/dsh-brand",
+      "version": "0.1.5-alpha.2",
+      "file": "deepseek-ai-dsh-brand-0.1.5-alpha.2.tgz",
+      "sha256": "c8100a065446f66f3c887086e437004c05bf7856ee0c872af1b30af4f1786625"
+    },
+    {
+      "name": "@deepseek-ai/dsh-typert-protocol",
+      "version": "0.1.5-alpha.2",
+      "file": "deepseek-ai-dsh-typert-protocol-0.1.5-alpha.2.tgz",
+      "sha256": "ccefa528ef97b4fc5f149df13e0ecde86ce9f2e172be2186b139e8c335fbd858"
+    },
+    {
+      "name": "@deepseek-ai/dsh-util-values",
+      "version": "0.1.5-alpha.2",
+      "file": "deepseek-ai-dsh-util-values-0.1.5-alpha.2.tgz",
+      "sha256": "540cf2eb5036325840681efd32c613446c3fdbdfc7f3c3b20e3ff6b300ef9c81"
+    },
+    {
+      "name": "@deepseek-ai/dsh-api-remotes-client",
+      "version": "0.1.5-alpha.2",
+      "file": "deepseek-ai-dsh-api-remotes-client-0.1.5-alpha.2.tgz",
+      "sha256": "168972bff72901181f31812e788f0aa8934cb4af248737e976bb02e4606ea03e"
+    }
+  ]
+}

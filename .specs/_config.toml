@@ -7,3 +7,9 @@ id = "migration"
 title = "Daedal DSH migration plan"
 root = "docs"
 include = ["daedal-dsh-migration-plan.md", "daedal-dsh-capability-map.md"]
+
+[[documentation]]
+id = "client-artifacts"
+title = "Portable DSH Client artifacts"
+root = "vendor/dsh"
+include = ["README.md"]

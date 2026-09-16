@@ -18,9 +18,11 @@ The supported DSH client surface MUST expose an authenticated host connection wi
 Command submission MUST distinguish confirmed success, confirmed rejection and unknown outcome. A retry MUST use backend-supported deduplication identity or first reconcile the prior outcome; it MUST NOT blindly resubmit a prompt or resolved interaction. Reconnect MUST resume from confirmed server state. Cancellation, disposal, backpressure, authentication expiry and permission errors MUST have explicit outcomes. The renderer MUST NOT receive host provider credentials or arbitrary privileged execution access.
 :::
 
-## Design work before implementation
+## Portable dependency ownership
 
-Freeze the generated interface and version negotiation with DSH owners. Prove the existing client face in Metro/Hermes and browser/Electron before choosing extraction boundaries. Add missing remote operations in DSH with parser validation and capability discovery. Preserve required-event refusal semantics; unknown tool presentation does not permit dropping unknown required wire events.
+The frontend consumes the generated portable DSH Client distribution from a clean source revision with recorded archive hashes and a lockfile. A package-manager installation must resolve only portable dependencies and retain shared Cordis and nominal type identities. Import and bundle checks remain distinct from physical-device and live Session acceptance.
+
+The DSH interface owns Host-generation admission, generated wire fingerprints, business revisions, Session-format acceptance and required-event refusal. Platform adapters supply authenticated transports without changing those semantics. Missing remote operations belong in their DSH owner; unknown tool presentation does not permit dropping required wire events. One Host owns one runtime, credential, hydrated navigation store and disposal lifetime.
 
 ## Verification
 
