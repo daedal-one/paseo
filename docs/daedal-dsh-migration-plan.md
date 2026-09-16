@@ -158,7 +158,7 @@ At each completed phase, inspect the entire outgoing commit range and run the ph
 
 Backend and app pushes are separate releases. Before either push, qualify supported Host/client combinations and choose a publication order that keeps them usable between deployments. Pin client artifacts to their qualified backend source. Preserve a known working compatible release and exercise the applicable recovery procedure; retained Session data does not establish downgrade support.
 
-After each push, verify the remote commit and inspect available CI and deployment results. Report what changed and distinguish published source, pending checks, observed deployment and actual desktop or TestFlight availability. Continue the next ready phase while Carlo uses the qualified release. The final default-UI switch and bridge removal still require the complete cutover checks.
+After each push, verify the remote commit and inspect available CI and deployment results. For each completed phase that changes the iPhone app, deliver a signed companion TestFlight build from its qualified candidate; this delivery happens throughout migration, before the final mobile qualification phase. Report the exact version/build, testing instructions and known preview limitations once the build is available to Carlo. Distinguish published source, pending checks, observed deployment, submitted uploads and installable desktop or TestFlight builds. Continue the next ready phase while Carlo uses the qualified release. The final default-UI switch and bridge removal still require the complete cutover checks.
 
 ### Phase 1 implementation handoff
 

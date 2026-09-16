@@ -17,6 +17,6 @@ Apply company assets/localized copy and fork-owned packaging/update configuratio
 
 ## Acceptance
 
-A preview installs on Carlo's Mac and controls an existing DSH session, including approval and reconnect. Closing it leaves the external host running. Installed branding and updater ownership are inspected; required signing is verified before distribution.
+A preview installs on Carlo's Mac and controls an existing DSH session, including approval and reconnect. Closing it leaves the external host running. Installed branding and updater ownership are inspected; required signing is verified before distribution. If the qualified preview changes the iPhone app, its matching signed companion build is submitted and its TestFlight availability is verified under the phase delivery requirement.
 
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
