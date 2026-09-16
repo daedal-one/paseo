@@ -282,7 +282,11 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
   const reload = useCallback(() => model.reload(), [model]);
   if (state.runtime !== null && state.conversation !== null)
     return (
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         {state.error !== null && <AccessError code={state.error} />}
         <Conversation
           key={state.conversation.sessionId}

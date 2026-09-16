@@ -139,6 +139,16 @@ function conversationHost() {
   const once = new Set<(event: { readonly data: unknown }) => void>();
   let readyState = 0;
   let failHistory = false;
+  const prompts: {
+    requestId: string;
+    sessionId: string;
+    mode: string;
+    content: { type: "text"; text: string }[];
+  }[] = [];
+  let promptReply: (signal: AbortSignal | null | undefined) => Promise<unknown> = async () => ({
+    ok: true,
+    value: { accepted: true },
+  });
   function emit(type: string, data: unknown) {
     for (const listener of listeners.get(type) ?? []) {
       if (once.delete(listener)) listeners.get(type)?.delete(listener);
@@ -176,6 +186,29 @@ function conversationHost() {
       case "subagents/list":
         value = { entries: [], parentAvailable: true };
         break;
+      case "session/prompt": {
+        const payload = z
+          .object({
+            payload: z.object({
+              args: z.object({
+                request: z.object({
+                  requestId: z.string(),
+                  sessionId: z.string(),
+                  mode: z.string(),
+                  content: z.array(z.object({ type: z.literal("text"), text: z.string() })),
+                }),
+              }),
+            }),
+          })
+          .parse(JSON.parse(String(init.body)));
+        prompts.push(payload.payload.args.request);
+        const result = await promptReply(init.signal);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ type: "server-response", rpcId: request.rpcId, result }),
+        };
+      }
       default:
         throw new Error(`Unexpected test RPC: ${request.method}`);
     }
@@ -303,6 +336,10 @@ function conversationHost() {
   };
   return {
     options: host.options,
+    prompts,
+    replyToPrompt(reply: typeof promptReply) {
+      promptReply = reply;
+    },
     push(value: unknown) {
       const streamId = streams.get("session/follow");
       if (streamId === undefined) throw new Error("Session history is not open");
@@ -471,6 +508,255 @@ describe("native DSH Conversation ownership", () => {
       expect(view.session.getSnapshot().openState).toBe("open");
       expect(view.session.getSnapshot().openError).toBeNull();
       expect(runtime.openConversation(host.ids[0], null)).toBe(view);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+describe("native DSH text submission", () => {
+  it("sends one exact queued prompt and clears only a Host-accepted draft", async () => {
+    const host = conversationHost();
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      expect(view.prompt.getSnapshot().canSend).toBe(false);
+      view.prompt.setText("  \n ");
+      await view.prompt.send();
+      expect(host.prompts).toHaveLength(0);
+      view.prompt.setText("Continue the existing task\nPreserve this line.");
+      expect(view.prompt.getSnapshot().canSend).toBe(true);
+      await view.prompt.send();
+      expect(host.prompts).toHaveLength(1);
+      expect(host.prompts[0]).toMatchObject({
+        sessionId: host.ids[0],
+        mode: "queue",
+        content: [{ type: "text", text: "Continue the existing task\nPreserve this line." }],
+      });
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "",
+        canSend: false,
+        submission: { kind: "accepted" },
+      });
+      expect(host.calls).not.toContain("session/cancel");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+  it("prevents duplicate taps while preserving edits made before acceptance", async () => {
+    const host = conversationHost();
+    let reply: (value: unknown) => void = () => {
+      throw new Error("No prompt is pending");
+    };
+    host.replyToPrompt(
+      () =>
+        new Promise((resolve) => {
+          reply = resolve;
+        }),
+    );
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("First draft");
+      const pending = view.prompt.send();
+      await vi.waitFor(() => expect(host.prompts).toHaveLength(1));
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        canSend: false,
+        submission: { kind: "sending", text: "First draft" },
+      });
+      view.prompt.setText("Next draft");
+      expect(view.prompt.send()).toBe(pending);
+      expect(host.prompts).toHaveLength(1);
+      reply({ ok: true, value: { accepted: true } });
+      expect(await pending).toBe(true);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "Next draft",
+        canSend: true,
+        submission: { kind: "accepted" },
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("keeps a confirmed Host refusal visible and retries only on another user submission", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => ({
+      ok: false,
+      error: {
+        code: "session/model-unavailable",
+        message: "No model",
+        details: { provider: "fixture", model: "fixture" },
+      },
+    }));
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("Keep my draft");
+      expect(await view.prompt.send()).toBe(false);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "Keep my draft",
+        canSend: true,
+        submission: { kind: "rejected", code: "session/model-unavailable" },
+      });
+      expect(host.prompts).toHaveLength(1);
+      host.replyToPrompt(async () => ({ ok: true, value: { accepted: true } }));
+      expect(await view.prompt.send()).toBe(true);
+      expect(host.prompts).toHaveLength(2);
+      expect(host.prompts[1].requestId).not.toBe(host.prompts[0].requestId);
+      expect(view.prompt.getSnapshot().text).toBe("");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("never resubmits an uncertain prompt when the user taps or the Host reconnects", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => {
+      throw new Error("Response lost after dispatch");
+    });
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("Possibly accepted");
+      expect(await view.prompt.send()).toBe(false);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "Possibly accepted",
+        canSend: false,
+        submission: { kind: "unknown" },
+      });
+      view.prompt.setText("A replacement cannot hide uncertainty");
+      expect(await view.prompt.send()).toBe(false);
+      const generation = runtime.connection.generation.getSnapshot();
+      runtime.connection.reconnect();
+      await vi.waitFor(() => {
+        expect(runtime.connection.generation.getSnapshot()).not.toBeUndefined();
+        expect(runtime.connection.generation.getSnapshot()).not.toBe(generation);
+      });
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "Possibly accepted",
+        canSend: false,
+        submission: { kind: "unknown" },
+      });
+      expect(host.prompts).toHaveLength(1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("aborts the owned request on view replacement and ignores its late success", async () => {
+    const host = conversationHost();
+    let reply: (value: unknown) => void = () => {
+      throw new Error("No prompt is pending");
+    };
+    let aborted = false;
+    const onAbort = () => {
+      aborted = true;
+    };
+    host.replyToPrompt(
+      (signal) =>
+        new Promise((resolve) => {
+          reply = resolve;
+          signal?.addEventListener("abort", onAbort, { once: true });
+        }),
+    );
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const first = runtime.openConversation(host.ids[0], null);
+      first.prompt.setText("Wait for loaded history");
+      expect(first.prompt.getSnapshot().canSend).toBe(false);
+      await first.prompt.send();
+      expect(host.prompts).toHaveLength(0);
+      await vi.waitFor(() => expect(first.session.getSnapshot().openState).toBe("open"));
+      const pending = first.prompt.send();
+      await vi.waitFor(() => expect(host.prompts).toHaveLength(1));
+      const second = runtime.openConversation(host.ids[1], null);
+      second.prompt.setText("Independent replacement draft");
+      expect(aborted).toBe(true);
+      reply({ ok: true, value: { accepted: true } });
+      expect(await pending).toBe(false);
+      expect(first.prompt.getSnapshot().canSend).toBe(false);
+      first.prompt.setText("Closed form");
+      await first.prompt.send();
+      expect(first.prompt.getSnapshot().text).toBe("Wait for loaded history");
+      expect(second.prompt.getSnapshot().text).toBe("Independent replacement draft");
+      expect(host.prompts).toHaveLength(1);
+      expect(host.calls).not.toContain("session/cancel");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+  it("preserves a draft edited back to its submitted text while acceptance is pending", async () => {
+    const host = conversationHost();
+    let reply: (value: unknown) => void = () => {
+      throw new Error("No prompt is pending");
+    };
+    host.replyToPrompt(
+      () =>
+        new Promise((resolve) => {
+          reply = resolve;
+        }),
+    );
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("Original");
+      const pending = view.prompt.send();
+      await vi.waitFor(() => expect(host.prompts).toHaveLength(1));
+      view.prompt.setText("Edited");
+      view.prompt.setText("Original");
+      reply({ ok: true, value: { accepted: true } });
+      await pending;
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "Original",
+        canSend: true,
+        submission: { kind: "accepted" },
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("retains the uncertain submitted text separately from a newer draft", async () => {
+    const host = conversationHost();
+    let reject: (error: Error) => void = () => {
+      throw new Error("No prompt is pending");
+    };
+    host.replyToPrompt(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("Possibly received");
+      const pending = view.prompt.send();
+      await vi.waitFor(() => expect(host.prompts).toHaveLength(1));
+      view.prompt.setText("A newer unsent draft");
+      reject(new Error("Response lost"));
+      expect(await pending).toBe(false);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "A newer unsent draft",
+        canSend: false,
+        submission: { kind: "unknown", text: "Possibly received" },
+      });
+      await view.prompt.send();
+      expect(host.prompts).toHaveLength(1);
     } finally {
       await runtime.dispose();
     }

@@ -2,6 +2,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "./access-error";
+import { DshPrompt } from "./prompt";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -21,6 +22,7 @@ export interface DshConversation {
   readonly sessionId: dsh.SessionId;
   readonly session: dsh.SessionFace;
   readonly conversation: dsh.ConversationBinding;
+  readonly prompt: DshPrompt;
 }
 
 export interface DshHostRuntime {
@@ -102,6 +104,7 @@ export async function createDshHostRuntime(
     let closed = false;
     function releaseConversation() {
       if (current === null) return;
+      current.view.prompt.dispose();
       current.binding.dispose();
       current = null;
     }
@@ -128,6 +131,7 @@ export async function createDshHostRuntime(
           sessionId: id,
           session: source.session,
           conversation: binding,
+          prompt: new DshPrompt(source.session, connection),
         };
         releaseConversation();
         current = { view, binding };

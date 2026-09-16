@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { DshDirectory } from "../native/directory";
 import type { DshConversation, DshHostRuntime } from "../runtime";
 import { styles } from "./styles";
+import { Composer } from "./composer";
 
 // The installed Chat Definitions own the payload for each registered renderer kind.
 function nodeIs<K extends dsh.ChatNodeKind>(
@@ -221,6 +222,7 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
       )}
       {state.hasMore && <Text style={styles.muted}>{t("nativeDsh.conversation.older")}</Text>}
       <Transcript view={view} ready={ready} />
+      <Composer model={view.prompt} />
     </View>
   );
 }

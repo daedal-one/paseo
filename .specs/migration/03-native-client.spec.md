@@ -43,7 +43,13 @@ Own at most one active Host runtime in the directory. Switching hosts and forget
 
 The directory opens a listed Session within its existing Host owner and returns to the list without creating another connection or cancelling Host execution. Compose the installed Conversation binding and shared Chat Definitions over the Session binding's event source; do not duplicate event projection or open another history stream. A Host owns at most one visible Conversation. Repeated selection retains its identity; selection changes and Host disposal detach the previous binding and cancel deferred publication. An unknown or removed Session cannot replace the current view silently.
 
-Render the loaded Session window using stable Chat order and per-node subscriptions. Show authoritative loading, empty, removed, resynchronizing and failed-read states. Retain readable content during disconnection and offer an explicit reconnect or initial-read retry. Render supported text and reasoning without raw event JSON; unsupported content remains visibly identified. This preview is read-only: prompt/approval controls, rich renderers and older-history loading remain subsequent work, and the current DSH interface remains available. Native Session selection is transient until durable restore is implemented. Qualify real native rendering against an isolated DSH Host as well as deterministic ownership and streaming cases; neither proves physical-device acceptance.
+Render the loaded Session window using stable Chat order and per-node subscriptions. Show authoritative loading, empty, removed, resynchronizing and failed-read states. Retain readable content during disconnection and offer an explicit reconnect or initial-read retry. Render supported text and reasoning without raw event JSON; unsupported content remains visibly identified. Approvals, rich renderers and older-history loading remain subsequent work, and the current DSH interface remains available. Native Session selection is transient until durable restore is implemented. Qualify real native rendering against an isolated DSH Host as well as deterministic ownership and streaming cases; neither proves physical-device acceptance.
+
+## Native text submission
+
+Add a text-only composer to a loaded ordinary Session. Use its existing generated prompt operation in queue mode so a running turn receives a queued follow-up; never use steering implicitly. The form owns draft text and one pending operation, requires an admitted connection and a readable, available Session, and prevents duplicate taps. Preserve drafts on a rejected or uncertain result and clear only the submitted draft after Host-confirmed acceptance; edits made while a request is pending remain intact, even if the user restores the same text. Keep an uncertain submitted message distinct from a newer unsent draft.
+
+Known pre-admission refusals are retryable after the user corrects the cause. Transport failure, cancellation, generation loss and unclassified failures remain unknown outcomes, never confirmed rejection. Do not expose a resend for an uncertain attempt or retry it on reconnect. Keep its draft and a visible instruction to inspect the authoritative conversation before any further action; explicit outcome reconciliation and safe retry remain required follow-up work. Closing the view cancels only its in-flight request and never sends Session cancellation. A late reply cannot mutate a closed or replacement composer. Subagent submission, attachments, queue editing and approval controls remain unavailable in this increment. Qualify controlled success, rejection, lost response, duplicate taps, draft edits, readiness and disposal through the real shared runtime, followed by an isolated Host refusal and platform rendering; static checks are not native acceptance.
 
 ## Implementation references
 
@@ -51,6 +57,8 @@ Render the loaded Session window using stable Chat order and per-node subscripti
 - [Native directory ownership](spec:src:packages/app/src/dsh/native/directory.ts)
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
 - [Native Session reading](spec:src:packages/app/src/dsh/ui/conversation.tsx)
+- [Native prompt ownership](spec:src:packages/app/src/dsh/prompt.ts)
+- [Native text composer](spec:src:packages/app/src/dsh/ui/composer.tsx)
 - [iPhone directory screen](spec:src:packages/app/src/dsh/ui/directory-screen.ios.tsx)
 - [Directory lifecycle verification](spec:src:packages/app/src/dsh/native/directory.test.ts)
 

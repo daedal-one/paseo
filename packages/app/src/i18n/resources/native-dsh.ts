@@ -3,7 +3,7 @@ export const nativeDsh = {
   iosOnly:
     "Native host access is available on iPhone. Desktop and browser access are being migrated.",
   preview:
-    "Native DSH preview · Pair a host and view its sessions. Conversation controls are being integrated.",
+    "Native DSH preview · Pair a host, read its sessions and send text. More controls are being integrated.",
   scan: "Scan pairing QR",
   scanAgain: "Scan a new QR",
   scanHint:
@@ -40,7 +40,7 @@ export const nativeDsh = {
     open: "Read conversation",
     back: "Back to sessions",
     preview:
-      "Read-only native preview. Use the current DSH interface to send messages and answer approvals.",
+      "Native preview. Send text to this session; use the current DSH interface for approvals and other controls.",
     user: "You",
     context: "Context",
     assistant: "Assistant",
@@ -59,6 +59,18 @@ export const nativeDsh = {
     retry: "Retry conversation",
     empty: "No messages to display.",
     older: "Earlier history is available in the current DSH interface.",
+  },
+  composer: {
+    label: "Message",
+    placeholder: "Write a message…",
+    send: "Send message",
+    sending: "Sending…",
+    accepted: "The host accepted your message. It will run after any queued work.",
+    rejected:
+      "The host rejected this message. Your draft is saved here. Check the session and model settings, then try again.",
+    unconfirmed: "Unconfirmed message",
+    unknown:
+      "Could not confirm whether the host received your submitted message. It will not be resent. Your draft is kept here. Check the conversation in the current DSH interface before sending it again.",
   },
   errors: {
     "session-unavailable": "This session is unavailable. Refresh the session list and try again.",
