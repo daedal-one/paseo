@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "31f818ef230ccbdb20227905c53a4e7b32c68627",
+  "sourceCommit": "da7b678457d59b0d104343c32c5400b4ef1c4415",
   "entry": "@deepseek-ai/dsh-api-remotes-client",
   "archives": [
     {
@@ -37,7 +37,7 @@
       "name": "@deepseek-ai/dsh-api-remotes-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-api-remotes-client-0.1.5-alpha.2.tgz",
-      "sha256": "fdc661c0dbddebf451c547caca3d6bbb31af72cbdb69827b7c2a96ace4c242fc"
+      "sha256": "bb721a45e86f87bbc64815fb5648e5f1ae2ff6c13854a2ced3667315824c4963"
     }
   ]
 }

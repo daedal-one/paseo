@@ -3,6 +3,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  nativeDsh: en.nativeDsh,
   common: {
     back: "返回",
     loading: "加载中...",

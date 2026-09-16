@@ -3,6 +3,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  nativeDsh: en.nativeDsh,
   common: {
     back: "戻る",
     loading: "読み込み中...",

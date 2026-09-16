@@ -3,6 +3,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  nativeDsh: en.nativeDsh,
   common: {
     back: "Voltar",
     loading: "Carregando...",

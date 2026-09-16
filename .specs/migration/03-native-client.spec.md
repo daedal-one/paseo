@@ -28,6 +28,19 @@ Pin every native HTTP and WebSocket target to the selected origin. Require HTTPS
 
 Enrollment submits one claim and never replays it after a lost result. Store a returned grant before presenting pairing success. Opening a saved Host hydrates and validates its record before creating the per-Host runtime; final disposal cancels that runtime and its authenticated carriers. Forgetting local access and revoking a Host-side grant remain distinct operations. The actual QR and Session screens must consume this owner before native-client acceptance. The native access module now supplies protected storage, iOS carriers and saved-runtime composition. Its focused tests qualify failure and ownership behavior with native-module substitutes; platform execution and the application screens remain separate acceptance gates.
 
+## Native Host directory
+
+Expose an iPhone-native Host directory from Settings while retaining the existing companion UI. Scanning only validates and displays a bounded, strict enrollment QR; claiming requires a separate confirmation showing the selected origin and Host identity. Challenges stay in memory and never enter navigation, ordinary storage or diagnostics. Repeated camera frames cannot submit or replace a reviewed enrollment, and unknown claim outcomes have explicit owner-side recovery.
+
+Own at most one active Host runtime in the directory. Switching hosts and forgetting local access wait for disposal; leaving the screen cancels pending enrollment and disposes late runtime arrivals. A failed final disposal prevents another directory owner from opening until the app restarts. List saved entries without exposing credentials, keep corrupt or partial records visible with recovery, and distinguish initial loading from an authoritative empty Session list. Use the generated DSH Session feed directly, including reconnect and pagination. Observe its read activity and structured failures: a settled refresh is not proof of success. Keep retained rows visible after failed refresh or continuation and expose retry without presenting an initial failure as an empty list. Directory browsing has no durable conversation selection; selected-conversation restore belongs to the subsequent conversation surface. Qualification covers lifecycle races, native rendering and real Host reads; QR camera use and physical-device acceptance remain distinct gates. Preview copy uses locale dictionaries with an explicit English fallback until translations are supplied.
+
+## Implementation references
+
+- [Protected access](spec:src:packages/app/src/dsh/native/access.ts)
+- [Native directory ownership](spec:src:packages/app/src/dsh/native/directory.ts)
+- [iPhone directory screen](spec:src:packages/app/src/dsh/ui/directory-screen.ios.tsx)
+- [Directory lifecycle verification](spec:src:packages/app/src/dsh/native/directory.test.ts)
+
 ## Acceptance
 
 Physical iPhone, desktop and browser attach to the same native session, stream, prompt and resolve an interaction without Paseo timeline projection. Authentication, incompatible versions, lost response and reconnect cases pass; backend gaps have accepted DSH specs.

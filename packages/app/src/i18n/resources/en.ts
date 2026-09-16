@@ -1,5 +1,7 @@
+import { nativeDsh } from "./native-dsh";
 import { companionDiscovery } from "./companion-discovery";
 export const en = {
+  nativeDsh,
   common: {
     back: "Back",
     loading: "Loading...",

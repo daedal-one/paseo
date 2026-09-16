@@ -1,27 +1,18 @@
 import { randomUUID } from "expo-crypto";
 import { getCalendars } from "expo-localization";
-import { z } from "zod";
 import {
   claimDeviceEnrollment,
-  connectionDeviceEnrollmentSchema,
   type ConnectionHostId,
   type SessionSelectionStore,
   type ConnectionNetworkSource,
 } from "@deepseek-ai/dsh-api-remotes-client";
 import { createDshHostRuntime, type DshHostRuntime } from "../runtime";
 import { DshAccessError } from "../access-error";
-import { parseDshOrigin } from "../host-origin";
+import { parseDshPairing } from "../pairing";
+export type { DshPairing } from "../pairing";
 import { dshDeviceStore, type StoredDshHost } from "./device-store";
 import { createNativeDshTransport } from "./transport";
 
-const pairingSchema = z
-  .object({
-    version: z.literal(1),
-    origin: z.string(),
-    enrollment: connectionDeviceEnrollmentSchema,
-  })
-  .strict();
-export type DshPairing = z.infer<typeof pairingSchema>;
 export interface PairDshHostOptions {
   pairing: unknown;
   deviceLabel: string;
@@ -45,13 +36,9 @@ export function pairDshHost(options: PairDshHostOptions): Promise<StoredDshHost>
 }
 
 async function claimAndStore(options: PairDshHostOptions): Promise<StoredDshHost> {
-  const parsed = pairingSchema.safeParse(options.pairing);
+  const { enrollment, origin } = parseDshPairing(options.pairing);
   const label = options.deviceLabel.trim();
-  if (!parsed.success || label.length < 1 || label.length > 80)
-    throw new DshAccessError("invalid-enrollment");
-  const { enrollment } = parsed.data;
-  const origin = parseDshOrigin(parsed.data.origin);
-  if (enrollment.expiresAt <= Date.now()) throw new DshAccessError("expired-enrollment");
+  if (label.length < 1 || label.length > 80) throw new DshAccessError("invalid-enrollment");
   if ((await dshDeviceStore.load(enrollment.hostId)) !== null)
     throw new DshAccessError("already-paired");
   if (options.signal.aborted) throw new DshAccessError("request-cancelled");

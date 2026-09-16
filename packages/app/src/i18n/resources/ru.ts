@@ -3,6 +3,7 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  nativeDsh: en.nativeDsh,
   common: {
     back: "Назад",
     loading: "Загрузка...",

@@ -1077,9 +1077,11 @@ function SettingsSidebar({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const hosts = useHosts();
+  const router = useRouter();
   const localServerId = useLocalDaemonServerId();
   const sortedHosts = useSortedHosts(hosts, localServerId);
   const hasHosts = sortedHosts.length > 0;
+  const openNativeDsh = useCallback(() => router.navigate("/dsh-hosts"), [router]);
   const enableBuiltInDaemonOption = useEnableBuiltInDaemonOption();
   const isDesktopApp = isElectronRuntime();
   const items = SIDEBAR_SECTION_ITEMS.filter(
@@ -1117,6 +1119,11 @@ function SettingsSidebar({
         ))}
       </View>
       <SidebarSeparator />
+      <View style={sidebarStyles.list}>
+        <Button variant="ghost" testID="settings-native-dsh" onPress={openNativeDsh}>
+          {t("nativeDsh.title")}
+        </Button>
+      </View>
       {hasHosts ? (
         <View style={sidebarStyles.list}>
           <Text style={sidebarStyles.groupLabel}>{t("settings.groups.host")}</Text>
