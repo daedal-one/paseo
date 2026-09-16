@@ -150,6 +150,16 @@ The total is approximately **67–103 engineering days**, roughly **14–21 work
 
 Dependencies: Phase 1 precedes the remaining work. Phase 2 can proceed alongside the Phase 3 investigation. Phase 4 requires Phase 3; Phases 5 and 6 build on Phase 4. Phase 7 can start after the native transport and ownership decisions in Phase 3. Phase 8 develops continuously but exits after the required capabilities and desktop integration. Phase 9 requires all earlier gates. These are work dependencies, not an instruction to start parallel agents now.
 
+### Continuous delivery during migration
+
+The [release requirement](../.specs/frontend/release-and-cutover.spec.md) governs every phase. Carlo uses the harness during development and automatically deploys pushed changes. Keep each increment shippable, preserve current UI access and supported installed clients, and keep unfinished capabilities unavailable or explicitly opt-in. Fix daily-use regressions before expanding later phases.
+
+At each completed phase, inspect the entire outgoing commit range and run the phase acceptance checks plus the relevant regression, build and repository checks. Include earlier unpublished commits in that assessment. A local commit or completed subtask does not qualify an unfinished phase for publication. Push the qualified phase to each affected daedal-one origin without waiting for the whole migration. The existing `codex/daedal-dsh` branches are the publication targets unless Carlo names another branch; this policy does not authorize a merge into `main` or `master`.
+
+Backend and app pushes are separate releases. Before either push, qualify supported Host/client combinations and choose a publication order that keeps them usable between deployments. Pin client artifacts to their qualified backend source. Preserve a known working compatible release and exercise the applicable recovery procedure; retained Session data does not establish downgrade support.
+
+After each push, verify the remote commit and inspect available CI and deployment results. Report what changed and distinguish published source, pending checks, observed deployment and actual desktop or TestFlight availability. Continue the next ready phase while Carlo uses the qualified release. The final default-UI switch and bridge removal still require the complete cutover checks.
+
 ### Phase 1 implementation handoff
 
 1. Accept or revise the draft requirements and ADR. Make the approved scope authoritative in repository instructions and link the plan as context.
