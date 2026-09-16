@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { connectionDeviceEnrollmentSchema } from "@deepseek-ai/dsh-api-remotes-client";
+import { connectionDeviceEnrollmentSchema } from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "./access-error";
 import { parseDshOrigin } from "./host-origin";
 

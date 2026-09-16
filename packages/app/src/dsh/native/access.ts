@@ -5,7 +5,7 @@ import {
   type ConnectionHostId,
   type SessionSelectionStore,
   type ConnectionNetworkSource,
-} from "@deepseek-ai/dsh-api-remotes-client";
+} from "@deepseek-ai/dsh-client";
 import { createDshHostRuntime, type DshHostRuntime } from "../runtime";
 import { DshAccessError } from "../access-error";
 import { parseDshPairing } from "../pairing";

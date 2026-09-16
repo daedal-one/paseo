@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  connectionDeviceGrantSchema,
-  connectionHostIdSchema,
-} from "@deepseek-ai/dsh-api-remotes-client";
+import { connectionDeviceGrantSchema, connectionHostIdSchema } from "@deepseek-ai/dsh-client";
 import { dshDeviceStore, type StoredDshHost } from "./device-store";
 import { createNativeDshTransport } from "./transport";
 import { pairDshHost, openSavedDshHost } from "./access";

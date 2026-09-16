@@ -1,4 +1,4 @@
-import type { ConnectionHostId, SessionSelection } from "@deepseek-ai/dsh-api-remotes-client";
+import type { ConnectionHostId, SessionSelection } from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../../runtime/dsh-abort-controller";
 import { DshAccessError, type DshAccessErrorCode } from "../access-error";
 import { decodeDshPairing, type DshPairing } from "../pairing";

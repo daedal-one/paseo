@@ -18,7 +18,7 @@ Test existing DSH client modules under Metro/Hermes, browser and Electron; extra
 
 ## Portable dependency installation
 
-Consume the DSH-owned `@deepseek-ai/dsh-api-remotes-client` distribution and its shared dependency archives, pinning their source commit, checksums and package-manager lockfile. Do not copy DSH wire schemas or import Host packages into the app. Verify a clean package-manager install and strict declaration consumption before running the installed dependency through Metro/Hermes. Native runtime assembly uses one Cordis root and one hydrated Session selection per Host, explicit generated capability requirements and the app-owned cancellation adapter. Host credential storage, platform transports, QR enrollment and Session presentation remain required application work.
+Consume the DSH-owned `@deepseek-ai/dsh-client` application distribution and its shared dependency archives, pinning their source commit, checksums and package-manager lockfile. Consume API, Conversation and Chat from that one distribution so generated service types and merge-extensible Chat declarations retain one identity. Do not install the API-only distribution alongside it. Do not copy DSH wire schemas or import Host packages into the app. Verify a clean package-manager install and strict declaration consumption before running the installed dependency through Metro/Hermes. Native runtime assembly uses one Cordis root and one hydrated Session selection per Host, explicit generated capability requirements and the app-owned cancellation adapter. Host credential storage, platform transports, QR enrollment and Session presentation remain required application work.
 
 ## Native device access
 

@@ -5,7 +5,7 @@ import {
   connectionDeviceGrantSchema,
   connectionHostIdSchema,
   type ConnectionHostId,
-} from "@deepseek-ai/dsh-api-remotes-client";
+} from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "../access-error";
 import { parseDshOrigin } from "../host-origin";
 

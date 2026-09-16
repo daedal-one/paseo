@@ -19,11 +19,11 @@ const expected = [
   "@deepseek-ai/dsh-brand",
   "@deepseek-ai/dsh-typert-protocol",
   "@deepseek-ai/dsh-util-values",
-  "@deepseek-ai/dsh-api-remotes-client",
+  "@deepseek-ai/dsh-client",
 ];
 assert.equal(manifest.version, 1);
 assert.match(manifest.sourceCommit, /^[a-f0-9]{40}$/);
-assert.equal(manifest.entry, "@deepseek-ai/dsh-api-remotes-client");
+assert.equal(manifest.entry, "@deepseek-ai/dsh-client");
 assert.deepEqual(manifest.archives.map((archive) => archive.name).sort(), expected.sort());
 for (const archive of manifest.archives) {
   assert.equal(basename(archive.file), archive.file, "archive must be a local filename");
@@ -54,10 +54,61 @@ for (const archive of manifest.archives) {
   const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
   assert.equal(record.integrity, integrity, `lock integrity: ${archive.name}`);
 }
+assert.equal(app.dependencies["@deepseek-ai/dsh-api-remotes-client"], undefined);
+assert.ok(
+  !Object.keys(lock.packages).some((path) =>
+    path.endsWith("node_modules/@deepseek-ai/dsh-api-remotes-client"),
+  ),
+  "the API-only distribution must not duplicate application types",
+);
 const clientUrl = pathToFileURL(appRequire.resolve(manifest.entry));
 const client = await import(clientUrl.href);
 assert.equal(
   client.selectRemoteCapabilities(["session/list", "session/follow", "session/prompt"]).length,
   3,
 );
+const { Context } = await import(pathToFileURL(appRequire.resolve("@deepseek-ai/cordis")).href);
+const context = new Context();
+const events = new client.ConversationEventRegistry(context);
+const views = new client.ConversationViewRegistry(context);
+client.registerChatConversation({
+  events,
+  views,
+  inspectRequestPrompt: client.inspectRequestPrompt,
+  inspectSystemPrompt: client.inspectSystemPrompt,
+});
+const feed = new client.MutableSessionEventSource();
+const binding = new client.ConversationBindingModel(
+  feed,
+  new client.ConversationNodeAssembler(events, views),
+  null,
+);
+const target = binding.target("chat");
+const unsubscribe = target.subscribe(() => {});
+try {
+  feed.append({ type: "event", event: { type: "turn/start", seq: 1, time: 1, data: { turn: 1 } } });
+  feed.append({
+    type: "event",
+    event: { type: "step/start", seq: 2, time: 2, data: { turn: 1, step: 1 } },
+  });
+  feed.append({
+    type: "transient",
+    event: {
+      type: "assistant/live-chunk",
+      seq: 3,
+      time: 3,
+      data: {
+        turn: 1,
+        step: 1,
+        attemptId: "distribution-check",
+        chunk: { type: "text-delta", index: 0, text: "installed Chat" },
+      },
+    },
+  });
+  assert.equal(target.getSnapshot().navigation.items()[0].response, "installed Chat");
+} finally {
+  unsubscribe();
+  binding.dispose();
+  await context.fiber.dispose();
+}
 console.log(`DSH Client verified: ${manifest.sourceCommit}, ${manifest.archives.length} archives`);

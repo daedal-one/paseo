@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { brandString } from "@deepseek-ai/dsh-brand";
-import type {
-  ConnectionHostId,
-  SessionId,
-  SessionSelection,
-} from "@deepseek-ai/dsh-api-remotes-client";
+import type { ConnectionHostId, SessionId, SessionSelection } from "@deepseek-ai/dsh-client";
 import { createDshHostRuntime, type DshHostRuntimeOptions } from "./runtime";
 
 function offlineHost(hostId: string) {

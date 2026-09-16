@@ -1,6 +1,6 @@
 import { Context } from "@deepseek-ai/cordis";
 import { brandString } from "@deepseek-ai/dsh-brand";
-import * as dsh from "@deepseek-ai/dsh-api-remotes-client";
+import * as dsh from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {

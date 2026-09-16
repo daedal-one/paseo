@@ -4,7 +4,7 @@ import type {
   ConnectionDeviceCredential,
   RemoteStreamSocket,
   RpcFetch,
-} from "@deepseek-ai/dsh-api-remotes-client";
+} from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../../runtime/dsh-abort-controller";
 import { DshAccessError } from "../access-error";
 import { parseDshOrigin } from "../host-origin";

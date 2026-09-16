@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "sourceCommit": "da7b678457d59b0d104343c32c5400b4ef1c4415",
-  "entry": "@deepseek-ai/dsh-api-remotes-client",
+  "sourceCommit": "cd31c4bcbe007dd7df2b61dbcc8ae5730aa0e4c9",
+  "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
       "name": "@deepseek-ai/cordis",
@@ -34,10 +34,10 @@
       "sha256": "540cf2eb5036325840681efd32c613446c3fdbdfc7f3c3b20e3ff6b300ef9c81"
     },
     {
-      "name": "@deepseek-ai/dsh-api-remotes-client",
+      "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
-      "file": "deepseek-ai-dsh-api-remotes-client-0.1.5-alpha.2.tgz",
-      "sha256": "bb721a45e86f87bbc64815fb5648e5f1ae2ff6c13854a2ced3667315824c4963"
+      "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
+      "sha256": "ab6549e5a2a2fe182f08de0e72e55d4875352fe02d1ee7465fbeb3bf5a19e82f"
     }
   ]
 }
