@@ -146,6 +146,7 @@ export default {
     },
     plugins: [
       "expo-router",
+      ["expo-secure-store", { configureAndroidBackup: true, faceIDPermission: false }],
       withPasteInput,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,

@@ -24,6 +24,8 @@ The frontend consumes the generated portable DSH Client distribution from a clea
 
 The DSH interface owns Host-generation admission, generated wire fingerprints, business revisions, Session-format acceptance and required-event refusal. Platform adapters supply authenticated transports without changing those semantics. Missing remote operations belong in their DSH owner; unknown tool presentation does not permit dropping required wire events. One Host owns one runtime, credential, hydrated navigation store and disposal lifetime.
 
+Native platform adapters pin the complete origin, forbid URL credentials and fragments, and reject a credential-bearing request outside that origin before dispatch. HTTP grant and claim traffic omits cookies and refuses redirects. Native request cancellation remains owned until JSON-body decoding settles; disposal cannot leave an authenticated carrier alive. Credential parsing and storage failures disclose fixed diagnostic codes rather than raw values.
+
 ## Verification
 
 Exercise the same recorded session and live host across all three client transports. Verify authentication expiry, command timeout after acceptance, reconnect, duplicate decision, large deferred results and a rejected incompatible handshake.

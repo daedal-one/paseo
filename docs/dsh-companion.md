@@ -102,6 +102,16 @@ After a connection loss, the provider loads the missing committed history and th
 
 Change DSH access policy, presets, and host tools in DSH. Paseo's permission modes, injected MCP tools, and custom system prompts are not mapped onto existing DSH sessions. Custom DSH event types remain in DSH's log; this provider projects messages, reasoning, tools, and turn state. Terminal windows, worktrees, and other Paseo host features retain Paseo's own behavior.
 
+## Native frontend development
+
+The application screens still use the companion bridge described above. The replacement runtime lives in `packages/app/src/dsh/` and consumes the [generated DSH Client artifacts](../vendor/dsh/README.md). `native/access.ts` enrolls a selected Host once and opens saved access with the existing DSH Session and Workspace services. Its caller owns one runtime per Host, hydrated navigation, visible connection state and disposal before local forgetting.
+
+`native/device-store.ts` keeps device grants and selected origins in Expo SecureStore with device-only, unlocked keychain access. Ordinary storage contains only the Host-id index. A missing keychain value is unpaired; corrupt or unavailable storage fails explicitly. An interrupted save or forget can leave an unpaired index entry. Local forgetting deletes the device secret but does not revoke its Host-side grant. Pairing consumes its challenge once; a lost response is uncertain and is not retried. A storage failure after a successful claim requires owner-side grant recovery before pairing again.
+
+The iOS transport uses Expo Fetch with cookie omission and redirect refusal, plus React Native WebSocket with a bearer header and the selected Origin. The adapter reads and cancels the native response stream itself because SDK 54 text/JSON decoding can remain pending after cancellation. Every carrier is pinned to the complete saved origin. HTTP is allowed only for explicit loopback or numeric Tailscale addresses; other origins require HTTPS. iOS may supply ambient WebSocket cookies, so DSH's strict bearer rejection remains required. Android, browser and Electron transports have separate qualification gates. Credentials never travel in URLs or diagnostic messages.
+
+Run the focused access tests from the root with `npm run test --workspace=@getpaseo/app -- src/dsh/native/access.test.ts`. They use native-module substitutes and the real installed DSH runtime. They do not establish camera pairing, application navigation, physical-iPhone behavior or TestFlight acceptance. The [migration plan](daedal-dsh-migration-plan.md) owns those remaining gates.
+
 ## Verification
 
 Focused tests live alongside the adapter in `packages/server/src/server/agent/providers/dsh/`. From `packages/server`:
