@@ -18,9 +18,18 @@ import {
   type DshDirectoryHost,
   type DshPairingState,
 } from "../native/directory";
+import type { ConversationScheduler, SessionListState, SessionId } from "@deepseek-ai/dsh-client";
+import { Conversation } from "./conversation";
 import type { DshHostRuntime } from "../runtime";
 import type { DshAccessErrorCode } from "../access-error";
 import { styles } from "./styles";
+
+const conversationScheduler: ConversationScheduler = {
+  schedule(publish) {
+    const frame = requestAnimationFrame(publish);
+    return () => cancelAnimationFrame(frame);
+  },
+};
 
 const barcodeSettings: BarcodeSettings = { barcodeTypes: ["qr"] };
 
@@ -169,6 +178,30 @@ function HostRow({ model, host, busy }: HostRowProps) {
   );
 }
 
+interface SessionRowProps {
+  session: SessionListState["byId"][SessionId];
+  model: DshDirectory;
+  busy: boolean;
+}
+function SessionRow({ session, model, busy }: SessionRowProps) {
+  const { t } = useTranslation();
+  const open = useCallback(
+    () => model.openConversation(session.id, conversationScheduler),
+    [model, session.id],
+  );
+  return (
+    <View style={styles.row}>
+      <Text style={styles.text}>{session.displayTitle}</Text>
+      <Text style={styles.muted}>
+        {session.running ? t("nativeDsh.running") : t("nativeDsh.idle")}
+      </Text>
+      <Button size="sm" disabled={busy} testID={`dsh-open-session-${session.id}`} onPress={open}>
+        {t("nativeDsh.conversation.open")}
+      </Button>
+    </View>
+  );
+}
+
 interface SessionsProps {
   runtime: DshHostRuntime;
   model: DshDirectory;
@@ -210,12 +243,7 @@ function Sessions({ runtime, model, busy }: SessionsProps) {
       )}
       {ready &&
         list.ids.map((id) => (
-          <View key={id} style={styles.row}>
-            <Text style={styles.text}>{list.byId[id].displayTitle}</Text>
-            <Text style={styles.muted}>
-              {list.byId[id].running ? t("nativeDsh.running") : t("nativeDsh.idle")}
-            </Text>
-          </View>
+          <SessionRow key={id} session={list.byId[id]} model={model} busy={busy} />
         ))}
       <View style={styles.actions}>
         <Button size="sm" disabled={busy} onPress={reconnect}>
@@ -252,6 +280,19 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
   const idle = state.pairing.status === "idle";
   const scan = useCallback(() => model.scan(), [model]);
   const reload = useCallback(() => model.reload(), [model]);
+  if (state.runtime !== null && state.conversation !== null)
+    return (
+      <ScrollView contentContainerStyle={styles.content}>
+        {state.error !== null && <AccessError code={state.error} />}
+        <Conversation
+          key={state.conversation.sessionId}
+          model={model}
+          runtime={state.runtime}
+          view={state.conversation}
+          busy={state.busy}
+        />
+      </ScrollView>
+    );
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.muted}>{t("nativeDsh.preview")}</Text>

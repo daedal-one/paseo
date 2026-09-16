@@ -1,8 +1,13 @@
-import type { ConnectionHostId, SessionSelection } from "@deepseek-ai/dsh-client";
+import type {
+  ConnectionHostId,
+  ConversationScheduler,
+  SessionId,
+  SessionSelection,
+} from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../../runtime/dsh-abort-controller";
 import { DshAccessError, type DshAccessErrorCode } from "../access-error";
 import { decodeDshPairing, type DshPairing } from "../pairing";
-import type { DshHostRuntime } from "../runtime";
+import type { DshConversation, DshHostRuntime } from "../runtime";
 import { openSavedDshHost, pairDshHost } from "./access";
 import { dshDeviceStore } from "./device-store";
 
@@ -23,6 +28,7 @@ export interface DshDirectorySnapshot {
   directory: DshDirectoryLoad;
   pairing: DshPairingState;
   runtime: DshHostRuntime | null;
+  conversation: DshConversation | null;
   busy: boolean;
   error: DshAccessErrorCode | null;
 }
@@ -37,6 +43,7 @@ export class DshDirectory {
     directory: { status: "loading" },
     pairing: { status: "idle" },
     runtime: null,
+    conversation: null,
     busy: false,
     error: null,
   };
@@ -159,7 +166,7 @@ export class DshDirectory {
       .dispose()
       .then(() => {
         this.ownedRuntime = null;
-        this.publish({ runtime: null });
+        this.publish({ runtime: null, conversation: null });
         return;
       })
       .catch(() => {
@@ -193,6 +200,27 @@ export class DshDirectory {
       if (this.closed) await this.closeRuntime();
       else this.publish({ runtime });
     }, "runtime-unavailable");
+  }
+
+  openConversation(id: SessionId, scheduler: ConversationScheduler | null): Promise<void> {
+    return this.run(async () => {
+      const runtime = this.ownedRuntime;
+      if (runtime === null) throw new DshAccessError("session-unavailable");
+      const conversation = runtime.openConversation(id, scheduler);
+      this.publish({ conversation });
+    }, "session-unavailable");
+  }
+
+  closeConversation(): void {
+    if (this.closed) return;
+    this.ownedRuntime?.closeConversation();
+    this.publish({ conversation: null });
+  }
+
+  retryConversation(): Promise<void> {
+    return this.run(async () => {
+      await this.snapshot.conversation?.session.retryOpen();
+    }, "session-unavailable");
   }
 
   reconnect(): void {
@@ -237,6 +265,7 @@ export class DshDirectory {
       directory: { status: "ready", hosts: [] },
       pairing: { status: "idle" },
       runtime: null,
+      conversation: null,
       busy: false,
       error: null,
     };

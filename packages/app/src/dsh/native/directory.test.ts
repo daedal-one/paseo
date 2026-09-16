@@ -1,3 +1,5 @@
+import { brandString } from "@deepseek-ai/dsh-brand";
+import type { SessionId } from "@deepseek-ai/dsh-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionDeviceGrantSchema, connectionHostIdSchema } from "@deepseek-ai/dsh-client";
 import { DshDirectory, openDshDirectory } from "./directory";
@@ -82,6 +84,17 @@ afterEach(async () => {
 });
 
 describe("native DSH Host directory", () => {
+  it("keeps unavailable Session selection visible without inventing a connection", async () => {
+    const model = directory();
+    await model.openConversation(brandString<SessionId>("missing"), null);
+    expect(model.getSnapshot().error).toBe("session-unavailable");
+    expect(model.getSnapshot().conversation).toBeNull();
+    expect(openSavedDshHost).not.toHaveBeenCalled();
+    await model.dispose();
+    await model.openConversation(brandString<SessionId>("missing"), null);
+    expect(model.getSnapshot().conversation).toBeNull();
+  });
+
   it("distinguishes initial loading from a hydrated empty directory", async () => {
     vi.mocked(dshDeviceStore.list).mockResolvedValue([]);
     const model = directory();

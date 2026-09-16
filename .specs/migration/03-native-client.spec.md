@@ -6,7 +6,12 @@ summary: "Prove native DSH connectivity and device access."
 owners: [daedal-one]
 progress: in-progress
 addresses:
-  ["IFC:frontend/dsh-connection", "REQ:frontend/hosts-and-access", "REQ:frontend/resilience"]
+  [
+    "IFC:frontend/dsh-connection",
+    "REQ:frontend/hosts-and-access",
+    "REQ:frontend/resilience",
+    "REQ:frontend/sessions",
+  ]
 blocked_by: ["TASK:migration/01-contract-baseline"]
 ---
 
@@ -34,10 +39,18 @@ Expose an iPhone-native Host directory from Settings while retaining the existin
 
 Own at most one active Host runtime in the directory. Switching hosts and forgetting local access wait for disposal; leaving the screen cancels pending enrollment and disposes late runtime arrivals. A failed final disposal prevents another directory owner from opening until the app restarts. List saved entries without exposing credentials, keep corrupt or partial records visible with recovery, and distinguish initial loading from an authoritative empty Session list. Use the generated DSH Session feed directly, including reconnect and pagination. Observe its read activity and structured failures: a settled refresh is not proof of success. Keep retained rows visible after failed refresh or continuation and expose retry without presenting an initial failure as an empty list. Directory browsing has no durable conversation selection; selected-conversation restore belongs to the subsequent conversation surface. Qualification covers lifecycle races, native rendering and real Host reads; QR camera use and physical-device acceptance remain distinct gates. Preview copy uses locale dictionaries with an explicit English fallback until translations are supplied.
 
+## Native Session reading
+
+The directory opens a listed Session within its existing Host owner and returns to the list without creating another connection or cancelling Host execution. Compose the installed Conversation binding and shared Chat Definitions over the Session binding's event source; do not duplicate event projection or open another history stream. A Host owns at most one visible Conversation. Repeated selection retains its identity; selection changes and Host disposal detach the previous binding and cancel deferred publication. An unknown or removed Session cannot replace the current view silently.
+
+Render the loaded Session window using stable Chat order and per-node subscriptions. Show authoritative loading, empty, removed, resynchronizing and failed-read states. Retain readable content during disconnection and offer an explicit reconnect or initial-read retry. Render supported text and reasoning without raw event JSON; unsupported content remains visibly identified. This preview is read-only: prompt/approval controls, rich renderers and older-history loading remain subsequent work, and the current DSH interface remains available. Native Session selection is transient until durable restore is implemented. Qualify real native rendering against an isolated DSH Host as well as deterministic ownership and streaming cases; neither proves physical-device acceptance.
+
 ## Implementation references
 
 - [Protected access](spec:src:packages/app/src/dsh/native/access.ts)
 - [Native directory ownership](spec:src:packages/app/src/dsh/native/directory.ts)
+- [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
+- [Native Session reading](spec:src:packages/app/src/dsh/ui/conversation.tsx)
 - [iPhone directory screen](spec:src:packages/app/src/dsh/ui/directory-screen.ios.tsx)
 - [Directory lifecycle verification](spec:src:packages/app/src/dsh/native/directory.test.ts)
 

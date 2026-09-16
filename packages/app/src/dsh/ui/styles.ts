@@ -17,6 +17,7 @@ export const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
   },
   text: { fontSize: theme.fontSize.base, color: theme.colors.foreground },
+  message: { fontSize: theme.fontSize.content, color: theme.colors.foreground },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
   error: { fontSize: theme.fontSize.base, color: theme.colors.destructive },
   camera: { height: 300, width: "100%", borderRadius: theme.borderRadius.lg, overflow: "hidden" },

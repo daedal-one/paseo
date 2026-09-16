@@ -1,5 +1,6 @@
 export type DshAccessErrorCode =
   | "runtime-unavailable"
+  | "session-unavailable"
   | "session-refresh-failed"
   | "invalid-origin"
   | "invalid-record"

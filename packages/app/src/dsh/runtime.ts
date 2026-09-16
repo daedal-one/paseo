@@ -1,6 +1,7 @@
 import { Context } from "@deepseek-ai/cordis";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
+import { DshAccessError } from "./access-error";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -16,12 +17,20 @@ export interface DshHostRuntimeOptions {
   network?: dsh.ConnectionNetworkSource;
 }
 
+export interface DshConversation {
+  readonly sessionId: dsh.SessionId;
+  readonly session: dsh.SessionFace;
+  readonly conversation: dsh.ConversationBinding;
+}
+
 export interface DshHostRuntime {
   readonly hostId: dsh.ConnectionHostId;
   readonly connection: dsh.ConnectionHandle;
   readonly remote: Context["remote"];
   readonly sessions: dsh.ISessions;
   readonly workspaces: dsh.IWorkspaces;
+  openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
+  closeConversation(): void;
   dispose(): Promise<void>;
 }
 
@@ -81,13 +90,56 @@ export async function createDshHostRuntime(
       selection: options.selection,
     };
     await context.plugin({ apply: dsh.applySessions, inject: dsh.sessionInject }, sessions);
+    const events = new dsh.ConversationEventRegistry(context);
+    const views = new dsh.ConversationViewRegistry(context);
+    dsh.registerChatConversation({
+      events,
+      views,
+      inspectRequestPrompt: dsh.inspectRequestPrompt,
+      inspectSystemPrompt: dsh.inspectSystemPrompt,
+    });
+    let current: { view: DshConversation; binding: dsh.ConversationBindingModel } | null = null;
+    let closed = false;
+    function releaseConversation() {
+      if (current === null) return;
+      current.binding.dispose();
+      current = null;
+    }
+    context.effect(() => releaseConversation);
     return {
       hostId: options.hostId,
       connection,
       remote: context.remote,
       sessions: context.sessions,
       workspaces: context.workspaces,
+      openConversation(id, scheduler) {
+        if (closed) throw new DshAccessError("transport-disposed");
+        const source = context.sessions.binding(id);
+        if (source === undefined || source.session.getSnapshot().removed)
+          throw new DshAccessError("session-unavailable");
+        if (current?.view.sessionId === id) return current.view;
+        context.sessions.open(id);
+        const binding = new dsh.ConversationBindingModel(
+          source.eventSource,
+          new dsh.ConversationNodeAssembler(events, views),
+          scheduler,
+        );
+        const view: DshConversation = {
+          sessionId: id,
+          session: source.session,
+          conversation: binding,
+        };
+        releaseConversation();
+        current = { view, binding };
+        return view;
+      },
+      closeConversation() {
+        releaseConversation();
+        if (!closed) context.sessions.clear();
+      },
       async dispose() {
+        closed = true;
+        releaseConversation();
         await context.fiber.dispose();
       },
     };
