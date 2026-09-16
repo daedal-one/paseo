@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Linking, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
@@ -20,6 +20,10 @@ import {
 } from "../native/directory";
 import type { ConversationScheduler, SessionListState, SessionId } from "@deepseek-ai/dsh-client";
 import { Conversation } from "./conversation";
+import { Composer } from "./composer";
+import { KeyboardDock } from "@/components/keyboard-dock";
+import { ComposerViewport, ComposerViewportContent } from "@/composer/viewport";
+import { useSettledKeyboardShift } from "@/hooks/keyboard-shift-context";
 import type { DshHostRuntime } from "../runtime";
 import type { DshAccessErrorCode } from "../access-error";
 import { styles } from "./styles";
@@ -276,26 +280,37 @@ function Sessions({ runtime, model, busy }: SessionsProps) {
 
 function DirectoryContent({ model }: { model: DshDirectory }) {
   const { t } = useTranslation();
+  const keyboardShift = useSettledKeyboardShift();
+  const historyInset = useMemo(() => ({ height: keyboardShift }), [keyboardShift]);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const idle = state.pairing.status === "idle";
   const scan = useCallback(() => model.scan(), [model]);
   const reload = useCallback(() => model.reload(), [model]);
   if (state.runtime !== null && state.conversation !== null)
     return (
-      <ScrollView
-        contentContainerStyle={styles.content}
-        automaticallyAdjustKeyboardInsets
-        keyboardShouldPersistTaps="handled"
-      >
-        {state.error !== null && <AccessError code={state.error} />}
-        <Conversation
-          key={state.conversation.sessionId}
-          model={model}
-          runtime={state.runtime}
-          view={state.conversation}
-          busy={state.busy}
-        />
-      </ScrollView>
+      <ComposerViewport key={state.conversation.sessionId} style={layoutStyles.viewport}>
+        <KeyboardDock style={layoutStyles.fill}>
+          <ScrollView
+            style={layoutStyles.fill}
+            contentInsetAdjustmentBehavior="never"
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={historyInset} />
+            <View style={styles.content}>
+              {state.error !== null && <AccessError code={state.error} />}
+              <Conversation
+                model={model}
+                runtime={state.runtime}
+                view={state.conversation}
+                busy={state.busy}
+              />
+            </View>
+          </ScrollView>
+          <ComposerViewportContent style={layoutStyles.composer}>
+            <Composer model={state.conversation.prompt} />
+          </ComposerViewportContent>
+        </KeyboardDock>
+      </ComposerViewport>
     );
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -373,3 +388,9 @@ export default function DshDirectoryScreen() {
     </View>
   );
 }
+
+const layoutStyles = RNStyleSheet.create({
+  viewport: { flex: 1, overflow: "hidden" },
+  fill: { flex: 1 },
+  composer: { width: "100%", flexShrink: 1 },
+});

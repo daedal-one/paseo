@@ -9,6 +9,8 @@ export const styles = StyleSheet.create((theme) => ({
     alignSelf: "center",
   },
   group: { gap: theme.spacing[3] },
+  composer: { flexShrink: 1, gap: theme.spacing[3] },
+  composerFields: { flexShrink: 1, flexGrow: 0 },
   row: { gap: theme.spacing[2], paddingVertical: theme.spacing[3] },
   actions: { flexDirection: "row", gap: theme.spacing[3], flexWrap: "wrap" },
   title: {
