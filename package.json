@@ -124,7 +124,8 @@
     "release:patch": "npm run release:check && npm run version:all:patch && npm run release:publish && npm run release:push",
     "release:minor": "npm run release:check && npm run version:all:minor && npm run release:publish && npm run release:push",
     "release:major": "npm run release:check && npm run version:all:major && npm run release:publish && npm run release:push",
-    "verify:dsh-client": "node scripts/verify-dsh-client.mjs"
+    "verify:dsh-client": "node scripts/verify-dsh-client.mjs",
+    "build:dsh-web": "npm run build:app-deps && cd packages/app && cross-env DSH_BROWSER_PREVIEW=1 expo export --platform web --output-dir ../../.dev/dsh-web"
   },
   "devDependencies": {
     "@types/ws": "^8.5.14",

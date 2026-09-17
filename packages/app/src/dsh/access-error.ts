@@ -1,4 +1,5 @@
 export type DshAccessErrorCode =
+  | "browser-auth-required"
   | "runtime-unavailable"
   | "session-unavailable"
   | "session-refresh-failed"

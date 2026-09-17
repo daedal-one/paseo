@@ -25,6 +25,14 @@ Test existing DSH client modules under Metro/Hermes, browser and Electron; extra
 
 Consume the DSH-owned `@deepseek-ai/dsh-client` application distribution and its shared dependency archives, pinning their source commit, checksums and package-manager lockfile. Consume API, Conversation, Chat, the pending-interaction registry and approval/question carriers and Remote consumers from that one distribution so generated service types, contributed pending values and Chat declarations retain one identity. Verify registered-carrier narrowing and shared Session/Remote registration types after installation. Qualify installed answers, precedence, cancellation and disposal through the iOS bundler; this dependency qualification does not establish native answer controls or actual Remote delivery. Do not install the API-only distribution alongside it. Do not copy DSH wire schemas or import Host packages into the app. Verify a clean package-manager install and strict declaration consumption before running the installed dependency through Metro/Hermes. Native runtime assembly uses one Cordis root and one hydrated Session selection per Host, explicit generated capability requirements and the app-owned cancellation adapter. Host credential storage, platform transports, QR enrollment and Session presentation remain required application work.
 
+## Browser owner transport
+
+The browser preview runs on the DSH Host origin and uses its existing browser-owner authentication. It does not enroll a device, copy cookies into JavaScript or persist bearer grants. Pin HTTP and WebSocket requests to the complete page origin, reject URL credentials and fragments, refuse redirects, and preserve cancellation through response decoding. Unsupported page schemes fail before network access. Read Host identity through the authenticated generated Connection RPC and bind the shared runtime to that identity; every subsequent generation still requires native capability admission. Follow browser online/offline events and detach them when disposing the runtime. Cancelling initialization disposes late arrivals rather than publishing another connection. Other Host origins require separately authenticated pages; no cross-origin credential proxy is implied.
+
+Share Session presentation and interaction owners across platform screens. Browser qualification must use a real authenticated Host, including incompatible admission, cancellation, read/reconnect and an actual prompt/interaction. A transport unit test or static export does not satisfy this acceptance. Desktop uses its own protected device storage and transport owner; the browser cookie path must not become an Electron credential fallback.
+
+Build the browser preview with a matching `/daedal` asset/router base and mount it through DSH's authenticated frontend-static owner, with `/dsh-hosts` as an explicit index route. Retain the root Web interface and its launch-token sign-in. The mounted distribution owns its bootstrap and shares the Host API and Session writer.
+
 ## Native device access
 
 Use the installed DSH validators for enrollment and protected grant records. Native grants remain in Expo SecureStore with device-only, unlocked keychain access; a nonsecret Host-id index is the only enrollment data in ordinary storage. Serialize index/secret mutations, keep partially saved entries visibly unpaired, and surface storage failures without disclosing credentials. A missing or invalid stored grant never falls back to legacy passwords or browser ownership.
@@ -63,6 +71,8 @@ Qualify generated Remote Event delivery, Session and Host isolation, mixed-reque
 
 ## Implementation references
 
+- [Browser access](spec:src:packages/app/src/dsh/browser/access.ts)
+- [Shared directory ownership](spec:src:packages/app/src/dsh/directory.ts)
 - [Protected access](spec:src:packages/app/src/dsh/native/access.ts)
 - [Native directory ownership](spec:src:packages/app/src/dsh/native/directory.ts)
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)

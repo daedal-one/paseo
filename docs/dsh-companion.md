@@ -120,9 +120,29 @@ The main conversation screens use the companion bridge described above; iPhone S
 
 `native/device-store.ts` keeps device grants and selected origins in Expo SecureStore with device-only, unlocked keychain access. Ordinary storage contains only the Host-id index. A missing keychain value is unpaired; corrupt or unavailable storage fails explicitly. An interrupted save or forget can leave an unpaired index entry. Local forgetting deletes the device secret but does not revoke its Host-side grant. Pairing consumes its challenge once; a lost response is uncertain and is not retried. A storage failure after a successful claim requires owner-side grant recovery before pairing again.
 
-The iOS transport uses Expo Fetch with cookie omission and redirect refusal, plus React Native WebSocket with a bearer header and the selected Origin. The adapter reads and cancels the native response stream itself because SDK 54 text/JSON decoding can remain pending after cancellation. Every carrier is pinned to the complete saved origin. HTTP is allowed only for explicit loopback or numeric Tailscale addresses; other origins require HTTPS. iOS may supply ambient WebSocket cookies, so DSH's strict bearer rejection remains required. Android, browser and Electron transports have separate qualification gates. Credentials never travel in URLs or diagnostic messages.
+The iOS transport uses Expo Fetch with cookie omission and redirect refusal, plus React Native WebSocket with a bearer header and the selected Origin. The adapter reads and cancels the native response stream itself because SDK 54 text/JSON decoding can remain pending after cancellation. Every carrier is pinned to the complete saved origin. HTTP is allowed only for explicit loopback or numeric Tailscale addresses; other origins require HTTPS. iOS may supply ambient WebSocket cookies, so DSH's strict bearer rejection remains required. Android and Electron transports have separate qualification gates. The browser preview uses the same-origin owner session described below. Credentials never travel in URLs or diagnostic messages.
 
 Run the focused access tests from the root with `npm run test --workspace=@getpaseo/app -- src/dsh/native/access.test.ts`. They use native-module substitutes and the real installed DSH runtime. They do not establish camera pairing, application navigation, physical-iPhone behavior or TestFlight acceptance. The [migration plan](daedal-dsh-migration-plan.md) owns those remaining gates.
+
+### Direct browser preview
+
+`npm run build:dsh-web` exports the app to `.dev/dsh-web` with `/daedal` as its asset and router base. Use a DSH build with the authenticated frontend mount support, then add this optional patch to its normal Web profile:
+
+```yaml
+- insert:
+    - id: daedal-browser-preview
+      name: "@deepseek-ai/dsh-host-frontend-static"
+      config:
+        distIndex: /absolute/path/to/deepseek-harness-companion/.dev/dsh-web/index.html
+        mountPath: /daedal
+        indexPaths: [/dsh-hosts]
+```
+
+Start the profile with `dsh --profile web --patch /absolute/path/to/preview.yml`. Open the normal DSH launch URL to sign in, then visit `/daedal/dsh-hosts` on that same origin. The current UI remains at `/`. The preview consumes the Host's generated Session and interaction APIs directly and starts no second Session writer. A separately hosted companion page cannot use this connection.
+
+`browser/transport.ts` pins HTTP and WebSocket traffic to the page origin and uses the existing browser-owner session; JavaScript neither reads cookies nor stores device grants. HTTP redirects are refused, cancellation includes response decoding, and unsupported page schemes fail before dispatch. `browser/access.ts` checks Host identity, composes the shared runtime and owns browser connectivity listeners. Session list, conversation and interaction presentation share the iPhone owners; browser mount support does not provide Electron device credentials.
+
+The isolated browser check uses a real DSH Web profile with recorded model responses. It covers unsigned-index refusal, signed-in Session reading, text submission, tool approval, multi-select answers and draft preservation through offline/reconnect. It does not establish physical-iPhone or Electron acceptance.
 
 ### Native interaction requests
 

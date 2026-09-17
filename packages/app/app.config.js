@@ -187,6 +187,7 @@ export default {
       ...(isProfileBuild ? [withAndroidProfileable] : []),
     ],
     experiments: {
+      ...(process.env.DSH_BROWSER_PREVIEW === "1" ? { baseUrl: "/daedal" } : {}),
       typedRoutes: true,
       reactCompiler: true,
       autolinkingModuleResolution: true,

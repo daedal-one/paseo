@@ -1,5 +1,9 @@
 export const nativeDsh = {
   title: "DSH hosts",
+  reloadBrowser: "Reconnect to this host",
+  browserAccess: "Direct DSH preview. This page uses the current host’s browser sign-in.",
+  desktopPending:
+    "Direct desktop access is being integrated. Your existing companion connections remain available.",
   iosOnly:
     "Native host access is available on iPhone. Desktop and browser access are being migrated.",
   preview:
@@ -89,6 +93,7 @@ export const nativeDsh = {
     failed: "This request has ended. Check the conversation for the current request.",
   },
   errors: {
+    "browser-auth-required": "Open the DSH host’s sign-in page, sign in, then reload this preview.",
     "session-unavailable": "This session is unavailable. Refresh the session list and try again.",
     "runtime-unavailable":
       "Could not open or close the host connection. Close and reopen the app before trying again.",

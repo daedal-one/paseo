@@ -1,0 +1,122 @@
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
+import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
+import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
+import { Button } from "@/components/ui/button";
+import { BackHeader } from "@/components/headers/back-header";
+import { getIsElectron } from "@/constants/platform";
+import { openBrowserDshDirectory } from "../browser/directory";
+import type { DshDirectory } from "../directory";
+import type { DshInteractionForm } from "../interaction-form";
+import { Conversation } from "./conversation";
+import { SessionComposer } from "./interactions";
+import { Sessions } from "./sessions";
+import { styles } from "./styles";
+
+async function connectPageHost(model: DshDirectory): Promise<void> {
+  await model.reload();
+  const { directory } = model.getSnapshot();
+  if (directory.status !== "ready") return;
+  const host = directory.hosts[0];
+  if (host?.status === "paired") await model.connect(host.hostId);
+}
+
+function BrowserContent({ model }: { model: DshDirectory }) {
+  const { t } = useTranslation();
+  const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
+  const [forms] = useState(() => new WeakMap<SessionPendingInteraction, DshInteractionForm>());
+  const retry = useCallback(() => connectPageHost(model), [model]);
+  if (state.runtime !== null && state.conversation !== null) {
+    return (
+      <View style={layout.fill}>
+        <ScrollView style={layout.fill} contentContainerStyle={styles.content}>
+          <Conversation
+            model={model}
+            runtime={state.runtime}
+            view={state.conversation}
+            busy={state.busy}
+          />
+        </ScrollView>
+        <View style={layout.composer}>
+          <SessionComposer runtime={state.runtime} view={state.conversation} forms={forms} />
+        </View>
+      </View>
+    );
+  }
+  const error = state.error ?? (state.directory.status === "failed" ? state.directory.error : null);
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.muted}>{t("nativeDsh.browserAccess")}</Text>
+      {error !== null && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {t(`nativeDsh.errors.${error}`)}
+        </Text>
+      )}
+      {state.busy && <Text style={styles.text}>{t("common.loading")}</Text>}
+      {state.runtime !== null && (
+        <Sessions model={model} runtime={state.runtime} busy={state.busy} />
+      )}
+      {state.runtime === null && (
+        <Button onPress={retry} disabled={state.busy}>
+          {t("nativeDsh.reloadBrowser")}
+        </Button>
+      )}
+    </ScrollView>
+  );
+}
+
+export default function BrowserDshDirectoryScreen() {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const back = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/settings");
+  }, [router]);
+  const focused = useIsFocused();
+  const electron = getIsElectron();
+  const [model, setModel] = useState<DshDirectory | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!focused || electron) return;
+    let visible = true;
+    let owned: DshDirectory | null = null;
+    void openBrowserDshDirectory()
+      .then(async (directory) => {
+        if (!visible) {
+          await directory.dispose();
+          return;
+        }
+        owned = directory;
+        setModel(directory);
+        setFailed(false);
+        return connectPageHost(directory);
+      })
+      .catch(() => {
+        if (visible) setFailed(true);
+      });
+    return () => {
+      visible = false;
+      setModel(null);
+      if (owned !== null) void owned.dispose().catch(() => setFailed(true));
+    };
+  }, [focused, electron]);
+  return (
+    <View style={styles.screen}>
+      <BackHeader title={t("nativeDsh.title")} onBack={back} />
+      {electron && <Text style={styles.text}>{t("nativeDsh.desktopPending")}</Text>}
+      {failed && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {t("nativeDsh.errors.runtime-unavailable")}
+        </Text>
+      )}
+      {focused && model !== null && <BrowserContent model={model} />}
+    </View>
+  );
+}
+
+const layout = StyleSheet.create({
+  fill: { flex: 1, minHeight: 0 },
+  composer: { flexShrink: 1, maxHeight: "50%" },
+});

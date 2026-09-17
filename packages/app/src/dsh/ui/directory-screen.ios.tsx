@@ -19,28 +19,16 @@ import {
   type DshDirectoryHost,
   type DshPairingState,
 } from "../native/directory";
-import type {
-  ConversationScheduler,
-  SessionListState,
-  SessionId,
-  SessionPendingInteraction,
-} from "@deepseek-ai/dsh-client";
+import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
 import { Conversation } from "./conversation";
+import { Sessions } from "./sessions";
 import { SessionComposer } from "./interactions";
 import type { DshInteractionForm } from "../interaction-form";
 import { KeyboardDock } from "@/components/keyboard-dock";
 import { ComposerViewport, ComposerViewportContent } from "@/composer/viewport";
 import { useSettledKeyboardShift } from "@/hooks/keyboard-shift-context";
-import type { DshHostRuntime } from "../runtime";
 import type { DshAccessErrorCode } from "../access-error";
 import { styles } from "./styles";
-
-const conversationScheduler: ConversationScheduler = {
-  schedule(publish) {
-    const frame = requestAnimationFrame(publish);
-    return () => cancelAnimationFrame(frame);
-  },
-};
 
 const barcodeSettings: BarcodeSettings = { barcodeTypes: ["qr"] };
 
@@ -184,111 +172,6 @@ function HostRow({ model, host, busy }: HostRowProps) {
         <Button size="sm" variant="outline" disabled={busy} onPress={forget}>
           {t("nativeDsh.forget")}
         </Button>
-      </View>
-    </View>
-  );
-}
-
-interface SessionRowProps {
-  pending: boolean;
-  session: SessionListState["byId"][SessionId];
-  model: DshDirectory;
-  busy: boolean;
-}
-function SessionRow({ session, model, busy, pending }: SessionRowProps) {
-  const { t } = useTranslation();
-  const open = useCallback(
-    () => model.openConversation(session.id, conversationScheduler),
-    [model, session.id],
-  );
-  return (
-    <View style={styles.row}>
-      <Text style={styles.text}>{session.displayTitle}</Text>
-      {pending && <Text style={styles.muted}>{t("nativeDsh.interactions.waiting")}</Text>}
-      <Text style={styles.muted}>
-        {session.running ? t("nativeDsh.running") : t("nativeDsh.idle")}
-      </Text>
-      <Button size="sm" disabled={busy} testID={`dsh-open-session-${session.id}`} onPress={open}>
-        {t("nativeDsh.conversation.open")}
-      </Button>
-    </View>
-  );
-}
-
-interface SessionsProps {
-  runtime: DshHostRuntime;
-  model: DshDirectory;
-  busy: boolean;
-}
-function Sessions({ runtime, model, busy }: SessionsProps) {
-  const pending = useSyncExternalStore(runtime.pending.subscribe, runtime.pending.getSnapshot);
-  const { t } = useTranslation();
-  const generation = useSyncExternalStore(
-    runtime.connection.generation.subscribe,
-    runtime.connection.generation.getSnapshot,
-  );
-  const connection = useSyncExternalStore(
-    runtime.connection.state.subscribe,
-    runtime.connection.state.getSnapshot,
-  );
-  const list = useSyncExternalStore(
-    runtime.sessions.list.subscribe,
-    runtime.sessions.list.getSnapshot,
-  );
-  let status: "connected" | "connecting" | "disconnected" = "connecting";
-  if (generation !== undefined) status = "connected";
-  else if (connection === "disconnected") status = "disconnected";
-  const connected = generation !== undefined;
-  const ready = connected && list.phase === "ready";
-  const readFailed = connected && list.error !== null;
-  const reading = connected && list.state === "loading";
-  const reconnect = useCallback(() => model.reconnect(), [model]);
-  const refresh = useCallback(() => model.refreshSessions(), [model]);
-  const loadMore = useCallback(() => model.loadMoreSessions(), [model]);
-  return (
-    <View style={styles.group} testID="dsh-session-list">
-      <Text style={styles.title}>{t("nativeDsh.sessions")}</Text>
-      <Text style={styles.muted}>{runtime.hostId}</Text>
-      <Text style={styles.text}>{t(`nativeDsh.connection.${status}`)}</Text>
-      {!ready && !readFailed && <Text style={styles.muted}>{t("nativeDsh.waiting")}</Text>}
-      {readFailed && <AccessError code="session-refresh-failed" />}
-      {ready && !readFailed && list.ids.length === 0 && (
-        <Text style={styles.text}>{t("nativeDsh.emptySessions")}</Text>
-      )}
-      {ready &&
-        list.ids.map((id) => (
-          <SessionRow
-            key={id}
-            session={list.byId[id]}
-            model={model}
-            busy={busy}
-            pending={pending.has(id)}
-          />
-        ))}
-      <View style={styles.actions}>
-        <Button size="sm" disabled={busy} onPress={reconnect}>
-          {t("nativeDsh.reconnect")}
-        </Button>
-        {connected && (
-          <Button
-            size="sm"
-            loading={reading}
-            disabled={busy || reading || list.loadingMore}
-            onPress={refresh}
-          >
-            {t("nativeDsh.refresh")}
-          </Button>
-        )}
-        {ready && list.hasMore && (
-          <Button
-            size="sm"
-            loading={list.loadingMore}
-            disabled={busy || reading || list.loadingMore}
-            onPress={loadMore}
-          >
-            {t("nativeDsh.loadMore")}
-          </Button>
-        )}
       </View>
     </View>
   );

@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type * as dsh from "@deepseek-ai/dsh-client";
 import { Button } from "@/components/ui/button";
-import type { DshDirectory } from "../native/directory";
+import type { DshDirectory } from "../directory";
 import type { DshConversation, DshHostRuntime } from "../runtime";
 import { styles } from "./styles";
 
