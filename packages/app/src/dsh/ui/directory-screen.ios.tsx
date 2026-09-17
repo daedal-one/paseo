@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { Linking, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import {
   CameraView,
@@ -363,6 +364,8 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
 }
 
 export default function DshDirectoryScreen() {
+  const insets = useSafeAreaInsets();
+  const safeArea = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
   const { t } = useTranslation();
   const router = useRouter();
   const back = useCallback(() => {
@@ -397,7 +400,7 @@ export default function DshDirectoryScreen() {
     };
   }, [focused]);
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, safeArea]}>
       <BackHeader title={t("nativeDsh.title")} onBack={back} />
       {disposeFailed && <AccessError code="runtime-unavailable" />}
       {focused && model !== null && <DirectoryContent model={model} />}

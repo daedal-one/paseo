@@ -29,6 +29,7 @@ export function Composer({ model }: { model: DshPrompt }) {
             onChangeText={model.setText}
             editable={state.submission.kind !== "unknown"}
             multiline
+            numberOfLines={6}
             size="md"
             accessibilityLabel={t("nativeDsh.composer.label")}
             placeholder={t("nativeDsh.composer.placeholder")}

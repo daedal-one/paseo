@@ -83,6 +83,7 @@ function QuestionField({ form, question, index, draft, disabled }: QuestionField
           onChangeText={setText}
           editable={!disabled}
           multiline
+          numberOfLines={6}
           size="md"
           accessibilityLabel={`${question.question} — ${t("nativeDsh.interactions.custom")}`}
           testID={`dsh-answer-${index}`}
