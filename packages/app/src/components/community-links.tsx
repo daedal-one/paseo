@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -12,15 +13,15 @@ const renderGitHubIcon = (color: string) => <GitHubIcon color={color} size={14} 
 export function CommunityLinks() {
   const { t } = useTranslation();
   const handleOpenGitHub = useCallback(() => {
-    void openExternalUrl("https://github.com/daedal-one/paseo");
+    void openExternalUrl(PRODUCT_LINKS.source);
   }, []);
 
   const handleOpenHelp = useCallback(() => {
-    void openExternalUrl("https://github.com/daedal-one/paseo/blob/main/docs/dsh-companion.md");
+    void openExternalUrl(PRODUCT_LINKS.help);
   }, []);
 
   const handleReportIssue = useCallback(() => {
-    void openExternalUrl("https://github.com/daedal-one/paseo/issues");
+    void openExternalUrl(PRODUCT_LINKS.issues);
   }, []);
 
   return (

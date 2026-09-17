@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -86,8 +87,6 @@ const METADATA_PROMPT_FIELDS: Record<MetadataPromptKey, MetadataPromptField> = {
     inputTestID: "metadata-prompt-pull-request-input",
   },
 };
-
-const WORKTREE_DOCS_URL = "https://paseo.sh/docs/worktrees";
 
 type ReadProjectConfigData = Awaited<ReturnType<DaemonClient["readProjectConfig"]>>;
 
@@ -664,7 +663,7 @@ function ProjectConfigForm({
   const setupDocsLink = useMemo(
     () => (
       <ExternalLink
-        href={WORKTREE_DOCS_URL}
+        href={PRODUCT_LINKS.worktrees}
         label={t("settings.project.worktree.docs")}
         tooltip={t("settings.project.worktree.docsTooltip")}
         testID="worktree-setup-docs-link"
@@ -675,7 +674,7 @@ function ProjectConfigForm({
   const teardownDocsLink = useMemo(
     () => (
       <ExternalLink
-        href={WORKTREE_DOCS_URL}
+        href={PRODUCT_LINKS.worktrees}
         label={t("settings.project.worktree.docs")}
         tooltip={t("settings.project.worktree.docsTooltip")}
         testID="worktree-teardown-docs-link"

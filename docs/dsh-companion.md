@@ -44,6 +44,8 @@ The desktop and mobile app preserve selected options and custom text together fo
 
 ## Desktop preview
 
+**Help** opens the fork’s DSH setup guide. **Report an issue** opens the daedal-one tracker. Feature guides remain in the fork while the bridge is available.
+
 Daedal DSH desktop connects to the existing companion at `127.0.0.1:6769`. The preview uses the current DSH bridge; native DSH client integration remains a separate migration task. Keep the companion host running before opening the desktop app.
 
 The shell does not start, stop, restart or upgrade a local Paseo daemon, and closing it leaves the external DSH host running. If the companion is unavailable, the app does not fall back to an unrelated daemon on port 6767. Use **Connect DSH host** on the home screen to open pairing and Tailscale discovery. Saved remote hosts can still be selected in the app.

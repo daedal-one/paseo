@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -13,7 +14,6 @@ import { buildSelectableProviderSelectorProviders } from "@/provider-selection/p
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { settingsStyles } from "@/styles/settings";
 
-const METADATA_GENERATION_DOCS_URL = "https://paseo.sh/docs/metadata-generation";
 type SelectionMode = "automatic" | "preferred";
 
 export function MetadataGenerationPage({ serverId }: { serverId: string }) {
@@ -92,7 +92,7 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
   const docsLink = useMemo(
     () => (
       <ExternalLink
-        href={METADATA_GENERATION_DOCS_URL}
+        href={PRODUCT_LINKS.metadataGeneration}
         label={t("settings.metadataGeneration.docs")}
       />
     ),

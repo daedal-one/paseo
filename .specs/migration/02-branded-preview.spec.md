@@ -15,6 +15,14 @@ blocked_by: []
 
 Apply company assets/localized copy and fork-owned packaging/update configuration in packages/app and packages/desktop. Preserve iOS identity. Use existing-host attach mode through the bridge for an explicitly transitional preview.
 
+## Setup and support surfaces
+
+Use the approved company mark in both native and browser startup rendering. Welcome, startup failure, sidebar help, changelog and feature-guide links point to the fork-owned setup, issue, release and documentation destinations. Keep bridge protocol identifiers and working pairing formats unchanged; present the companion pairing format in examples. Reuse localized Help copy and existing app navigation. Inspect the actual native welcome and browser help destinations, and qualify both export variants before release.
+
+- [Welcome](spec:src:packages/app/src/components/welcome-screen.tsx)
+- [Startup](spec:src:packages/app/src/screens/startup-splash-screen.tsx)
+- [Support destinations](spec:src:packages/app/src/components/sidebar/sidebar-help-menu.tsx)
+
 ## Acceptance
 
 A preview installs on Carlo's Mac and controls an existing DSH session, including approval and reconnect. Closing it leaves the external host running. Installed branding and updater ownership are inspected; required signing is verified before distribution. If the qualified preview changes the iPhone app, its matching signed companion build is submitted and its TestFlight availability is verified under the phase delivery requirement.

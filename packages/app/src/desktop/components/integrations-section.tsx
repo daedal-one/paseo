@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -10,8 +11,6 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { settingsStyles } from "@/styles/settings";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
-
-const CLI_DOCS_URL = "https://paseo.sh/docs/cli";
 
 export function IntegrationsSection() {
   const { t } = useTranslation();
@@ -29,7 +28,7 @@ export function IntegrationsSection() {
     [theme.iconSize.sm, theme.colors.foregroundMuted],
   );
   const handleOpenDocs = useCallback(() => {
-    void openExternalUrl(CLI_DOCS_URL);
+    void openExternalUrl(PRODUCT_LINKS.cli);
   }, []);
   const trailing = useMemo(
     () => (
