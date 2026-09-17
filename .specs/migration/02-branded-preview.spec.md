@@ -4,7 +4,7 @@ type: task
 status: accepted
 summary: "Deliver the first branded desktop preview."
 owners: [daedal-one]
-progress: in-progress
+progress: done
 addresses: ["REQ:frontend/brand", "REQ:frontend/desktop", "REQ:frontend/release-and-cutover"]
 blocked_by: []
 ---
@@ -36,3 +36,11 @@ Development and directory-only previews without packaged update metadata do not 
 A preview installs on Carlo's Mac and controls an existing DSH session, including approval and reconnect. Closing it leaves the external host running. Installed branding and updater ownership are inspected; required signing is verified before distribution. If the qualified preview changes the iPhone app, its matching signed companion build is submitted and its TestFlight availability is verified under the phase delivery requirement.
 
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
+
+## Delivery evidence
+
+The 17 September 2026 preview uses frontend candidate `ed3548a318a5f20345af18f0aac5151947649fee`. The installed macOS app has verified local ad-hoc signing, company branding and disabled automatic-update actions without packaged metadata. Existing live Session import/history and external-host survival after normal quit pass. The separate recorded-profile desktop scenario covers messages, exact-call approval, complete question answers, offline drafts and reconnect without duplicate submission.
+
+The signed companion version 0.8.0, build 7003003, preserves the existing application identity. EAS build `934d5771-6bad-4e32-b1e8-f4872892658f` and submission `d010ccf6-ee18-4c83-9487-4b7f5e92e68b` completed; Apple processing and access through Carlo's existing internal tester group were verified. Native welcome was inspected in the iPhone Simulator; physical-iPhone upgrade qualification remains in the mobile task.
+
+Publish the frontend migration branch first while retaining the deployed DSH and companion 0.7.2. The outgoing frontend range changes no bridge provider, server or protocol implementation. Native DSH access stays explicitly opt-in and uses Client artifacts pinned to backend `61a0b4acc9f60b14aa715a7aecc4c601855f59dd`. Keep the backend migration unpublished until its own phase gates pass. The previous installed desktop and TestFlight 0.7.2 build 7003002 provide compatible recovery; do not rewrite or downgrade Session data. The full native migration, long-plan and keyboard qualification, notarized desktop delivery and final cutover remain separate tasks.
