@@ -1349,6 +1349,8 @@ export const ja: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable:
+          "このビルドでは自動更新を利用できません。新しいビルドを手動でインストールしてください。",
         checking: "アプリの更新を確認中...",
         installing: "アプリの更新をインストール中...",
         upToDate: "アプリは最新です。",

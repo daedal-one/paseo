@@ -1336,6 +1336,7 @@ export const ar: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable: "التحديثات التلقائية غير متاحة في هذا الإصدار. ثبّت إصدارًا جديدًا يدويًا.",
         checking: "جارٍ التحقق من وجود تحديثات للتطبيق...",
         installing: "جارٍ تثبيت تحديث التطبيق...",
         upToDate: "التطبيق محدث.",

@@ -749,6 +749,7 @@ function DesktopAppUpdateRow() {
   const { settings, updateSettings } = useSettings();
   const {
     isDesktopApp,
+    status,
     statusText,
     availableUpdate,
     errorMessage,
@@ -857,7 +858,7 @@ function DesktopAppUpdateRow() {
             variant="outline"
             size="sm"
             onPress={handleCheckForUpdates}
-            disabled={isChecking || isInstalling}
+            disabled={isChecking || isInstalling || status === "unavailable"}
           >
             {isChecking ? t("settings.about.updates.checking") : t("settings.about.updates.check")}
           </Button>

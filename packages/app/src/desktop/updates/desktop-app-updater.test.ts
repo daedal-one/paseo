@@ -128,6 +128,18 @@ describe("desktop app updater — check", () => {
     });
   });
 
+  it("reports unavailable updates without claiming the preview is current", async () => {
+    const { updater, port } = createUpdater();
+    port.nextCheckResult(buildFakeCheckResult({ unavailable: true }));
+    await updater.checkForUpdates({ releaseChannel: "stable" });
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "unavailable",
+      availableUpdate: null,
+      errorMessage: null,
+      lastCheckedAt: null,
+    });
+  });
+
   it("reports 'up-to-date' when the check resolves with no update", async () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(buildFakeCheckResult({ hasUpdate: false, readyToInstall: false }));
@@ -331,6 +343,18 @@ describe("desktop app updater — install", () => {
     });
   });
 
+  it("reports unavailable when installation rechecks a preview build", async () => {
+    const { updater, port } = createUpdater();
+    port.nextInstallResult(buildFakeInstallResult({ unavailable: true, installed: false }));
+    await updater.installUpdate({ releaseChannel: "stable" });
+    expect(updater.getSnapshot()).toMatchObject({
+      status: "unavailable",
+      availableUpdate: null,
+      isInstalling: false,
+      lastCheckedAt: null,
+    });
+  });
+
   it("moves to 'up-to-date' when the install reports nothing to install", async () => {
     const { updater, port } = createUpdater();
     port.nextInstallResult(buildFakeInstallResult({ installed: false }));
@@ -383,6 +407,19 @@ describe("formatStatusText", () => {
   const formatVersion = (version: string | null | undefined) =>
     version ? `v${version.replace(/^v/i, "")}` : "\u2014";
   const formatLastCheckedAt = (timestamp: number) => `time-${timestamp}`;
+
+  it("explains how to update a build without automatic updates", () => {
+    expect(
+      formatStatusText({
+        status: "unavailable",
+        availableUpdate: null,
+        installMessage: null,
+        lastCheckedAt: null,
+        formatVersion,
+        formatLastCheckedAt,
+      }),
+    ).toBe("Automatic updates are unavailable in this build. Install a new build manually.");
+  });
 
   it("shows when an up-to-date check completed", () => {
     expect(

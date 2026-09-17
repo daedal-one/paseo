@@ -1361,6 +1361,8 @@ export const ptBR: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable:
+          "As atualizações automáticas não estão disponíveis nesta versão. Instale uma nova versão manualmente.",
         checking: "Verificando atualizações do app...",
         installing: "Instalando atualização do app...",
         upToDate: "O app está atualizado.",

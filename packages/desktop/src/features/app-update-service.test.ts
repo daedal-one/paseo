@@ -151,11 +151,15 @@ class FakeAppUpdateRuntime implements AppUpdateRuntime {
   }
 }
 
-function createService(input?: { now?: () => number; bucket?: () => Promise<number> }) {
+function createService(input?: {
+  now?: () => number;
+  bucket?: () => Promise<number>;
+  canUpdate?: () => Promise<boolean>;
+}) {
   const runtime = new FakeAppUpdateRuntime();
   const service = createAppUpdateService({
     runtime,
-    isPackaged: () => true,
+    canUpdate: input?.canUpdate ?? (async () => true),
     now: input?.now ?? (() => Date.parse("2026-04-28T12:00:00.000Z")),
     bucket: input?.bucket ?? (async () => 0.99),
   });
@@ -169,6 +173,84 @@ const rolledOutUpdate = {
 };
 
 describe("app update service", () => {
+  it("withdraws a prepared update when packaged update metadata disappears", async () => {
+    let enabled = true;
+    const { runtime, service } = createService({ canUpdate: async () => enabled });
+    const input = { currentVersion: "1.2.3", releaseChannel: "stable" as const };
+    runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
+    await service.checkForAppUpdate({ ...input, intent: "manual" });
+    runtime.finishUpdateDownload(rolledOutUpdate);
+    enabled = false;
+    expect(
+      await service.installUpdateOnQuit({ ...input, signal: new AbortController().signal }),
+    ).toBe(false);
+    expect(await service.downloadAndInstallUpdate(input)).toMatchObject({
+      unavailable: true,
+      installed: false,
+    });
+    enabled = true;
+    expect(
+      await service.installUpdateOnQuit({ ...input, signal: new AbortController().signal }),
+    ).toBe(false);
+    expect(runtime.checkCount).toBe(1);
+    expect(runtime.installedVersions).toEqual([]);
+  });
+
+  it("reports availability inspection failures without contacting the update server", async () => {
+    const { runtime, service } = createService({
+      canUpdate: async () => {
+        throw new Error("Update metadata is unreadable");
+      },
+    });
+    const result = await service.checkForAppUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+      intent: "manual",
+    });
+    expect(result).toMatchObject({
+      unavailable: false,
+      hasUpdate: false,
+      errorMessage: "Update metadata is unreadable",
+    });
+    await expect(
+      service.downloadAndInstallUpdate({ currentVersion: "1.2.3", releaseChannel: "stable" }),
+    ).rejects.toThrow("Update metadata is unreadable");
+    expect(runtime.checkCount).toBe(0);
+  });
+
+  it("keeps previews without update metadata out of checks and installation", async () => {
+    const { runtime, service } = createService({ canUpdate: async () => false });
+    const input = { currentVersion: "1.2.3", releaseChannel: "stable" as const };
+    const check = await service.checkForAppUpdate({ ...input, intent: "manual" });
+    expect(check).toEqual({
+      unavailable: true,
+      hasUpdate: false,
+      readyToInstall: false,
+      currentVersion: "1.2.3",
+      latestVersion: "1.2.3",
+      body: null,
+      date: null,
+      errorMessage: null,
+    });
+    let beforeQuitCount = 0;
+    const install = await service.downloadAndInstallUpdate(input, async () => {
+      beforeQuitCount += 1;
+    });
+    expect(install).toEqual({
+      unavailable: true,
+      installed: false,
+      version: "1.2.3",
+      message: "Automatic updates are unavailable in this build. Install a new build manually.",
+    });
+    expect(
+      await service.installUpdateOnQuit({ ...input, signal: new AbortController().signal }),
+    ).toBe(false);
+    expect(runtime.checkCount).toBe(0);
+    expect(runtime.downloadCallCount).toBe(0);
+    expect(runtime.installedVersions).toEqual([]);
+    expect(beforeQuitCount).toBe(0);
+  });
+
   it("does not expose automatic stable updates before the user is admitted to rollout", async () => {
     const { runtime, service } = createService();
     runtime.nextCheck({ isUpdateAvailable: true, updateInfo: rolledOutUpdate });
@@ -180,6 +262,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -201,6 +284,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -230,6 +314,7 @@ describe("app update service", () => {
     });
 
     expect(result).toMatchObject({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: true,
       latestVersion: "1.2.4",
@@ -254,6 +339,7 @@ describe("app update service", () => {
     });
 
     expect(result).toMatchObject({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       latestVersion: "1.2.4",
@@ -296,8 +382,7 @@ describe("app update service", () => {
       intent: "manual",
     });
 
-    await Promise.resolve();
-    expect(runtime.checkCount).toBe(1);
+    await expect.poll(() => runtime.checkCount).toBe(1);
 
     automaticCheck.resolve({ isUpdateAvailable: false, updateInfo: rolledOutUpdate });
     await automaticPending;
@@ -329,6 +414,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -359,6 +445,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -567,6 +654,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -588,6 +676,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -618,6 +707,7 @@ describe("app update service", () => {
 
     expect(runtime.checkCount).toBe(2);
     expect(retryResult).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -647,6 +737,7 @@ describe("app update service", () => {
 
     expect(runtime.checkCount).toBe(2);
     expect(automaticResult).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -689,6 +780,7 @@ describe("app update service", () => {
 
     expect(runtime.checkCount).toBe(3);
     expect(automaticResult).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -719,6 +811,7 @@ describe("app update service", () => {
     });
 
     expect(failedPreparation).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -737,6 +830,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -800,6 +894,7 @@ describe("app update service", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: false,
       currentVersion: "1.2.3",
@@ -832,6 +927,7 @@ describe("app update service", () => {
     const result = await pending;
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: true,
       readyToInstall: true,
       currentVersion: "1.2.3",

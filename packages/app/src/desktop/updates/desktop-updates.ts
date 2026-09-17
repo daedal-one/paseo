@@ -4,6 +4,7 @@ import { isWeb } from "@/constants/platform";
 import { i18n } from "@/i18n/i18next";
 
 export interface DesktopAppUpdateCheckResult {
+  unavailable: boolean;
   hasUpdate: boolean;
   readyToInstall: boolean;
   currentVersion: string | null;
@@ -14,6 +15,7 @@ export interface DesktopAppUpdateCheckResult {
 }
 
 export interface DesktopAppUpdateInstallResult {
+  unavailable: boolean;
   installed: boolean;
   version: string | null;
   message: string;
@@ -116,6 +118,7 @@ export async function checkDesktopAppUpdate({
   }
 
   return {
+    unavailable: result.unavailable === true,
     hasUpdate: result.hasUpdate === true,
     readyToInstall: result.readyToInstall === true,
     currentVersion: toStringOrNull(result.currentVersion),
@@ -137,6 +140,7 @@ export async function installDesktopAppUpdate({
   }
 
   return {
+    unavailable: result.unavailable === true,
     installed: result.installed === true,
     version: toStringOrNull(result.version),
     message: toStringOrNull(result.message) ?? i18n.t("desktop.updates.status.installed"),

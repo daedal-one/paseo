@@ -11,6 +11,7 @@ export type DesktopAppUpdateStatus =
   | "checking"
   | "pending"
   | "up-to-date"
+  | "unavailable"
   | "available"
   | "installing"
   | "installed"
@@ -102,14 +103,42 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function formatStatusText(input: {
+interface StatusTextInput {
   status: DesktopAppUpdateStatus;
   availableUpdate: DesktopAppUpdateCheckResult | null;
   installMessage: string | null;
   lastCheckedAt: number | null;
   formatVersion: (version: string | null | undefined) => string;
   formatLastCheckedAt: (timestamp: number) => string;
-}): string {
+}
+
+function formatPendingStatusText({
+  availableUpdate,
+  lastCheckedAt,
+  formatVersion,
+  formatLastCheckedAt,
+}: StatusTextInput): string {
+  if (availableUpdate?.latestVersion) {
+    return i18n.t(
+      lastCheckedAt != null
+        ? "desktop.updates.status.pendingWithVersionAndLastChecked"
+        : "desktop.updates.status.pendingWithVersion",
+      {
+        version: formatVersion(availableUpdate.latestVersion),
+        time: lastCheckedAt != null ? formatLastCheckedAt(lastCheckedAt) : undefined,
+      },
+    );
+  }
+
+  if (lastCheckedAt != null) {
+    return i18n.t("desktop.updates.status.pendingWithLastChecked", {
+      time: formatLastCheckedAt(lastCheckedAt),
+    });
+  }
+  return i18n.t("desktop.updates.status.pending");
+}
+
+export function formatStatusText(input: StatusTextInput): string {
   const {
     status,
     availableUpdate,
@@ -118,6 +147,8 @@ export function formatStatusText(input: {
     formatVersion,
     formatLastCheckedAt,
   } = input;
+
+  if (status === "unavailable") return i18n.t("desktop.updates.status.unavailable");
 
   if (status === "checking") {
     return i18n.t("desktop.updates.status.checking");
@@ -136,26 +167,7 @@ export function formatStatusText(input: {
     return i18n.t("desktop.updates.status.upToDate");
   }
 
-  if (status === "pending") {
-    if (availableUpdate?.latestVersion) {
-      return i18n.t(
-        lastCheckedAt != null
-          ? "desktop.updates.status.pendingWithVersionAndLastChecked"
-          : "desktop.updates.status.pendingWithVersion",
-        {
-          version: formatVersion(availableUpdate.latestVersion),
-          time: lastCheckedAt != null ? formatLastCheckedAt(lastCheckedAt) : undefined,
-        },
-      );
-    }
-
-    if (lastCheckedAt != null) {
-      return i18n.t("desktop.updates.status.pendingWithLastChecked", {
-        time: formatLastCheckedAt(lastCheckedAt),
-      });
-    }
-    return i18n.t("desktop.updates.status.pending");
-  }
+  if (status === "pending") return formatPendingStatusText(input);
 
   if (status === "available") {
     if (availableUpdate?.latestVersion) {
@@ -248,6 +260,17 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         return result;
       }
 
+      if (result.unavailable) {
+        commit({
+          ...state,
+          status: "unavailable",
+          availableUpdate: null,
+          errorMessage: null,
+          installMessage: null,
+          lastCheckedAt: null,
+        });
+        return result;
+      }
       let nextStatus: DesktopAppUpdateStatus;
       let nextAvailable: DesktopAppUpdateCheckResult | null;
 
@@ -307,12 +330,14 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         releaseChannel: options.releaseChannel,
       });
       const nextLastCheckedAt = deps.now();
+      let status: DesktopAppUpdateStatus = result.installed ? "installed" : "up-to-date";
+      if (result.unavailable) status = "unavailable";
       commit({
         ...state,
-        status: result.installed ? "installed" : "up-to-date",
+        status,
         availableUpdate: null,
         installMessage: result.message,
-        lastCheckedAt: nextLastCheckedAt,
+        lastCheckedAt: result.unavailable ? null : nextLastCheckedAt,
         isInstalling: false,
       });
       return result;

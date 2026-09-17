@@ -31,6 +31,22 @@ import {
 // These renderer cases use the Desktop bridge fixture. Actual Electron ownership
 // and native confirmation journeys live in daemon-lifecycle.e2e.mjs.
 test.describe("Desktop updates", () => {
+  test("a preview without automatic updates explains manual installation", async ({ page }) => {
+    await installDesktopRuntime(page, { serverId: getServerId(), updatesUnavailable: true });
+    await gotoAppShell(page);
+    await openDesktopAboutSettings(page);
+    await expect(
+      page.getByText(
+        "Automatic updates are unavailable in this build. Install a new build manually.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Update", exact: true })).toBeDisabled();
+    await expect(page.getByTestId("update-callout")).toHaveCount(0);
+    await expect(page.getByText("App is up to date.", { exact: true })).toHaveCount(0);
+  });
+
   test("a desktop-managed daemon explains why its update action is disabled", async ({
     page,
     desktopManagedOutdatedDaemon,

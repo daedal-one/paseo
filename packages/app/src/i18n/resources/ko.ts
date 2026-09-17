@@ -1343,6 +1343,8 @@ export const ko: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable:
+          "이 빌드에서는 자동 업데이트를 사용할 수 없습니다. 새 빌드를 수동으로 설치하세요.",
         checking: "앱 업데이트 확인 중...",
         installing: "앱 업데이트 설치 중...",
         upToDate: "앱이 최신 상태입니다.",

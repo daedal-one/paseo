@@ -35,6 +35,7 @@ function buildCheckResult(
   overrides: Partial<DesktopAppUpdateCheckResult> = {},
 ): DesktopAppUpdateCheckResult {
   return {
+    unavailable: false,
     hasUpdate: false,
     readyToInstall: false,
     currentVersion: null,
@@ -50,6 +51,7 @@ function buildInstallResult(
   overrides: Partial<DesktopAppUpdateInstallResult> = {},
 ): DesktopAppUpdateInstallResult {
   return {
+    unavailable: false,
     installed: false,
     version: null,
     message: "Update completed.",

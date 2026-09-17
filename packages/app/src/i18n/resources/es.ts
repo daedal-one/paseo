@@ -1371,6 +1371,8 @@ export const es: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable:
+          "Las actualizaciones automáticas no están disponibles en esta compilación. Instala una nueva manualmente.",
         checking: "Buscando actualizaciones de la aplicación...",
         installing: "Instalando actualización de la aplicación...",
         upToDate: "La aplicación está actualizada.",

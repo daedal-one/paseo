@@ -44,6 +44,8 @@ The desktop and mobile app preserve selected options and custom text together fo
 
 ## Desktop preview
 
+Directory-only desktop previews are updated manually. **About** shows when automatic updates are unavailable and disables update installation; release builds retain the fork-owned update feed.
+
 **Help** opens the fork’s DSH setup guide. **Report an issue** opens the daedal-one tracker. Feature guides remain in the fork while the bridge is available.
 
 Daedal DSH desktop connects to the existing companion at `127.0.0.1:6769`. The preview uses the current DSH bridge; native DSH client integration remains a separate migration task. Keep the companion host running before opening the desktop app.

@@ -1323,6 +1323,7 @@ export const zhCN: TranslationResources = {
     },
     updates: {
       status: {
+        unavailable: "此版本不支持自动更新。请手动安装新版本。",
         checking: "正在检查 app 更新...",
         installing: "正在安装 app 更新...",
         upToDate: "App 已是最新版本。",

@@ -1362,6 +1362,8 @@ export const en = {
     },
     updates: {
       status: {
+        unavailable:
+          "Automatic updates are unavailable in this build. Install a new build manually.",
         checking: "Checking for app updates...",
         installing: "Installing app update...",
         upToDate: "App is up to date.",

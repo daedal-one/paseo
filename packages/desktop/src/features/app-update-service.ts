@@ -6,6 +6,7 @@ import {
 } from "./app-update-rollout.js";
 
 export interface AppUpdateCheckResult {
+  unavailable: boolean;
   hasUpdate: boolean;
   readyToInstall: boolean;
   currentVersion: string;
@@ -16,6 +17,7 @@ export interface AppUpdateCheckResult {
 }
 
 export interface AppUpdateInstallResult {
+  unavailable: boolean;
   installed: boolean;
   version: string | null;
   message: string;
@@ -76,7 +78,7 @@ export interface AppUpdateService {
 
 export interface AppUpdateServiceDeps {
   runtime: AppUpdateRuntime;
-  isPackaged(): boolean;
+  canUpdate(): Promise<boolean>;
   now(): number;
   bucket(): Promise<number>;
   reportCheckError?(error: unknown): void;
@@ -85,6 +87,7 @@ export interface AppUpdateServiceDeps {
 }
 
 function buildCheckResult(input: {
+  unavailable?: boolean;
   currentVersion: string;
   hasUpdate: boolean;
   readyToInstall: boolean;
@@ -94,6 +97,7 @@ function buildCheckResult(input: {
   const { currentVersion, hasUpdate, readyToInstall, info, errorMessage = null } = input;
 
   return {
+    unavailable: input.unavailable ?? false,
     hasUpdate,
     readyToInstall,
     currentVersion,
@@ -133,6 +137,7 @@ function getErrorMessage(error: unknown): string {
 
 function buildDeferredInstallResult(currentVersion: string): AppUpdateInstallResult {
   return {
+    unavailable: false,
     installed: false,
     version: currentVersion,
     message: "Update validation timed out. The update will be installed later.",
@@ -246,18 +251,18 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     releaseChannel: AppReleaseChannel;
     intent: AppUpdateCheckIntent;
   }): Promise<AppUpdateCheckResult> {
-    if (!deps.isPackaged()) {
-      return buildCheckResult({
-        currentVersion,
-        hasUpdate: false,
-        readyToInstall: false,
-      });
-    }
-
     return runCheckExclusively(async () => {
-      configureRuntime(releaseChannel, intent);
-
       try {
+        if (!(await deps.canUpdate())) {
+          clearUpdateState();
+          return buildCheckResult({
+            currentVersion,
+            unavailable: true,
+            hasUpdate: false,
+            readyToInstall: false,
+          });
+        }
+        configureRuntime(releaseChannel, intent);
         const result = await deps.runtime.checkForUpdates();
         if (!result || !result.updateInfo) {
           clearUpdateState();
@@ -333,24 +338,20 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     },
     onBeforeQuit?: () => Promise<void>,
   ): Promise<AppUpdateInstallResult> {
-    if (!deps.isPackaged()) {
-      return {
-        installed: false,
-        version: currentVersion,
-        message: "Auto-update is not available in development mode.",
-      };
-    }
-
     const check = await checkForAppUpdate({
       currentVersion,
       releaseChannel,
       intent: "manual",
     });
     if (!check.hasUpdate) {
+      if (check.errorMessage) throw new Error(check.errorMessage);
       return {
+        unavailable: check.unavailable,
         installed: false,
         version: currentVersion,
-        message: check.errorMessage ?? "No update available.",
+        message: check.unavailable
+          ? "Automatic updates are unavailable in this build. Install a new build manually."
+          : "No update available.",
       };
     }
 
@@ -406,6 +407,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
   ): Promise<AppUpdateInstallResult> {
     if (!cachedUpdateInfo) {
       return {
+        unavailable: false,
         installed: false,
         version: currentVersion,
         message: "No update available. Check for updates first.",
@@ -424,6 +426,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
         restart,
       });
       return {
+        unavailable: false,
         installed: true,
         version: readyVersion,
         message: "Update downloaded. The app will restart shortly.",
@@ -437,6 +440,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       }
       if (preparation === "superseded") {
         return {
+          unavailable: false,
           installed: false,
           version: currentVersion,
           message: "A newer update was found and will be installed later.",
@@ -449,6 +453,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       });
 
       return {
+        unavailable: false,
         installed: true,
         version: readyVersion,
         message: "Update downloaded. The app will restart shortly.",
@@ -457,6 +462,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
       const message = error instanceof Error ? error.message : String(error);
       deps.reportInstallError?.(message);
       return {
+        unavailable: false,
         installed: false,
         version: currentVersion,
         message: `Update failed: ${message}`,
@@ -473,7 +479,7 @@ export function createAppUpdateService(deps: AppUpdateServiceDeps): AppUpdateSer
     releaseChannel: AppReleaseChannel;
     signal: AbortSignal;
   }): Promise<boolean> {
-    if (!deps.isPackaged() || !downloadedUpdateVersion) {
+    if (!downloadedUpdateVersion) {
       return false;
     }
 
