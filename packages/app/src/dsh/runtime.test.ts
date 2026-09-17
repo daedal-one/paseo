@@ -116,7 +116,43 @@ describe("native DSH runtime ownership", () => {
 
 // In-memory carriers exercise the installed generated codecs and real Session/Chat owners.
 // Platform socket and fetch behavior is qualified separately against an isolated DSH Host.
+function hasFixtureAdmission(
+  runtime: Awaited<ReturnType<typeof createDshHostRuntime>>,
+  id: SessionId,
+) {
+  return (
+    runtime.sessions
+      .binding(id)
+      ?.eventSource.getSnapshot()
+      .entries.some(
+        (entry) =>
+          entry.type === "event" &&
+          entry.event.type === "user/message" &&
+          entry.event.data.id === "admitted-1",
+      ) === true
+  );
+}
+
+function admittedPrompt(requestId: string, seq = 1) {
+  return {
+    type: "event",
+    event: {
+      type: "user/message",
+      seq,
+      time: seq + 1,
+      surfaceOp: "append",
+      data: {
+        id: `admitted-${seq}`,
+        role: "user",
+        content: [{ type: "text", text: "Possibly accepted" }],
+        source: { kind: "user", rpcId: requestId },
+      },
+    },
+  };
+}
+
 function conversationHost() {
+  let historyAdmission: string | null = null;
   const host = offlineHost("26e99520-f2d3-4874-84b5-07c5ef24775d");
   const identity = {
     version: 1,
@@ -312,7 +348,7 @@ function conversationHost() {
                 createdAt: 0,
                 isSeeded: false,
               },
-              cursor: 0,
+              cursor: historyAdmission === null ? 0 : 1,
               records: [
                 {
                   type: "event",
@@ -329,6 +365,7 @@ function conversationHost() {
                     },
                   },
                 },
+                ...(historyAdmission === null ? [] : [admittedPrompt(historyAdmission)]),
               ],
               hasMore: false,
               projections: { asOfSeq: 0, values: {} },
@@ -356,6 +393,14 @@ function conversationHost() {
       emit("close", undefined);
     },
     prompts,
+    admitOnReconnect(requestId: string) {
+      historyAdmission = requestId;
+    },
+    control(value: unknown) {
+      const streamId = streams.get("session/control");
+      if (streamId === undefined) throw new Error("Session control is not open");
+      item(streamId, value);
+    },
     replyToPrompt(reply: typeof promptReply) {
       promptReply = reply;
     },
@@ -664,6 +709,136 @@ describe("native DSH text submission", () => {
         text: "Possibly accepted",
         canSend: false,
         submission: { kind: "unknown" },
+      });
+      expect(host.prompts).toHaveLength(1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it.each(["live history", "reconnect history", "queue"])(
+    "confirms a lost reply from exact %s evidence without resending",
+    async (evidence) => {
+      const host = conversationHost();
+      host.replyToPrompt(async () => {
+        throw new Error("Reply lost");
+      });
+      const runtime = await createDshHostRuntime(host.options);
+      try {
+        await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+        const view = runtime.openConversation(host.ids[0], null);
+        await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+        view.prompt.setText("Possibly accepted");
+        expect(await view.prompt.send()).toBe(false);
+        const requestId = host.prompts[0]!.requestId;
+        expect(view.prompt.getSnapshot().submission.kind).toBe("unknown");
+        if (evidence === "live history") {
+          host.push(admittedPrompt("another-request"));
+          expect(view.prompt.getSnapshot().submission.kind).toBe("unknown");
+          host.push(admittedPrompt(requestId, 2));
+        } else if (evidence === "reconnect history") {
+          host.admitOnReconnect(requestId);
+          runtime.connection.reconnect();
+        } else {
+          host.control({
+            type: "queue",
+            sessionId: host.ids[0],
+            items: [
+              {
+                id: "queued-prompt",
+                placement: "queued",
+                rpcId: requestId,
+                message: {
+                  id: "queued-prompt",
+                  content: [{ type: "text", text: "Possibly accepted" }],
+                },
+              },
+            ],
+          });
+        }
+        await vi.waitFor(() =>
+          expect(view.prompt.getSnapshot()).toMatchObject({
+            text: "",
+            submission: { kind: "accepted" },
+            canSend: false,
+          }),
+        );
+        expect(host.prompts).toHaveLength(1);
+      } finally {
+        await runtime.dispose();
+      }
+    },
+  );
+
+  it.each(["before", "after"])(
+    "retains an edited draft when evidence arrives %s a lost reply",
+    async (timing) => {
+      const host = conversationHost();
+      let loseReply: (error: Error) => void = () => {
+        throw new Error("No pending request");
+      };
+      host.replyToPrompt(
+        () =>
+          new Promise((_resolve, reject) => {
+            loseReply = reject;
+          }),
+      );
+      const runtime = await createDshHostRuntime(host.options);
+      try {
+        await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+        const view = runtime.openConversation(host.ids[0], null);
+        await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+        view.prompt.setText("Possibly accepted");
+        const pending = view.prompt.send();
+        await vi.waitFor(() => expect(host.prompts).toHaveLength(1));
+        view.prompt.setText("Changed");
+        view.prompt.setText("Possibly accepted");
+        if (timing === "before") {
+          host.push(admittedPrompt(host.prompts[0]!.requestId));
+          await vi.waitFor(() => expect(hasFixtureAdmission(runtime, host.ids[0])).toBe(true));
+        }
+        loseReply(new Error("Reply lost"));
+        expect(await pending).toBe(timing === "before");
+        if (timing === "after") host.push(admittedPrompt(host.prompts[0]!.requestId));
+        await vi.waitFor(() =>
+          expect(view.prompt.getSnapshot()).toMatchObject({
+            text: "Possibly accepted",
+            submission: { kind: "accepted" },
+            canSend: true,
+          }),
+        );
+        expect(host.prompts).toHaveLength(1);
+      } finally {
+        await runtime.dispose();
+      }
+    },
+  );
+
+  it("releases an uncertain observer when another conversation opens", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => {
+      throw new Error("Reply lost");
+    });
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const first = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(first.session.getSnapshot().openState).toBe("open"));
+      first.prompt.setText("Possibly accepted");
+      await first.prompt.send();
+      const second = runtime.openConversation(host.ids[1], null);
+      await vi.waitFor(() => expect(second.session.getSnapshot().openState).toBe("open"));
+      second.prompt.setText("Independent draft");
+      host.push(admittedPrompt(host.prompts[0]!.requestId));
+      expect(first.prompt.getSnapshot()).toMatchObject({
+        text: "Possibly accepted",
+        submission: { kind: "unknown" },
+        canSend: false,
+      });
+      expect(second.prompt.getSnapshot()).toMatchObject({
+        text: "Independent draft",
+        submission: { kind: "idle" },
+        canSend: true,
       });
       expect(host.prompts).toHaveLength(1);
     } finally {

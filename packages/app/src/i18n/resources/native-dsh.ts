@@ -82,7 +82,7 @@ export const nativeDsh = {
       "The host rejected this message. Your draft is saved here. Check the session and model settings, then try again.",
     unconfirmed: "Unconfirmed message",
     unknown:
-      "Could not confirm whether the host received your submitted message. It will not be resent. Your draft is kept here. Check the conversation in the current DSH interface before sending it again.",
+      "Waiting to confirm whether the host received your message. Reconnect to check. It will not be resent, and your draft stays here until the host confirms acceptance.",
   },
   interactions: {
     approval: "Permission requested",

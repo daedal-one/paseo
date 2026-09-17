@@ -136,7 +136,9 @@ export async function createDshHostRuntime(
           sessionId: id,
           session: source.session,
           conversation: binding,
-          prompt: new DshPrompt(source.session, connection),
+          prompt: new DshPrompt(source, connection, () =>
+            brandString<dsh.SessionRequestId>(options.randomId()),
+          ),
         };
         releaseConversation();
         current = { view, binding };

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,13 @@ export function Composer({ model }: { model: DshPrompt }) {
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const editor = useRef<EditingTextInputHandle>(null);
   const send = useCallback(async () => {
-    if (await model.send()) editor.current?.replaceText(model.getSnapshot().text);
+    await model.send();
   }, [model]);
+  useEffect(() => {
+    if (state.submission.kind === "accepted" && model.getSnapshot() === state) {
+      editor.current?.replaceText(state.text);
+    }
+  }, [model, state]);
   if (state.availability === "subagent") return null;
   return (
     <View style={[styles.content, styles.composer]} testID="dsh-composer">
