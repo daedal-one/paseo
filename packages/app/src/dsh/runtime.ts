@@ -31,6 +31,7 @@ export interface DshHostRuntime {
   readonly remote: Context["remote"];
   readonly sessions: dsh.ISessions;
   readonly workspaces: dsh.IWorkspaces;
+  readonly pending: dsh.PendingInteractions["source"];
   openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
   closeConversation(): void;
   dispose(): Promise<void>;
@@ -92,6 +93,18 @@ export async function createDshHostRuntime(
       selection: options.selection,
     };
     await context.plugin({ apply: dsh.applySessions, inject: dsh.sessionInject }, sessions);
+    const pending = new dsh.PendingInteractions();
+    await context.plugin({
+      inject: ["remote", "sessions"],
+      apply(scope) {
+        dsh.registerApprovalRequests(scope.remote, scope.sessions, (precedence) =>
+          pending.register(scope, precedence),
+        );
+        dsh.registerQuestionRequests(scope.remote, scope.sessions, (precedence) =>
+          pending.register(scope, precedence),
+        );
+      },
+    });
     const events = new dsh.ConversationEventRegistry(context);
     const views = new dsh.ConversationViewRegistry(context);
     dsh.registerChatConversation({
@@ -115,6 +128,7 @@ export async function createDshHostRuntime(
       remote: context.remote,
       sessions: context.sessions,
       workspaces: context.workspaces,
+      pending: pending.source,
       openConversation(id, scheduler) {
         if (closed) throw new DshAccessError("transport-disposed");
         const source = context.sessions.binding(id);

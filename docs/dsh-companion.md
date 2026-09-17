@@ -112,6 +112,12 @@ The iOS transport uses Expo Fetch with cookie omission and redirect refusal, plu
 
 Run the focused access tests from the root with `npm run test --workspace=@getpaseo/app -- src/dsh/native/access.test.ts`. They use native-module substitutes and the real installed DSH runtime. They do not establish camera pairing, application navigation, physical-iPhone behavior or TestFlight acceptance. The [migration plan](daedal-dsh-migration-plan.md) owns those remaining gates.
 
+### Native interaction requests
+
+The native Host runtime uses DSH's shared pending registry and Remote approval/question consumers. Each Session row identifies waiting requests; the conversation composer displays the effective request. Tool approvals allow once or reject. Questions retain verbatim choices, free text, explicit skips and complete-batch submission; plan reviews show their full detail. A higher-priority request preserves the hidden form's draft. Leaving a conversation retains Host-owned work; leaving the directory releases its interaction consumers.
+
+Responses settle the shared Client carrier once. They are not replayed after disconnection, and local submission does not establish Host acceptance: follow the authoritative conversation and connection state. Native rendering, actual authenticated interaction delivery and physical-device release qualification remain separate from controlled transport tests.
+
 ### Host directory preview
 
 On iPhone, Settings → DSH hosts opens the native access preview. Scan a version-1 JSON device-enrollment QR, confirm the displayed origin and Host identity, and save the grant before viewing its Session list. Repeated camera frames do not claim access. QR challenges stay in memory; credentials remain in protected storage. The native device-enrollment QR is distinct from the legacy companion pairing link. Request enrollment from the owner-facing device access settings in DSH.

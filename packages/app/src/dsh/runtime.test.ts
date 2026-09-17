@@ -134,6 +134,7 @@ function conversationHost() {
   ]).map((entry) => Object.assign({}, entry, { availability: "available" }));
   const ids = [brandString<SessionId>("first"), brandString<SessionId>("second")];
   const calls: string[] = [];
+  const eventResults: unknown[] = [];
   const streams = new Map<string, string>();
   const listeners = new Map<string, Set<(event: { readonly data: unknown }) => void>>();
   const once = new Set<(event: { readonly data: unknown }) => void>();
@@ -183,6 +184,14 @@ function conversationHost() {
           })),
         };
         break;
+      case "$events/result": {
+        const frame = z
+          .object({ payload: z.object({ args: z.unknown() }) })
+          .parse(JSON.parse(String(init.body)));
+        eventResults.push(frame.payload.args);
+        value = undefined;
+        break;
+      }
       case "subagents/list":
         value = { entries: [], parentAvailable: true };
         break;
@@ -336,6 +345,16 @@ function conversationHost() {
   };
   return {
     options: host.options,
+    eventResults,
+    event(value: unknown) {
+      const streamId = streams.get("$events");
+      if (streamId === undefined) throw new Error("Remote event stream is not open");
+      item(streamId, value);
+    },
+    disconnect() {
+      readyState = 3;
+      emit("close", undefined);
+    },
     prompts,
     replyToPrompt(reply: typeof promptReply) {
       promptReply = reply;
@@ -761,4 +780,249 @@ describe("native DSH text submission", () => {
       await runtime.dispose();
     }
   });
+});
+
+describe("native DSH pending interactions", () => {
+  it("answers a scoped approval through the installed Remote event transport", async () => {
+    const host = conversationHost();
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      host.event({
+        type: "waterfall",
+        event: "approval/request",
+        eventId: "approval-one",
+        agentId: host.ids[1],
+        request: { toolName: "shell", reason: "Run tests" },
+      });
+      await vi.waitFor(() =>
+        expect(runtime.pending.getSnapshot().get(host.ids[1])?.kind).toBe("approval"),
+      );
+      const approval = runtime.pending.getSnapshot().get(host.ids[1]);
+      if (approval?.kind !== "approval") throw new Error("Missing approval");
+      expect(runtime.pending.getSnapshot().has(host.ids[0])).toBe(false);
+      expect(approval.reason).toBe("Run tests");
+      await approval.answer("allowed-once");
+      await vi.waitFor(() =>
+        expect(host.eventResults).toEqual([
+          {
+            clientId: "native-test",
+            eventId: "approval-one",
+            outcome: { kind: "result", value: "allowed-once" },
+          },
+        ]),
+      );
+      expect(runtime.pending.getSnapshot().size).toBe(0);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+it("preserves question identity beneath plan precedence and returns every answer", async () => {
+  const host = conversationHost();
+  const runtime = await createDshHostRuntime(host.options);
+  try {
+    await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+    host.event({
+      type: "waterfall",
+      event: "user-questions/request",
+      eventId: "question",
+      agentId: host.ids[0],
+      request: {
+        questions: [
+          { id: "a", question: "First?" },
+          { id: "b", question: "Second?" },
+        ],
+      },
+    });
+    await vi.waitFor(() =>
+      expect(runtime.pending.getSnapshot().get(host.ids[0])?.kind).toBe("question"),
+    );
+    const question = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (question?.kind !== "question") throw new Error("Missing question");
+    host.event({
+      type: "waterfall",
+      event: "approval/request",
+      eventId: "approval",
+      agentId: host.ids[0],
+      request: { toolName: "read" },
+    });
+    host.event({
+      type: "waterfall",
+      event: "user-questions/request",
+      eventId: "plan",
+      agentId: host.ids[0],
+      request: {
+        questions: [
+          {
+            id: "p",
+            question: "Review?",
+            detail: "Plan",
+            options: [{ label: "No" }, { label: "Yes" }],
+            intent: { kind: "plan-review", approve: "Yes" },
+          },
+        ],
+      },
+    });
+    await vi.waitFor(() =>
+      expect(runtime.pending.getSnapshot().get(host.ids[0])?.kind).toBe("plan-review"),
+    );
+    const plan = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (plan?.kind !== "plan-review") throw new Error("Missing plan");
+    await plan.answer({ answers: [{ id: "p", selected: ["Yes"] }] });
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().get(host.ids[0])).toBe(question));
+    await question.answer({
+      answers: [
+        { id: "a", selected: [], custom: "Text" },
+        { id: "b", selected: [] },
+      ],
+    });
+    await vi.waitFor(() =>
+      expect(runtime.pending.getSnapshot().get(host.ids[0])?.kind).toBe("approval"),
+    );
+    const approval = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (approval?.kind !== "approval") throw new Error("Missing approval");
+    await approval.answer("rejected");
+    await vi.waitFor(() => expect(host.eventResults).toHaveLength(3));
+    expect(host.eventResults).toEqual([
+      {
+        clientId: "native-test",
+        eventId: "plan",
+        outcome: { kind: "result", value: { answers: [{ id: "p", selected: ["Yes"] }] } },
+      },
+      {
+        clientId: "native-test",
+        eventId: "question",
+        outcome: {
+          kind: "result",
+          value: {
+            answers: [
+              { id: "a", selected: [], custom: "Text" },
+              { id: "b", selected: [] },
+            ],
+          },
+        },
+      },
+      {
+        clientId: "native-test",
+        eventId: "approval",
+        outcome: { kind: "result", value: "rejected" },
+      },
+    ]);
+    expect(runtime.pending.getSnapshot().size).toBe(0);
+  } finally {
+    await runtime.dispose();
+  }
+});
+
+it("withdraws a Host-cancelled question and never sends its late answer", async () => {
+  const host = conversationHost();
+  const runtime = await createDshHostRuntime(host.options);
+  try {
+    await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+    host.event({
+      type: "waterfall",
+      event: "user-questions/request",
+      eventId: "cancel",
+      agentId: host.ids[0],
+      request: { questions: [{ id: "q", question: "Answer?" }] },
+    });
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().size).toBe(1));
+    const question = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (question?.kind !== "question") throw new Error("Missing question");
+    host.event({ type: "cancel", eventId: "cancel" });
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().size).toBe(0));
+    await expect(
+      question.answer({ answers: [{ id: "q", selected: [], custom: "Late" }] }),
+    ).rejects.toThrow("already settled");
+    expect(host.eventResults).toEqual([]);
+  } finally {
+    await runtime.dispose();
+  }
+});
+
+it("sends explicit question cancellation as a rejected waterfall result", async () => {
+  const host = conversationHost();
+  const runtime = await createDshHostRuntime(host.options);
+  try {
+    await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+    host.event({
+      type: "waterfall",
+      event: "user-questions/request",
+      eventId: "cancel",
+      agentId: host.ids[0],
+      request: { questions: [{ id: "q", question: "Answer?" }] },
+    });
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().size).toBe(1));
+    const question = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (question?.kind !== "question") throw new Error("Missing question");
+    await question.cancel();
+    await vi.waitFor(() => expect(host.eventResults).toHaveLength(1));
+    expect(host.eventResults[0]).toMatchObject({
+      eventId: "cancel",
+      outcome: { kind: "rejected", error: { code: "ASK_CANCELLED" } },
+    });
+  } finally {
+    await runtime.dispose();
+  }
+});
+
+it("withdraws unanswered requests on generation loss and final disposal", async () => {
+  const host = conversationHost();
+  const runtime = await createDshHostRuntime(host.options);
+  try {
+    await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+    host.event({
+      type: "waterfall",
+      event: "approval/request",
+      eventId: "lost",
+      agentId: host.ids[0],
+      request: { toolName: "shell" },
+    });
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().size).toBe(1));
+    const request = runtime.pending.getSnapshot().get(host.ids[0]);
+    if (request?.kind !== "approval") throw new Error("Missing approval");
+    host.disconnect();
+    await vi.waitFor(() => expect(runtime.pending.getSnapshot().size).toBe(0));
+    await expect(request.answer("allowed-once")).rejects.toThrow("already settled");
+    expect(host.eventResults).toEqual([]);
+  } finally {
+    await runtime.dispose();
+  }
+  expect(runtime.pending.getSnapshot().size).toBe(0);
+});
+
+it("isolates two Hosts and releases unanswered requests when one closes", async () => {
+  const first = conversationHost();
+  const second = conversationHost();
+  const one = await createDshHostRuntime(first.options);
+  const two = await createDshHostRuntime(second.options);
+  try {
+    await vi.waitFor(() => expect(one.sessions.list.getSnapshot().phase).toBe("ready"));
+    await vi.waitFor(() => expect(two.sessions.list.getSnapshot().phase).toBe("ready"));
+    const frame = {
+      type: "waterfall",
+      event: "approval/request",
+      eventId: "separate",
+      agentId: first.ids[0],
+      request: { toolName: "shell" },
+    };
+    first.event(frame);
+    second.event(frame);
+    await vi.waitFor(() => expect(one.pending.getSnapshot().size).toBe(1));
+    await vi.waitFor(() => expect(two.pending.getSnapshot().size).toBe(1));
+    const other = two.pending.getSnapshot().get(second.ids[0]);
+    expect(one.pending.getSnapshot().get(first.ids[0])).not.toBe(other);
+    await one.dispose();
+    expect(one.pending.getSnapshot().size).toBe(0);
+    expect(two.pending.getSnapshot().get(second.ids[0])).toBe(other);
+    if (other?.kind !== "approval") throw new Error("Missing independent approval");
+    await other.answer("allowed-once");
+    await vi.waitFor(() => expect(second.eventResults).toHaveLength(1));
+    expect(first.calls).not.toContain("session/cancel");
+  } finally {
+    await one.dispose();
+    await two.dispose();
+  }
 });

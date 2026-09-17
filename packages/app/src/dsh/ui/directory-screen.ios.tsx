@@ -18,9 +18,15 @@ import {
   type DshDirectoryHost,
   type DshPairingState,
 } from "../native/directory";
-import type { ConversationScheduler, SessionListState, SessionId } from "@deepseek-ai/dsh-client";
+import type {
+  ConversationScheduler,
+  SessionListState,
+  SessionId,
+  SessionPendingInteraction,
+} from "@deepseek-ai/dsh-client";
 import { Conversation } from "./conversation";
-import { Composer } from "./composer";
+import { SessionComposer } from "./interactions";
+import type { DshInteractionForm } from "../interaction-form";
 import { KeyboardDock } from "@/components/keyboard-dock";
 import { ComposerViewport, ComposerViewportContent } from "@/composer/viewport";
 import { useSettledKeyboardShift } from "@/hooks/keyboard-shift-context";
@@ -183,11 +189,12 @@ function HostRow({ model, host, busy }: HostRowProps) {
 }
 
 interface SessionRowProps {
+  pending: boolean;
   session: SessionListState["byId"][SessionId];
   model: DshDirectory;
   busy: boolean;
 }
-function SessionRow({ session, model, busy }: SessionRowProps) {
+function SessionRow({ session, model, busy, pending }: SessionRowProps) {
   const { t } = useTranslation();
   const open = useCallback(
     () => model.openConversation(session.id, conversationScheduler),
@@ -196,6 +203,7 @@ function SessionRow({ session, model, busy }: SessionRowProps) {
   return (
     <View style={styles.row}>
       <Text style={styles.text}>{session.displayTitle}</Text>
+      {pending && <Text style={styles.muted}>{t("nativeDsh.interactions.waiting")}</Text>}
       <Text style={styles.muted}>
         {session.running ? t("nativeDsh.running") : t("nativeDsh.idle")}
       </Text>
@@ -212,6 +220,7 @@ interface SessionsProps {
   busy: boolean;
 }
 function Sessions({ runtime, model, busy }: SessionsProps) {
+  const pending = useSyncExternalStore(runtime.pending.subscribe, runtime.pending.getSnapshot);
   const { t } = useTranslation();
   const generation = useSyncExternalStore(
     runtime.connection.generation.subscribe,
@@ -247,7 +256,13 @@ function Sessions({ runtime, model, busy }: SessionsProps) {
       )}
       {ready &&
         list.ids.map((id) => (
-          <SessionRow key={id} session={list.byId[id]} model={model} busy={busy} />
+          <SessionRow
+            key={id}
+            session={list.byId[id]}
+            model={model}
+            busy={busy}
+            pending={pending.has(id)}
+          />
         ))}
       <View style={styles.actions}>
         <Button size="sm" disabled={busy} onPress={reconnect}>
@@ -279,6 +294,7 @@ function Sessions({ runtime, model, busy }: SessionsProps) {
 }
 
 function DirectoryContent({ model }: { model: DshDirectory }) {
+  const [forms] = useState(() => new WeakMap<SessionPendingInteraction, DshInteractionForm>());
   const { t } = useTranslation();
   const keyboardShift = useSettledKeyboardShift();
   const historyInset = useMemo(() => ({ height: keyboardShift }), [keyboardShift]);
@@ -307,7 +323,7 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
             </View>
           </ScrollView>
           <ComposerViewportContent style={layoutStyles.composer}>
-            <Composer model={state.conversation.prompt} />
+            <SessionComposer runtime={state.runtime} view={state.conversation} forms={forms} />
           </ComposerViewportContent>
         </KeyboardDock>
       </ComposerViewport>

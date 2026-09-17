@@ -40,7 +40,7 @@ export const nativeDsh = {
     open: "Read conversation",
     back: "Back to sessions",
     preview:
-      "Native preview. Send text to this session; use the current DSH interface for approvals and other controls.",
+      "Native preview. Send text and answer requests here. Use the current DSH interface for other controls.",
     user: "You",
     context: "Context",
     assistant: "Assistant",
@@ -71,6 +71,22 @@ export const nativeDsh = {
     unconfirmed: "Unconfirmed message",
     unknown:
       "Could not confirm whether the host received your submitted message. It will not be resent. Your draft is kept here. Check the conversation in the current DSH interface before sending it again.",
+  },
+  interactions: {
+    approval: "Permission requested",
+    question: "Your answer is needed",
+    "plan-review": "Review the plan",
+    waiting: "Waiting for your answer",
+    allow: "Allow once",
+    reject: "Reject",
+    custom: "Your answer",
+    skip: "Skip this question",
+    skipped: "Question skipped",
+    submit: "Submit answers",
+    cancel: "Cancel request",
+    settling: "Submitting your response…",
+    settled: "Response submitted. Follow the conversation for the host’s next step.",
+    failed: "This request has ended. Check the conversation for the current request.",
   },
   errors: {
     "session-unavailable": "This session is unavailable. Refresh the session list and try again.",
