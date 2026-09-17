@@ -45,6 +45,18 @@ for (const archive of manifest.archives) {
   assert.equal(installed.version, archive.version, `installed version: ${archive.name}`);
   if (archive.name === manifest.entry) {
     assert.equal(installed.dshSource.commit, manifest.sourceCommit, "installed DSH source commit");
+    assert.deepEqual(
+      installed.dshSource.packages,
+      [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-approval",
+        "@deepseek-ai/dsh-client-ui-user-questions",
+      ],
+      "shared application owners",
+    );
   }
   const locked = Object.entries(lock.packages).filter(([path]) =>
     path.endsWith(`node_modules/${archive.name}`),
@@ -63,6 +75,16 @@ assert.ok(
 );
 const clientUrl = pathToFileURL(appRequire.resolve(manifest.entry));
 const client = await import(clientUrl.href);
+for (const name of [
+  "PendingInteractions",
+  "PendingApproval",
+  "PendingQuestion",
+  "registerApprovalRequests",
+  "registerQuestionRequests",
+  "planReviewOf",
+]) {
+  assert.equal(typeof client[name], "function", `installed interaction export: ${name}`);
+}
 assert.equal(
   client.selectRemoteCapabilities(["session/list", "session/follow", "session/prompt"]).length,
   3,
