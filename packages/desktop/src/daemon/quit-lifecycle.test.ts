@@ -30,6 +30,36 @@ function waitForQuitLifecycle(): Promise<void> {
 }
 
 describe("quit-lifecycle", () => {
+  it("waits for authenticated connections to close before daemon shutdown and exit", async () => {
+    const closing = deferred<void>();
+    const events: string[] = [];
+    const lifecycle = createQuitLifecycle({
+      app: { exit: () => events.push("exit") },
+      closeTransportSessions: () => {
+        events.push("close");
+        return closing.promise;
+      },
+      stopDesktopManagedDaemonIfNeeded: async () => {
+        events.push("daemon");
+        return false;
+      },
+      installAppUpdateOnQuit: async () => false,
+      createUpdateDeadlineSignal: () => new AbortController().signal,
+      onStopError: (error) => {
+        throw error;
+      },
+      onUpdateError: (error) => {
+        throw error;
+      },
+    });
+    lifecycle.handleBeforeQuit({ preventDefault: () => events.push("prevent") });
+    await waitForQuitLifecycle();
+    expect(events).toEqual(["close", "prevent"]);
+    closing.resolve();
+    await waitForQuitLifecycle();
+    expect(events).toEqual(["close", "prevent", "daemon", "exit"]);
+  });
+
   it("turns external termination signals into one Electron quit", () => {
     const listeners = new Map<NodeJS.Signals, () => void>();
     const quits: string[] = [];

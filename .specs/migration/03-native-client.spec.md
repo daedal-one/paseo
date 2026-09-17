@@ -33,6 +33,14 @@ Share Session presentation and interaction owners across platform screens. Brows
 
 Build the browser preview with a matching `/daedal` asset/router base and mount it through DSH's authenticated frontend-static owner, with `/dsh-hosts` as an explicit index route. Retain the root Web interface and its launch-token sign-in. The mounted distribution owns its bootstrap and shares the Host API and Session writer.
 
+## Desktop device access
+
+Electron stores device grants in its main process using platform-protected encryption. Refuse missing encryption or Linux's plaintext backend; never fall back to ordinary storage. Serialize encrypted-record mutations and atomically replace the protected file. Only nonsecret Host descriptors cross into the renderer. Enrollment consumes one reviewed challenge and saves its grant before success; failure and uncertainty never replay a claim.
+
+The main process owns every authenticated HTTP request and WebSocket for one window's connection. Pin targets to its saved origin, refuse redirects and ambient cookies, and attach device credentials only in headers. Validate IPC requests and permit them only from the registered application window's top frame on its configured application origin. Bind each transport and request identifier to that window; another window or embedded browser cannot borrow it. Renderer cancellation, navigation, window destruction, local forgetting and application exit release owned carriers without stopping the external DSH Host. Errors expose fixed codes, never credentials or transport exception bodies.
+
+The renderer composes the same installed DSH runtime and shared directory using this bounded transport interface. Its native Host screen accepts enrollment QR contents for review, opens saved Hosts and exposes the existing Session, prompt and interaction controls. No device credential or browser-owner cookie reaches renderer storage. Qualification requires protected-storage and IPC isolation tests, real Electron enrollment and reconnect against an isolated Host, and a packaged desktop smoke before the direct desktop path is considered usable.
+
 ## Native device access
 
 Use the installed DSH validators for enrollment and protected grant records. Native grants remain in Expo SecureStore with device-only, unlocked keychain access; a nonsecret Host-id index is the only enrollment data in ordinary storage. Serialize index/secret mutations, keep partially saved entries visibly unpaired, and surface storage failures without disclosing credentials. A missing or invalid stored grant never falls back to legacy passwords or browser ownership.
@@ -71,6 +79,8 @@ Qualify generated Remote Event delivery, Session and Host isolation, mixed-reque
 
 ## Implementation references
 
+- [Desktop protected access](spec:src:packages/desktop/src/dsh/access.ts)
+- [Desktop native directory](spec:src:packages/app/src/dsh/ui/directory-screen.electron.tsx)
 - [Browser access](spec:src:packages/app/src/dsh/browser/access.ts)
 - [Shared directory ownership](spec:src:packages/app/src/dsh/directory.ts)
 - [Protected access](spec:src:packages/app/src/dsh/native/access.ts)

@@ -101,7 +101,7 @@ export function createQuitLifecycle({
   onUpdateError,
 }: {
   app: BeforeQuitApp;
-  closeTransportSessions: () => void;
+  closeTransportSessions: () => void | Promise<void>;
   stopDesktopManagedDaemonIfNeeded: () => Promise<boolean>;
   installAppUpdateOnQuit: (signal: AbortSignal) => Promise<boolean>;
   createUpdateDeadlineSignal: () => AbortSignal;
@@ -116,12 +116,16 @@ export function createQuitLifecycle({
   const updateQuit = createDeferredUpdateQuit();
 
   function handleBeforeQuit(event: BeforeQuitEvent): void {
-    closeTransportSessions();
-    if (quittingForUpdate) return;
+    const transportClosing = closeTransportSessions();
+    if (quittingForUpdate) {
+      void Promise.resolve(transportClosing).catch(onStopError);
+      return;
+    }
     if (quitting) {
       // MacUpdater's no-relaunch path calls app.quit() without emitting
       // before-quit-for-update. A second quit is equivalent handoff evidence.
       updateQuit.resolve();
+      void Promise.resolve(transportClosing).catch(onStopError);
       return;
     }
     quitting = true;
@@ -129,6 +133,7 @@ export function createQuitLifecycle({
 
     void (async () => {
       try {
+        await transportClosing;
         await stopDesktopManagedDaemonIfNeeded();
       } catch (error) {
         onStopError(error);

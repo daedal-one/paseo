@@ -1,3 +1,4 @@
+import { dshSessionEndpoints } from "@getpaseo/protocol/dsh-access";
 import { Context } from "@deepseek-ai/cordis";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
@@ -37,16 +38,6 @@ export interface DshHostRuntime {
   dispose(): Promise<void>;
 }
 
-const sessionEndpoints = [
-  "workspace/follow",
-  "session/list",
-  "session/control",
-  "session/follow",
-  "session/prompt",
-  "session/cancel",
-  "subagents/list",
-] as const;
-
 /**
  * Start one Host's generated DSH services. Connection readiness remains observable
  * through `connection.generation`; returning does not mean the Host is online.
@@ -55,7 +46,7 @@ const sessionEndpoints = [
 export async function createDshHostRuntime(
   options: DshHostRuntimeOptions,
 ): Promise<DshHostRuntime> {
-  const requiredCapabilities = dsh.selectRemoteCapabilities(sessionEndpoints);
+  const requiredCapabilities = dsh.selectRemoteCapabilities(dshSessionEndpoints);
   const context = new Context();
   const connection = dsh.createConnection({
     isLoopback: options.isLocal,

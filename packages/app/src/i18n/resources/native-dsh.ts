@@ -1,5 +1,13 @@
 export const nativeDsh = {
   title: "DSH hosts",
+  desktopAccess:
+    "Connect directly to your DSH hosts. Device access is protected by this computer’s secure storage.",
+  desktopDeviceLabel: "Daedal DSH desktop",
+  desktopPairingHint:
+    "Copy the device enrollment QR contents from your DSH host, then review its identity. Keep Tailscale connected on both computers.",
+  enrollmentContents: "Device enrollment QR contents",
+  reviewEnrollment: "Review host",
+  addHost: "Pair a DSH host",
   reloadBrowser: "Reconnect to this host",
   browserAccess: "Direct DSH preview. This page uses the current host’s browser sign-in.",
   desktopPending:
@@ -20,9 +28,9 @@ export const nativeDsh = {
   pairingTrust: "Continue only if this is the host whose enrollment QR you requested.",
   pair: "Pair host",
   deviceLabel: "Daedal DSH iPhone",
-  forget: "Forget on this iPhone",
+  forget: "Forget on this device",
   forgetHint:
-    "This removes access from this iPhone and closes its connection. Sessions keep running. To revoke the device grant, remove it on the DSH host.",
+    "This removes access from this device and closes its connection. Sessions keep running. To revoke the device grant, remove it on the DSH host.",
   connect: "View sessions",
   sessions: "Sessions",
   waiting: "Waiting for a live host response. Check Tailscale and that your host is awake.",
@@ -100,8 +108,8 @@ export const nativeDsh = {
     "session-refresh-failed": "Could not refresh sessions. Reconnect and try again.",
     "invalid-origin": "This QR uses an unsupported host address. Request a new QR from the host.",
     "invalid-record":
-      "Saved access could not be read. Forget this host on the phone and pair again.",
-    "storage-unavailable": "Protected storage is unavailable. Unlock your iPhone and retry.",
+      "Saved access could not be read. Forget this host on this device and pair again.",
+    "storage-unavailable": "Protected storage is unavailable. Unlock your device and retry.",
     "not-paired":
       "This host has no saved device access. Review enrolled devices on the host before requesting a new QR.",
     "already-paired": "This host is already paired. Open it from the saved hosts.",
@@ -117,6 +125,6 @@ export const nativeDsh = {
     "enrollment-outcome-unknown":
       "The pairing result is unknown. Inspect enrolled devices on the host and revoke any unused grant before requesting a new QR. This claim will not be retried.",
     "enrollment-save-failed":
-      "The host granted access, but this iPhone could not save it. Revoke that device on the host, then request a new enrollment QR.",
+      "The host granted access, but this device could not save it. Revoke that device on the host, then request a new enrollment QR.",
   },
 } as const;

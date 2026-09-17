@@ -31,6 +31,8 @@
     "pretest": "npm run generate:validators"
   },
   "dependencies": {
+    "@deepseek-ai/cordis": "file:../../vendor/dsh/deepseek-ai-cordis-4.0.2.tgz",
+    "@deepseek-ai/dsh-client": "file:../../vendor/dsh/deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
     "semver": "^7.8.5",
     "zod": "^4.4.3"
   },

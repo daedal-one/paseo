@@ -1,13 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { z } from "zod";
-import {
-  connectionDeviceGrantSchema,
-  connectionHostIdSchema,
-  type ConnectionHostId,
-} from "@deepseek-ai/dsh-client";
+import { connectionHostIdSchema, type ConnectionHostId } from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "../access-error";
-import { parseDshOrigin } from "../host-origin";
+import { parseStoredDshHost, type StoredDshHost } from "@getpaseo/protocol/dsh-access";
+export type { StoredDshHost } from "@getpaseo/protocol/dsh-access";
 
 const indexKey = "daedal.dsh.host-index.v1";
 const protectedOptions: SecureStore.SecureStoreOptions = {
@@ -18,14 +15,6 @@ const protectedOptions: SecureStore.SecureStoreOptions = {
 const indexSchema = z
   .array(connectionHostIdSchema)
   .refine((ids) => new Set(ids).size === ids.length);
-const recordSchema = z
-  .object({
-    version: z.literal(1),
-    origin: z.string(),
-    grant: connectionDeviceGrantSchema,
-  })
-  .strict();
-export type StoredDshHost = z.infer<typeof recordSchema>;
 let pending: Promise<unknown> = Promise.resolve();
 
 function serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -55,12 +44,6 @@ function validateId(value: ConnectionHostId): ConnectionHostId {
   return result.data;
 }
 
-function validateRecord(value: unknown): StoredDshHost {
-  const result = recordSchema.safeParse(value);
-  if (!result.success) throw new DshAccessError("invalid-record");
-  return { ...result.data, origin: parseDshOrigin(result.data.origin) };
-}
-
 async function readIndex(): Promise<ConnectionHostId[]> {
   const text = await AsyncStorage.getItem(indexKey);
   if (text === null) return [];
@@ -76,7 +59,7 @@ function secretKey(hostId: ConnectionHostId): string {
 async function readSecret(hostId: ConnectionHostId): Promise<StoredDshHost | null> {
   const text = await SecureStore.getItemAsync(secretKey(hostId), protectedOptions);
   if (text === null) return null;
-  const record = validateRecord(parseJson(text));
+  const record = parseStoredDshHost(parseJson(text));
   if (record.grant.hostId !== hostId) throw new DshAccessError("invalid-record");
   return record;
 }
@@ -97,7 +80,7 @@ export const dshDeviceStore = {
   },
   save(value: StoredDshHost): Promise<void> {
     return serialize(async () => {
-      const record = validateRecord(value);
+      const record = parseStoredDshHost(value);
       const hostId = record.grant.hostId;
       const ids = await readIndex();
       if (ids.includes(hostId)) {

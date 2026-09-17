@@ -1,3 +1,5 @@
+import { DesktopDshIpc } from "./dsh/ipc.js";
+import { DesktopDshDeviceStore } from "./dsh/device-store.js";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
 import log from "electron-log/main";
@@ -22,6 +24,7 @@ import {
   net,
   protocol,
   screen,
+  safeStorage,
   session,
   shell,
   webContents,
@@ -112,6 +115,7 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
 const agentNavigationInbox = new AgentNavigationInbox();
+let dshIpc: DesktopDshIpc | undefined;
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -699,6 +703,10 @@ async function createWindow(
   });
   applyDesktopWindowChromeMode({ win: mainWindow, mode: DESKTOP_WINDOW_CHROME_MODE });
 
+  dshIpc?.attach(
+    mainWindow.webContents,
+    app.isPackaged ? `${APP_SCHEME}://app` : new URL(DEV_SERVER_URL).origin,
+  );
   const webContentsId = mainWindow.webContents.id;
   options.onCreated?.(webContentsId);
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
@@ -917,6 +925,13 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
 
+  dshIpc = new DesktopDshIpc(
+    new DesktopDshDeviceStore(
+      path.join(app.getPath("userData"), "dsh-device-access.v1"),
+      safeStorage,
+      process.platform,
+    ),
+  );
   const appDistDir = getAppDistDir();
   protocol.handle(APP_SCHEME, (request) => {
     const { pathname, search, hash } = new URL(request.url);
@@ -1014,7 +1029,10 @@ void runDesktopStartup({
 
 const quitLifecycle = createQuitLifecycle({
   app,
-  closeTransportSessions: closeAllTransportSessions,
+  closeTransportSessions: async () => {
+    await dshIpc?.dispose();
+    await closeAllTransportSessions();
+  },
   stopDesktopManagedDaemonIfNeeded: async () => false,
   installAppUpdateOnQuit: async (signal) => {
     const settings = await getDesktopSettingsStore().get();

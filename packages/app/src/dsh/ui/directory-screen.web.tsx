@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
-import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
 import { Button } from "@/components/ui/button";
 import { BackHeader } from "@/components/headers/back-header";
 import { getIsElectron } from "@/constants/platform";
 import { openBrowserDshDirectory } from "../browser/directory";
 import type { DshDirectory } from "../directory";
-import type { DshInteractionForm } from "../interaction-form";
-import { Conversation } from "./conversation";
-import { SessionComposer } from "./interactions";
+import { WebConversation } from "./web-conversation";
 import { Sessions } from "./sessions";
 import { styles } from "./styles";
 
@@ -26,24 +23,9 @@ async function connectPageHost(model: DshDirectory): Promise<void> {
 function BrowserContent({ model }: { model: DshDirectory }) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
-  const [forms] = useState(() => new WeakMap<SessionPendingInteraction, DshInteractionForm>());
   const retry = useCallback(() => connectPageHost(model), [model]);
   if (state.runtime !== null && state.conversation !== null) {
-    return (
-      <View style={layout.fill}>
-        <ScrollView style={layout.fill} contentContainerStyle={styles.content}>
-          <Conversation
-            model={model}
-            runtime={state.runtime}
-            view={state.conversation}
-            busy={state.busy}
-          />
-        </ScrollView>
-        <View style={layout.composer}>
-          <SessionComposer runtime={state.runtime} view={state.conversation} forms={forms} />
-        </View>
-      </View>
-    );
+    return <WebConversation model={model} state={state} />;
   }
   const error = state.error ?? (state.directory.status === "failed" ? state.directory.error : null);
   return (
@@ -115,8 +97,3 @@ export default function BrowserDshDirectoryScreen() {
     </View>
   );
 }
-
-const layout = StyleSheet.create({
-  fill: { flex: 1, minHeight: 0 },
-  composer: { flexShrink: 1, maxHeight: "50%" },
-});

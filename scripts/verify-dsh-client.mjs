@@ -66,6 +66,26 @@ for (const archive of manifest.archives) {
   const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
   assert.equal(record.integrity, integrity, `lock integrity: ${archive.name}`);
 }
+for (const workspace of ["protocol", "desktop"]) {
+  const path = `packages/${workspace}`;
+  const consumer = readJson(join(root, path, "package.json"));
+  for (const name of [manifest.entry, "@deepseek-ai/cordis"]) {
+    const archive = manifest.archives.find((entry) => entry.name === name);
+    const dependency = `file:../../vendor/dsh/${archive.file}`;
+    assert.equal(consumer.dependencies[name], dependency, `${workspace} dependency: ${name}`);
+    assert.equal(
+      lock.packages[path].dependencies[name],
+      dependency,
+      `${workspace} locked dependency: ${name}`,
+    );
+    const consumerRequire = createRequire(join(root, path, "package.json"));
+    assert.equal(
+      consumerRequire.resolve(name),
+      appRequire.resolve(name),
+      `${workspace} shared installed identity: ${name}`,
+    );
+  }
+}
 assert.equal(app.dependencies["@deepseek-ai/dsh-api-remotes-client"], undefined);
 assert.ok(
   !Object.keys(lock.packages).some((path) =>
