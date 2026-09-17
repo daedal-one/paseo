@@ -35,10 +35,17 @@ export function Pairing({ model, pairing, Entry, deviceLabel, retryLabel }: Pair
       return <Entry model={model} />;
     case "claiming":
       return <Text style={styles.text}>{t("nativeDsh.pairing")}</Text>;
+    case "wrong-host":
     case "failed":
       return (
         <View style={styles.group}>
-          <AccessError code={pairing.error} />
+          {pairing.status === "wrong-host" ? (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {t("nativeDsh.discovery.mismatch")}
+            </Text>
+          ) : (
+            <AccessError code={pairing.error} />
+          )}
           <Button onPress={scan}>{retryLabel}</Button>
           <Button variant="ghost" onPress={cancel}>
             {t("common.actions.cancel")}

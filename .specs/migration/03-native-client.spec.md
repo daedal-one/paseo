@@ -55,6 +55,16 @@ Expose an iPhone-native Host directory from Settings while retaining the existin
 
 Own at most one active Host runtime in the directory. Switching hosts and forgetting local access wait for disposal; leaving the screen cancels pending enrollment and disposes late runtime arrivals. A failed final disposal prevents another directory owner from opening until the app restarts. List saved entries without exposing credentials, keep corrupt or partial records visible with recovery, and distinguish initial loading from an authoritative empty Session list. Use the generated DSH Session feed directly, including reconnect and pagination. Observe its read activity and structured failures: a settled refresh is not proof of success. Keep retained rows visible after failed refresh or continuation and expose retry without presenting an initial failure as an empty list. Directory browsing has no durable conversation selection; selected-conversation restore belongs to the subsequent conversation surface. Qualification covers lifecycle races, native rendering and real Host reads; QR camera use and physical-device acceptance remain distinct gates. Preview copy uses locale dictionaries with an explicit English fallback until translations are supplied.
 
+## Host-assisted discovery in the directory
+
+After a saved Host connection passes native generation admission, automatically request optional discovery through that Host's authenticated Connection RPC. Keep scanning and its failures independent of Session browsing and submission. Display bounded candidate metadata, explicit missing or disabled discovery, Tailscale availability, partial scans and an empty scan without claiming that every Host was searched. An explicit refresh repeats only the read. A new admitted generation may perform a new read; never replay pairing or Session mutations.
+
+Bind every scan to the assisting Host and activation. Generation loss, Host replacement, local forgetting and directory disposal abort the request, clear candidates and refuse late results. Serialize requests while cancellation drains and release every subscription at disposal. Validate responses through the installed DSH portable reader and retain no candidate metadata beyond the directory lifetime. Old Hosts without discovery remain usable for ordinary Sessions. Desktop IPC admits only the exact installed discovery endpoint through its existing window-owned authenticated transport; anonymous candidate advertisements are not renderer grant targets.
+
+Candidates are untrusted labels and probe-derived addresses, never enrollment records. A candidate matching a paired Host can open only that Host's saved origin and protected grant; an advertisement cannot replace that origin or label. A new candidate leads to the existing owner-authorized QR review, with a matching Host identity required. Keep the QR's authoritative origin intact even when discovery used a different address; never send its challenge to an advertised address. Cancelled review releases the candidate constraint, and a mismatched QR never dispatches a claim. An unavailable stored record stays a visible recovery case rather than becoming automatic re-enrollment. Browser owner pages may display candidates but keep authentication tied to the current page and do not enroll remote devices.
+
+Qualify the installed distribution, automatic and explicit reads, disconnect and replacement races, old Hosts, malformed or wrong-activation responses, candidate identity mismatch and cross-Host credential isolation. Exercise the actual shared screens against authenticated Hosts and keep real tailnet, simulator and physical iPhone evidence distinct.
+
 ## Native Session reading
 
 The directory opens a listed Session within its existing Host owner and returns to the list without creating another connection or cancelling Host execution. Compose the installed Conversation binding and shared Chat Definitions over the Session binding's event source; do not duplicate event projection or open another history stream. A Host owns at most one visible Conversation. Repeated selection retains its identity; selection changes and Host disposal detach the previous binding and cancel deferred publication. An unknown or removed Session cannot replace the current view silently.
@@ -78,6 +88,10 @@ Render tool approval with allow-once and reject choices. Render the complete que
 Qualify generated Remote Event delivery, Session and Host isolation, mixed-request precedence, complete answers, Host cancellation, generation loss and disposal using installed owners. Follow with actual authenticated Host delivery and native controls, including the software keyboard. Controlled carriers and iOS compilation do not establish actual Host or device answering.
 
 ## Implementation references
+
+- [Native discovery ownership](spec:src:packages/app/src/dsh/discovery.ts)
+- [Shared discovery controls](spec:src:packages/app/src/dsh/ui/host-discovery.tsx)
+- [Discovery and enrollment verification](spec:src:packages/app/src/dsh/discovery.test.ts)
 
 - [Desktop protected access](spec:src:packages/desktop/src/dsh/access.ts)
 - [Desktop native directory](spec:src:packages/app/src/dsh/ui/directory-screen.electron.tsx)

@@ -1,5 +1,6 @@
 import {
   claimDeviceEnrollment,
+  HOST_DISCOVERY_ENDPOINT,
   selectRemoteCapabilities,
   type ConnectionHostId,
 } from "@deepseek-ai/dsh-client";
@@ -20,6 +21,7 @@ import { createDesktopDshTransport, type DesktopDshTransport } from "./transport
 const rpcPaths = new Set([
   ...selectRemoteCapabilities(dshSessionEndpoints).map(({ endpoint }) => `/api/${endpoint}`),
   "/api/connection/identity",
+  `/api/${HOST_DISCOVERY_ENDPOINT}`,
   "/api/$capabilities",
   "/api/$events/result",
 ]);

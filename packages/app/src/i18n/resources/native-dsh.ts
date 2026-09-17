@@ -42,6 +42,32 @@ export const nativeDsh = {
   loadMore: "Load more",
   emptyHosts: "No native DSH hosts paired yet.",
   reload: "Reload saved hosts",
+  discovery: {
+    title: "Hosts on your Tailscale network",
+    hint: "Your connected host looks for DSH hosts with discovery enabled. Each new host needs its own pairing approval.",
+    browser:
+      "Pair another host from the iPhone or desktop app using its owner’s device enrollment QR.",
+    empty:
+      "No other DSH hosts responded to this scan. Check that they are awake and have discovery enabled.",
+    partial: "This scan reached its limit. Other hosts may be available.",
+    refresh: "Refresh discovered hosts",
+    pair: "Pair using this host’s QR",
+    recover: "Saved access needs recovery. Use the saved host entry above.",
+    savedOrigin: "Paired on this device · connects to {{origin}}",
+    mismatch:
+      "This QR belongs to a different host. Scan the selected host’s QR, or cancel to choose another host.",
+    status: {
+      offline: "Connect to a paired host to discover others.",
+      loading: "Looking for DSH hosts…",
+      unavailable:
+        "Discovery is unavailable on this host. Check its discovery settings and connection. You can still use its sessions.",
+      "invalid-response":
+        "The host returned an invalid discovery response. No candidates were accepted.",
+      "tailscale-unavailable": "Tailscale is unavailable on the connected host.",
+      "tailscale-disconnected": "Connect the host to Tailscale, then refresh discovery.",
+      "scan-failed": "The host could not finish discovery. Try refreshing.",
+    },
+  },
   connection: {
     connected: "Connected",
     connecting: "Connecting…",

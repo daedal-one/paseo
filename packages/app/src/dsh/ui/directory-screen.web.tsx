@@ -9,6 +9,7 @@ import { getIsElectron } from "@/constants/platform";
 import { openBrowserDshDirectory } from "../browser/directory";
 import type { DshDirectory } from "../directory";
 import { WebConversation } from "./web-conversation";
+import { HostDiscovery } from "./host-discovery";
 import { Sessions } from "./sessions";
 import { styles } from "./styles";
 
@@ -37,6 +38,9 @@ function BrowserContent({ model }: { model: DshDirectory }) {
         </Text>
       )}
       {state.busy && <Text style={styles.text}>{t("common.loading")}</Text>}
+      {state.discovery !== null && (
+        <HostDiscovery model={model} discovery={state.discovery} pairing="browser" />
+      )}
       {state.runtime !== null && (
         <Sessions model={model} runtime={state.runtime} busy={state.busy} />
       )}

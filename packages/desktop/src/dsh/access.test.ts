@@ -110,6 +110,8 @@ describe("desktop window and grant ownership", () => {
     for (const path of [
       "/api/connection/device/claim",
       "/api/connection/enrollment",
+      "/api/connection/discovery/advertisement",
+      "/api/connection/discovery?target=other",
       "/api/session/list?redirect=true",
       "/private",
     ]) {
@@ -126,16 +128,18 @@ describe("desktop window and grant ownership", () => {
       ).rejects.toMatchObject({ code: "invalid-origin" });
     }
     expect(transport.fetch).not.toHaveBeenCalled();
-    await access.run(1, {
-      type: "fetch",
-      ownerId,
-      requestId: randomUUID(),
-      url: record.origin + "/api/session/list",
-      method: "POST",
-      body: "{}",
-      headers: {},
-    });
-    expect(transport.fetch).toHaveBeenCalledOnce();
+    for (const path of ["/api/session/list", "/api/connection/discovery"]) {
+      await access.run(1, {
+        type: "fetch",
+        ownerId,
+        requestId: randomUUID(),
+        url: record.origin + path,
+        method: "POST",
+        body: "{}",
+        headers: {},
+      });
+    }
+    expect(transport.fetch).toHaveBeenCalledTimes(2);
   });
   it("cancels an owner waiting for protected storage without creating a transport", async () => {
     const { access, store } = fixture();

@@ -15,6 +15,7 @@ import { BackHeader } from "@/components/headers/back-header";
 import { DshDirectory, openDshDirectory } from "../native/directory";
 import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
 import { Conversation } from "./conversation";
+import { HostDiscovery } from "./host-discovery";
 import { Sessions } from "./sessions";
 import { SessionComposer } from "./interactions";
 import type { DshInteractionForm } from "../interaction-form";
@@ -136,6 +137,9 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
         <Button variant="ghost" disabled={state.busy} onPress={reload}>
           {t("nativeDsh.reload")}
         </Button>
+      )}
+      {idle && state.discovery !== null && (
+        <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
       )}
       {idle && state.runtime !== null && (
         <Sessions runtime={state.runtime} model={model} busy={state.busy} />

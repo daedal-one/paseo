@@ -156,6 +156,14 @@ The macOS package check uses an ad-hoc-signed app and a real isolated DSH profil
 
 After packaging, run `npm run verify:dsh-desktop -- "/absolute/path/Daedal DSH.app"`. This loads the packaged main-process access modules and checks the pinned DSH Client and Cordis identities. The source dependency check alone cannot establish that these dependencies are present in the shipped app.
 
+### Native host discovery
+
+Connecting a saved host starts an optional discovery read through that host. The desktop, iPhone and browser directories show responding candidates and a refresh action. Discovery must be enabled in DSH Connection configuration on the assisting host and candidate hosts; an older or unconfigured host still supports its ordinary sessions. Tailscale must be connected on the assisting host. A limited or empty scan does not establish that every host was searched, and candidate reachability is measured from the assisting host.
+
+Each candidate is an untrusted label, identity claim and probe-derived address. A paired candidate opens its existing saved origin with that host’s own protected credential. Discovery never updates that saved address. A new candidate opens the existing QR enrollment flow; its QR must match the selected Host identity, and its reviewed QR origin owns the claim even if discovery found a different address. Never transfer an existing grant or enrollment challenge to a discovered address. Browser pages remain authenticated to their current host and display candidates without remote enrollment.
+
+Disconnecting, switching or forgetting the assisting host cancels its read and removes candidates. Reconnection starts a new read after DSH admits the generation; pairing and messages are never replayed. Native discovery lifecycle and installed protocol tests are separate from actual tailnet reachability and physical iPhone qualification.
+
 ### Native interaction requests
 
 The native Host runtime uses DSH's shared pending registry and Remote approval/question consumers. Each Session row identifies waiting requests; the conversation composer displays the effective request. Tool approvals allow once or reject. Questions retain verbatim choices, free text, explicit skips and complete-batch submission; plan reviews show their full detail. A higher-priority request preserves the hidden form's draft. Leaving a conversation retains Host-owned work; leaving the directory releases its interaction consumers.

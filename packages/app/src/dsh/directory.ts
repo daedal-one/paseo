@@ -6,6 +6,7 @@ import type {
   SessionSelectionStore,
 } from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
+import { DshDiscovery } from "./discovery";
 import { DshAccessError, type DshAccessErrorCode } from "./access-error";
 import { decodeDshPairing, type DshPairing } from "./pairing";
 import type { DshConversation, DshHostRuntime } from "./runtime";
@@ -22,12 +23,14 @@ export type DshPairingState =
   | { status: "scanning" }
   | { status: "review"; pairing: DshPairing }
   | { status: "claiming" }
+  | { status: "wrong-host" }
   | { status: "failed"; error: DshAccessErrorCode };
 export interface DshDirectorySnapshot {
   directory: DshDirectoryLoad;
   pairing: DshPairingState;
   runtime: DshHostRuntime | null;
   conversation: DshConversation | null;
+  discovery: DshDiscovery | null;
   busy: boolean;
   error: DshAccessErrorCode | null;
 }
@@ -54,6 +57,7 @@ export class DshDirectory {
     pairing: { status: "idle" },
     runtime: null,
     conversation: null,
+    discovery: null,
     busy: false,
     error: null,
   };
@@ -67,6 +71,7 @@ export class DshDirectory {
   private pending: Promise<void> = Promise.resolve();
   private closing: Promise<void> | null = null;
   private claim: AbortController | null = null;
+  private pairingHostId: ConnectionHostId | null = null;
 
   getSnapshot = (): DshDirectorySnapshot => this.snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -112,13 +117,19 @@ export class DshDirectory {
 
   scan(): void {
     if (this.closed || this.snapshot.busy) return;
+    if (this.snapshot.pairing.status === "idle") this.pairingHostId = null;
     this.publish({ pairing: { status: "scanning" }, error: null });
   }
 
   scanned(raw: string): void {
     if (this.closed || this.snapshot.pairing.status !== "scanning") return;
     try {
-      this.publish({ pairing: { status: "review", pairing: decodeDshPairing(raw) } });
+      const pairing = decodeDshPairing(raw);
+      if (this.pairingHostId !== null && pairing.enrollment.hostId !== this.pairingHostId) {
+        this.publish({ pairing: { status: "wrong-host" } });
+        return;
+      }
+      this.publish({ pairing: { status: "review", pairing } });
     } catch (error) {
       this.publish({
         pairing: { status: "failed", error: accessCode(error, "invalid-enrollment") },
@@ -128,6 +139,7 @@ export class DshDirectory {
 
   cancelPairing(): void {
     if (this.closed || this.snapshot.pairing.status === "claiming") return;
+    this.pairingHostId = null;
     this.publish({ pairing: { status: "idle" } });
   }
 
@@ -139,6 +151,7 @@ export class DshDirectory {
       this.publish({ pairing: { status: "claiming" } });
       try {
         await this.access.pair({ pairing: review.pairing, deviceLabel, signal: this.claim.signal });
+        this.pairingHostId = null;
         this.publish({ pairing: { status: "idle" } });
         await this.readHosts();
       } catch (error) {
@@ -155,11 +168,15 @@ export class DshDirectory {
     if (this.runtimeClosing !== null) return this.runtimeClosing;
     const runtime = this.ownedRuntime;
     if (runtime === null) return Promise.resolve();
-    this.runtimeClosing = runtime
-      .dispose()
-      .then(() => {
+    this.runtimeClosing = Promise.allSettled([
+      this.snapshot.discovery?.dispose(),
+      runtime.dispose(),
+    ])
+      .then((results) => {
+        if (results.some((result) => result.status === "rejected"))
+          throw new DshAccessError("runtime-unavailable");
         this.ownedRuntime = null;
-        this.publish({ runtime: null, conversation: null });
+        this.publish({ runtime: null, conversation: null, discovery: null });
         return;
       })
       .catch(() => {
@@ -192,8 +209,31 @@ export class DshDirectory {
       });
       this.ownedRuntime = runtime;
       if (this.closed) await this.closeRuntime();
-      else this.publish({ runtime });
+      else this.publish({ runtime, discovery: new DshDiscovery(runtime.connection, hostId) });
     }, "runtime-unavailable");
+  }
+
+  /** Candidate addresses never override the origin stored with a protected grant or QR. */
+  selectDiscoveredHost(hostId: ConnectionHostId): Promise<void> {
+    if (this.closed || this.snapshot.busy || this.snapshot.pairing.status !== "idle")
+      return this.pending;
+    const discovery = this.snapshot.discovery?.getSnapshot();
+    const directory = this.snapshot.directory;
+    if (
+      discovery?.status !== "ready" ||
+      directory.status !== "ready" ||
+      !discovery.candidates.some((candidate) => candidate.identity.hostId === hostId)
+    )
+      return Promise.resolve();
+    const saved = directory.hosts.find((host) => host.hostId === hostId);
+    if (saved?.status === "paired") return this.connect(saved.hostId);
+    if (saved?.status === "unavailable") {
+      this.publish({ error: saved.error });
+      return Promise.resolve();
+    }
+    this.scan();
+    this.pairingHostId = hostId;
+    return Promise.resolve();
   }
 
   openConversation(id: SessionId, scheduler: ConversationScheduler | null): Promise<void> {
@@ -261,6 +301,7 @@ export class DshDirectory {
       pairing: { status: "idle" },
       runtime: null,
       conversation: null,
+      discovery: null,
       busy: false,
       error: null,
     };

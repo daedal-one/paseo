@@ -9,6 +9,7 @@ import { BackHeader } from "@/components/headers/back-header";
 import { openDesktopDshDirectory } from "../desktop/directory";
 import type { DshDirectory } from "../directory";
 import { AccessError, HostRow, Pairing } from "./host-pairing";
+import { HostDiscovery } from "./host-discovery";
 import { Sessions } from "./sessions";
 import { WebConversation } from "./web-conversation";
 import { styles } from "./styles";
@@ -85,6 +86,9 @@ function DesktopContent({ model }: { model: DshDirectory }) {
         <Button variant="ghost" disabled={state.busy} onPress={reload}>
           {t("nativeDsh.reload")}
         </Button>
+      )}
+      {idle && state.discovery !== null && (
+        <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
       )}
       {idle && state.runtime !== null && (
         <Sessions runtime={state.runtime} model={model} busy={state.busy} />
