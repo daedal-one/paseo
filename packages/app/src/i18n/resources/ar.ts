@@ -211,6 +211,7 @@ export const ar: TranslationResources = {
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
     messageCapped: "تم اقتطاع هذه الرسالة ({{bytes}} بايت).",
     permission: {
+      submitFailed: "تعذّر تأكيد إجابتك. تم الاحتفاظ بخياراتك. تحقّق من الاتصال وحاول مجددًا.",
       rejectedPlan: "خطة مرفوضة",
       approvedPlan: "خطة معتمدة",
       canceledPlan: "خطة ملغاة",

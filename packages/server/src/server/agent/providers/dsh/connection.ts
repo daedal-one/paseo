@@ -18,6 +18,8 @@ export const DshConfigSchema = z.strictObject({
   cookieFile: z.string().min(1).optional(),
   requestTimeoutMs: z.number().int().positive().max(120_000).default(30_000),
   reconnectDelayMs: z.number().int().min(100).max(60_000).default(1000),
+  reconnectMaxDelayMs: z.number().int().min(100).max(120_000).default(30_000),
+  maxToolTextChars: z.number().int().min(256).max(1_048_576).default(16_384),
 });
 export type DshConfig = z.infer<typeof DshConfigSchema>;
 export const DshAuthSchema = z.object({

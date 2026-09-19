@@ -46,7 +46,11 @@ function click(selector: string): void {
   act(() => element(selector).click());
 }
 
-function renderQuestion(structured: boolean, multiSelect = true) {
+function renderQuestion(
+  structured: boolean,
+  multiSelect = true,
+  submissionError: string | null = null,
+) {
   const permission: PendingPermission = {
     key: "question",
     agentId: "agent",
@@ -72,13 +76,34 @@ function renderQuestion(structured: boolean, multiSelect = true) {
   const onRespond = vi.fn();
   act(() =>
     root.render(
-      React.createElement(QuestionFormCard, { permission, onRespond, isResponding: false }),
+      React.createElement(QuestionFormCard, {
+        permission,
+        onRespond,
+        isResponding: false,
+        submissionError,
+      }),
     ),
   );
   return onRespond;
 }
 
 describe("question answer editing", () => {
+  it("shows submission failure without clearing the answer and offers Retry", () => {
+    renderQuestion(true);
+    typeAnswer("Keep this answer");
+    click('[data-testid="question-form-primary-action"]');
+    const onRespond = renderQuestion(true, true, "Could not confirm your answer.");
+    expect(element('[role="alert"]').textContent).toBe("Could not confirm your answer.");
+    expect(element<HTMLInputElement>('input[aria-label="Which color?"]').value).toBe(
+      "Keep this answer",
+    );
+    expect(element('[data-testid="question-form-primary-action"]').textContent).toBe("Retry");
+    click('[data-testid="question-form-primary-action"]');
+    expect(onRespond.mock.calls[0][0].updatedInput.structuredAnswers).toEqual({
+      color: { selected: [], custom: "Keep this answer" },
+    });
+  });
+
   it.each(["choice-first", "text-first"])(
     "submits both parts of a structured multi-select answer (%s)",
     (order) => {

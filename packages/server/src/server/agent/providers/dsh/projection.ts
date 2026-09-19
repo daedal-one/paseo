@@ -29,7 +29,10 @@ export class DshProjection {
   >();
   turn: number | null = null;
 
-  constructor(readonly sessionId: string) {}
+  constructor(
+    readonly sessionId: string,
+    private readonly maxToolTextChars = 16_384,
+  ) {}
 
   get turnId(): string | undefined {
     return this.turn === null ? undefined : `${this.sessionId}:${this.turn}`;
@@ -37,7 +40,7 @@ export class DshProjection {
 
   getToolDetail(callId: string): ToolCallDetail | undefined {
     const call = this.calls.get(callId);
-    return call ? toolDetail(call.name, call.arguments) : undefined;
+    return call ? this.toolDetail(call.name, call.arguments) : undefined;
   }
 
   accept(event: DshEvent): AgentStreamEvent[] {
@@ -101,7 +104,7 @@ export class DshProjection {
           name: call.name,
           status: "running",
           error: null,
-          detail: toolDetail(call.name, call.arguments),
+          detail: this.toolDetail(call.name, call.arguments),
         });
       }
       case "tool/result": {
@@ -110,8 +113,8 @@ export class DshProjection {
           const call = this.calls.get(block.toolCallId);
           const name = call ? call.name : "Tool";
           const args = call ? call.arguments : "";
-          const output = contentText(block.content);
-          const detail = toolDetail(name, args, output);
+          const output = this.boundToolText(contentText(block.content));
+          const detail = this.toolDetail(name, args, output);
           return this.timeline(
             event,
             block.isError
@@ -258,6 +261,20 @@ export class DshProjection {
     return events;
   }
 
+  private boundToolText(text: string): string {
+    if (text.length <= this.maxToolTextChars) return text;
+    const suffix = "\n\n[Preview truncated. Full result remains in DSH Web.]";
+    return text.slice(0, this.maxToolTextChars - suffix.length) + suffix;
+  }
+
+  private toolDetail(name: string, input: string, output?: string): ToolCallDetail {
+    return {
+      type: "plain_text",
+      label: name,
+      text: this.boundToolText(output === undefined ? input : `${input}\n\n${output}`),
+    };
+  }
+
   private timeline(event: DshEvent, item: AgentTimelineItem): AgentStreamEvent[] {
     return [
       {
@@ -272,15 +289,8 @@ export class DshProjection {
 }
 
 function undelivered(committed: string, delivered: string): string {
-  if (!committed.startsWith(delivered))
-    throw new Error("DSH committed response differs from its streamed prefix");
-  return committed.slice(delivered.length);
-}
-
-function toolDetail(name: string, input: string, output?: string): ToolCallDetail {
-  return {
-    type: "plain_text",
-    label: name,
-    text: output === undefined ? input : `${input}\n\n${output}`,
-  };
+  if (committed.startsWith(delivered)) return committed.slice(delivered.length);
+  // Finalized blocks can remove trailing whitespace from the provider's deltas.
+  if (committed.trimEnd() === delivered.trimEnd()) return "";
+  throw new Error("DSH committed response differs from its streamed prefix");
 }

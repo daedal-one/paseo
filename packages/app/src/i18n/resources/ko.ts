@@ -211,6 +211,8 @@ export const ko: TranslationResources = {
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
     messageCapped: "이 메시지는 길이 제한으로 잘렸습니다({{bytes}}바이트).",
     permission: {
+      submitFailed:
+        "답변을 확인하지 못했습니다. 선택 사항은 유지됩니다. 연결을 확인하고 다시 시도하세요.",
       rejectedPlan: "거부된 계획",
       approvedPlan: "승인된 계획",
       canceledPlan: "취소된 계획",

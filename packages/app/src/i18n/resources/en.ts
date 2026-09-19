@@ -209,6 +209,8 @@ export const en = {
     historyLoadFailed: "Couldn't load agent history",
     messageCapped: "This message was capped ({{bytes}} bytes).",
     permission: {
+      submitFailed:
+        "Could not confirm your answer. Your choices are kept. Check the connection and try again.",
       rejectedPlan: "Rejected plan",
       approvedPlan: "Approved plan",
       canceledPlan: "Canceled plan",

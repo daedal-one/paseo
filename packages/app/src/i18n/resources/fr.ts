@@ -214,6 +214,8 @@ export const fr: TranslationResources = {
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
     messageCapped: "Ce message a été tronqué ({{bytes}} octets).",
     permission: {
+      submitFailed:
+        "Impossible de confirmer votre réponse. Vos choix sont conservés. Vérifiez la connexion et réessayez.",
       rejectedPlan: "Plan refusé",
       approvedPlan: "Plan approuvé",
       canceledPlan: "Plan annulé",

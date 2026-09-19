@@ -2,6 +2,41 @@ import { describe, expect, it } from "vitest";
 import { DshProjection } from "./projection.js";
 
 describe("DSH transcript projection", () => {
+  it("bounds generic tool previews and error payloads before phone delivery", () => {
+    const projection = new DshProjection("session", 256);
+    const events = projection.accept({
+      type: "tool/result",
+      seq: 0,
+      time: 1000,
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call",
+              isError: true,
+              content: [{ type: "text", text: "x".repeat(1_000_000) }],
+            },
+          ],
+        },
+      },
+    });
+    const item = events[0];
+    if (
+      item.type !== "timeline" ||
+      item.item.type !== "tool_call" ||
+      item.item.detail.type !== "plain_text"
+    ) {
+      throw new Error("Expected tool preview");
+    }
+    expect(item.item.detail.text.length).toBeLessThanOrEqual(256);
+    expect(item.item.error?.length).toBeLessThanOrEqual(256);
+    expect(item.item.detail.text).toContain("Full result remains in DSH Web.");
+    expect(JSON.stringify(events).length).toBeLessThan(1000);
+  });
+
   it("restores a compact live baseline and skips the prefix already received", () => {
     const projection = new DshProjection("session-1");
     const baseline = {
@@ -110,4 +145,93 @@ describe("DSH transcript projection", () => {
       { type: "turn_canceled", provider: "dsh", turnId: "session-1:2", reason: "aborted" },
     ]);
   });
+});
+
+it("accepts provider-normalized trailing reasoning whitespace without blocking the next message", () => {
+  const projection = new DshProjection("session");
+  projection.acceptStream({ type: "start", attemptId: "attempt", turn: 1, step: 1 });
+  projection.acceptStream({
+    type: "chunk",
+    attemptId: "attempt",
+    index: 0,
+    chunk: { type: "reasoning-delta", index: 0, text: "Checking options.\n\n" },
+  });
+  expect(
+    projection.accept({
+      type: "assistant/message",
+      seq: 1,
+      time: 1000,
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          id: "message",
+          content: [
+            { type: "reasoning", text: "Checking options." },
+            { type: "text", text: "Choose an option." },
+          ],
+        },
+      },
+    }),
+  ).toEqual([
+    {
+      type: "timeline",
+      provider: "dsh",
+      timestamp: "1970-01-01T00:00:01.000Z",
+      item: { type: "assistant_message", text: "Choose an option.", messageId: "attempt" },
+    },
+  ]);
+});
+
+it("preserves an exact whitespace suffix added by the committed response", () => {
+  const projection = new DshProjection("session");
+  projection.acceptStream({ type: "start", attemptId: "attempt", turn: 1, step: 1 });
+  projection.acceptStream({
+    type: "chunk",
+    attemptId: "attempt",
+    index: 0,
+    chunk: { type: "text-delta", index: 0, text: "Hello" },
+  });
+  expect(
+    projection.accept({
+      type: "assistant/message",
+      seq: 1,
+      time: 1000,
+      data: {
+        turn: 1,
+        step: 1,
+        message: { id: "message", content: [{ type: "text", text: "Hello\n" }] },
+      },
+    }),
+  ).toEqual([
+    {
+      type: "timeline",
+      provider: "dsh",
+      timestamp: "1970-01-01T00:00:01.000Z",
+      item: { type: "assistant_message", text: "\n", messageId: "attempt" },
+    },
+  ]);
+});
+
+it("refuses substantive changes to a streamed prefix", () => {
+  const projection = new DshProjection("session");
+  projection.acceptStream({ type: "start", attemptId: "attempt", turn: 1, step: 1 });
+  projection.acceptStream({
+    type: "chunk",
+    attemptId: "attempt",
+    index: 0,
+    chunk: { type: "text-delta", index: 0, text: "First answer" },
+  });
+  expect(() =>
+    projection.accept({
+      type: "assistant/message",
+      seq: 1,
+      time: 1000,
+      data: {
+        turn: 1,
+        step: 1,
+        message: { id: "message", content: [{ type: "text", text: "Different answer" }] },
+      },
+    }),
+  ).toThrow("differs from its streamed prefix");
 });

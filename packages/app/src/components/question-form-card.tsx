@@ -28,6 +28,25 @@ interface QuestionFormCardProps {
   permission: PendingPermission;
   onRespond: (response: AgentPermissionResponse) => void;
   isResponding: boolean;
+  submissionError?: string | null;
+}
+
+function SubmissionError({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return (
+    <Text accessibilityRole="alert" testID="permission-submit-error" style={styles.questionText}>
+      {message}
+    </Text>
+  );
+}
+
+function questionActionLabel(
+  last: boolean,
+  error: string | null | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (!last) return t("message.question.next");
+  return error ? t("common.actions.retry") : t("message.question.submit");
 }
 
 const IS_WEB = isWeb;
@@ -325,7 +344,12 @@ function QuestionOtherInput({
   );
 }
 
-export function QuestionFormCard({ permission, onRespond, isResponding }: QuestionFormCardProps) {
+export function QuestionFormCard({
+  permission,
+  onRespond,
+  isResponding,
+  submissionError,
+}: QuestionFormCardProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -472,9 +496,8 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
   );
 
   const primaryDisabled = isResponding || (isLastQuestion ? !allAnswered : !activeQuestionAnswered);
-  const primaryActionLabel = isLastQuestion
-    ? t("message.question.submit")
-    : t("message.question.next");
+  const primaryActionLabel = questionActionLabel(isLastQuestion, submissionError, t);
+  const activeResponse = isResponding ? respondingAction : null;
   const submitButtonStyle = useCallback(
     ({ pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.actionButton,
@@ -538,6 +561,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
 
   return (
     <View style={containerStyle} testID="question-form-card">
+      <SubmissionError message={submissionError} />
       <QuestionNav
         questions={questions}
         activeIndex={resolvedActiveQuestionIndex}
@@ -596,7 +620,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
           accessibilityLabel={dismissLabel}
           testID="question-form-dismiss"
         >
-          {respondingAction === "dismiss" ? (
+          {activeResponse === "dismiss" ? (
             <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
           ) : (
             <View style={styles.actionContent}>
@@ -614,7 +638,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
           accessibilityLabel={primaryActionLabel}
           testID="question-form-primary-action"
         >
-          {respondingAction === "submit" ? (
+          {activeResponse === "submit" ? (
             <LoadingSpinner size="small" color={theme.colors.accentForeground} />
           ) : (
             <View style={styles.actionContent}>

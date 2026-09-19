@@ -291,6 +291,24 @@ test("advertises consumer-provided browser automation capabilities", async () =>
   });
 });
 
+test("does not queue an interaction answer while the phone is reconnecting", async () => {
+  const transport = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "offline-answer",
+    transportFactory: () => transport.transport,
+    reconnect: { enabled: false },
+  });
+  clients.push(client);
+  const connecting = client.connect();
+  await expect(
+    client.respondToPermissionAndWait("agent", "question", { behavior: "allow" }),
+  ).rejects.toThrow("Reconnect to the host");
+  transport.triggerOpen();
+  await connecting;
+  expect(transport.sent).toEqual([]);
+});
+
 test("retry-safe creation rejects older hosts before sending any request", async () => {
   const transport = createMockTransport();
   const client = new DaemonClient({

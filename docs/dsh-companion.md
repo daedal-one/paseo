@@ -2,7 +2,7 @@
 
 This fork adds a DSH provider to Paseo. Run the Paseo daemon on the same Mac as DSH Web, then use **Open DSH session** to connect an existing DSH session. DSH owns its session, workspace, tools, and permission policy. Closing a Paseo session detaches the companion and leaves DSH running.
 
-The provider reads paginated history, streams assistant text and reasoning, displays tool calls and results, sends messages, stops turns, answers approvals and questions, and reconnects after a dropped connection. The original DSH session ID is preserved. DSH model and reasoning selections are available in the existing Paseo controls.
+The provider reads paginated history, streams assistant text and reasoning, displays tool calls and results, sends messages, stops turns, answers approvals and questions, and reconnects after a dropped connection. Pending questions remain answerable while transcript catch-up is recovering. Failed submissions retain choices and show an inline retry; answers are never queued while reconnecting. A lost acknowledgement may leave the outcome uncertain until the pending-request state refreshes. Transcript recovery keeps confirmed history, ignores frames from replaced connections and backs off between failures. Generic tool previews are capped by `maxToolTextChars` (16,384 characters by default); full results remain in DSH Web. The bridge still hydrates older history and deferred details on the host; native on-demand detail loading remains part of the migration. The original DSH session ID is preserved. DSH model and reasoning selections are available in the existing Paseo controls.
 
 ## Connect the host
 
