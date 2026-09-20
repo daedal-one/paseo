@@ -83,13 +83,9 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
     return (
       <ComposerViewport key={state.conversation.sessionId} style={layoutStyles.viewport}>
         <KeyboardDock style={layoutStyles.fill}>
-          <ScrollView
-            style={layoutStyles.fill}
-            contentInsetAdjustmentBehavior="never"
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={layoutStyles.fill}>
             <View style={historyInset} />
-            <View style={styles.content}>
+            <View style={layoutStyles.fill}>
               {state.error !== null && <AccessError code={state.error} />}
               <Conversation
                 model={model}
@@ -98,7 +94,7 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
                 busy={state.busy}
               />
             </View>
-          </ScrollView>
+          </View>
           <ComposerViewportContent style={layoutStyles.composer}>
             <SessionComposer runtime={state.runtime} view={state.conversation} forms={forms} />
           </ComposerViewportContent>

@@ -111,6 +111,18 @@ export const nativeDsh = {
     empty: "No messages to display.",
     older: "Earlier history is available in the current DSH interface.",
   },
+  history: {
+    loadOlder: "Load earlier messages",
+    retryOlder: "Retry earlier messages",
+    pageFailed: "Earlier messages could not be loaded. Your current history is still here.",
+    loadDetail: "Load full result",
+    retryDetail: "Retry full result",
+    detailFailed: "The full result could not be loaded. Try again.",
+    tooLarge: "This result exceeds the app’s detail limit. Open it in the current DSH interface.",
+    offline: "Reconnect to load this history.",
+    unavailable: "This host does not support this history control. Update the host to use it.",
+    latest: "Latest messages",
+  },
   composer: {
     label: "Message",
     placeholder: "Write a message…",

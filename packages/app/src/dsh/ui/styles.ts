@@ -1,5 +1,21 @@
 import { StyleSheet } from "react-native-unistyles";
 export const styles = StyleSheet.create((theme) => ({
+  fill: { flex: 1, minHeight: 0 },
+  historyRow: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    paddingHorizontal: theme.spacing[6],
+  },
+  conversationHeader: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    paddingHorizontal: theme.spacing[6],
+    paddingVertical: theme.spacing[2],
+    gap: theme.spacing[2],
+  },
+  detail: { maxHeight: 320, flexGrow: 0 },
   screen: { flex: 1, backgroundColor: theme.colors.surface0 },
   content: {
     padding: theme.spacing[6],
