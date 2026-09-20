@@ -33,6 +33,12 @@ Qualify actual installed-runtime pagination, deferred-result reconstruction, dup
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
 
+## Shared history Client prerequisites
+
+The application distribution is pinned to DSH `ca59f9f11f7b4e0e97f5dc3497e3358a8c92fb00`, containing explicit older-page failures and retry, joined deferred-detail cancellation and an optional Host-wide retained-detail allowance. The native app has not enabled that allowance or the history controls. Shared-owner and package checks do not establish native scrolling, capability admission or complete Phase 4 acceptance.
+
+The installed candidate passes 159 focused app/desktop cases, workspace types/lint/spec checks and the iOS export. With Node carriers, the actual app runtime reads a 10,000-event fixture plus four authoritative activation events from an isolated built Host: 40 older pages, a maximum 49,806-byte page response, retained history after an injected page failure, explicit retry, coalesced requests and exact deferred-result reconstruction. All nine generated core/history endpoint requirements match the delivered TestFlight 7003007 Client. These checks do not exercise native UI scrolling or claim complete business-semantic compatibility.
+
 ## Acceptance
 
 Recorded sessions match DSH projections across clients. Real simultaneous approval/question responses, large history, deferred details and interrupted commands produce one correct backend result.

@@ -102,13 +102,15 @@ for (const name of [
   "registerApprovalRequests",
   "registerQuestionRequests",
   "planReviewOf",
+  "HistoryDetailLimitError",
 ]) {
-  assert.equal(typeof client[name], "function", `installed interaction export: ${name}`);
+  assert.equal(typeof client[name], "function", `installed Client export: ${name}`);
 }
 assert.equal(
   client.selectRemoteCapabilities(["session/list", "session/follow", "session/prompt"]).length,
   3,
 );
+assert.equal(client.selectRemoteCapabilities(["session/page", "session/historyDetail"]).length, 2);
 const { Context } = await import(pathToFileURL(appRequire.resolve("@deepseek-ai/cordis")).href);
 const context = new Context();
 const events = new client.ConversationEventRegistry(context);
