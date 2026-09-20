@@ -150,6 +150,8 @@ The total is approximately **67–103 engineering days**, roughly **14–21 work
 
 Dependencies: Phase 1 precedes the remaining work. Phase 2 can proceed alongside the Phase 3 investigation. Phase 4 requires Phase 3; Phases 5 and 6 build on Phase 4. Phase 7 can start after the native transport and ownership decisions in Phase 3. Phase 8 develops continuously but exits after the required capabilities and desktop integration. Phase 9 requires all earlier gates. These are work dependencies, not an instruction to start parallel agents now.
 
+The current iPhone build has [provisional user acceptance](../.specs/migration/03-native-client.spec.md#provisional-physical-iphone-acceptance) for its outstanding physical-device checks. Apply that disposition to the phase exit criteria without reporting those checks as executed.
+
 ### Continuous delivery during migration
 
 The [release requirement](../.specs/frontend/release-and-cutover.spec.md) governs every phase. Carlo uses the harness during development and automatically deploys pushed changes. Keep each increment shippable, preserve current UI access and supported installed clients, and keep unfinished capabilities unavailable or explicitly opt-in. Fix daily-use regressions before expanding later phases.

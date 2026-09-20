@@ -31,4 +31,6 @@ Finish compact layouts, accessibility, keyboard input, bounded offline cache, sh
 
 Real iPhone upgrade, pairing, revoked access, network transitions, background/foreground, long sessions and all required mobile flows pass. Browser and desktop share native semantics. Record calibrated latency/memory budgets and real distribution status.
 
+The current delivered build uses the [provisional physical iPhone acceptance](03-native-client.spec.md#provisional-physical-iphone-acceptance). Its deferred device checks do not block continued migration; unfinished mobile capabilities and browser qualification remain required.
+
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).

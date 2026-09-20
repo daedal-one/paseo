@@ -112,4 +112,10 @@ Qualify generated Remote Event delivery, Session and Host isolation, mixed-reque
 
 Physical iPhone, desktop and browser attach to the same native session, stream, prompt and resolve an interaction without Paseo timeline projection. Authentication, incompatible versions, lost response and reconnect cases pass; backend gaps have accepted DSH specs.
 
+## Provisional physical iPhone acceptance
+
+Carlo accepted the remaining physical iPhone checks as passed for now on 20 September 2026, reporting that the app is mostly working and explicitly directing the migration to skip those tests. This clears the current physical-device acceptance requirement, including camera/QR, keyboard, interaction and network checks, for the delivered TestFlight 0.8.0 build 7003006 from frontend commit `491b80343a9342077b5388154d4e3140fd599967`.
+
+Record this disposition as provisional user acceptance. Automated device checks remain unperformed; the decision does not establish observed native-preview behavior. Do not wait for the outstanding device-access request, repeat it or keep iPhone availability as a migration blocker. Preserve that evidence distinction in release reports. Host activation, non-device regression checks, compatibility, publication and later feature work retain their own requirements.
+
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
