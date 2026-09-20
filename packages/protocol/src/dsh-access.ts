@@ -178,3 +178,6 @@ export const dshSessionEndpoints = [
   "session/cancel",
   "subagents/list",
 ] as const;
+
+/** Optional native history reads; absent operations do not reject basic Session admission. */
+export const dshHistoryEndpoints = ["session/page", "session/historyDetail"] as const;

@@ -164,6 +164,12 @@ Each candidate is an untrusted label, identity claim and probe-derived address. 
 
 Disconnecting, switching or forgetting the assisting host cancels its read and removes candidates. Reconnection starts a new read after DSH admits the generation; pairing and messages are never replayed. Native discovery lifecycle and installed protocol tests are separate from actual tailnet reachability and physical iPhone qualification.
 
+### Native history read ownership
+
+The direct DSH preview admits optional `session/page` and `session/historyDetail` operations independently using generated mode, schema fingerprint and semantic revision. Missing optional operations do not prevent basic Session access. The desktop carrier admits those exact paths; ordinary RPC access cannot obtain device grants.
+
+Each native conversation owns cancellation and transient detail-read status. View replacement and Host generation loss abort reads without stopping the resident Session or Host work; final runtime disposal waits for canceled carriers. Reconnect never repeats a read automatically. The shared Session manager limits retained hydrated details to 8,388,608 serialized UTF-16 characters across that Host's resident Sessions. Exact entries larger than the allowance fail explicitly; compact history and cursors remain available. This is a retained-data allowance, not a transport or process-memory bound. History controls and scroll qualification remain in progress.
+
 ### Native interaction requests
 
 The native Host runtime uses DSH's shared pending registry and Remote approval/question consumers. Each Session row identifies waiting requests; the conversation composer displays the effective request. Tool approvals allow once or reject. Questions retain verbatim choices, free text, explicit skips and complete-batch submission; plan reviews show their full detail. A higher-priority request preserves the hidden form's draft. Leaving a conversation retains Host-owned work; leaving the directory releases its interaction consumers.

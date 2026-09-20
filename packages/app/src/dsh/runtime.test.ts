@@ -435,10 +435,21 @@ describe("native DSH Conversation ownership", () => {
         expect(snapshot?.nodes.values().find((node) => node.kind === "user")?.data).toMatchObject({
           content: [{ type: "text", text: "Read this existing conversation" }],
         });
+        expect(first.history.getSnapshot()).toMatchObject({
+          older: "unavailable",
+          detail: "unavailable",
+        });
+        await Promise.all([first.history.loadOlder(), first.history.loadDetail(0)]);
+        expect(host.calls).not.toContain("session/page");
+        expect(host.calls).not.toContain("session/historyDetail");
         expect(runtime.openConversation(host.ids[0], null)).toBe(first);
         expect(host.calls.filter((endpoint) => endpoint === "session/follow")).toHaveLength(1);
         const second = runtime.openConversation(host.ids[1], null);
         expect(second.sessionId).toBe(host.ids[1]);
+        expect(first.history.getSnapshot()).toMatchObject({ older: "offline", detail: "offline" });
+        await Promise.all([first.history.loadOlder(), first.history.loadDetail(0)]);
+        expect(host.calls).not.toContain("session/page");
+        expect(host.calls).not.toContain("session/historyDetail");
         expect(second.conversation).not.toBe(first.conversation);
         await vi.waitFor(() => expect(second.session.getSnapshot().openState).toBe("open"));
         expect(target.getSnapshot()).toBe(snapshot);

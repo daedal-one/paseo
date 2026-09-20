@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "sourceCommit": "ca59f9f11f7b4e0e97f5dc3497e3358a8c92fb00",
+  "sourceCommit": "a6bef71641f0a28c4886b24d9c595732175e9277",
   "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
       "name": "@deepseek-ai/cordis",
       "version": "4.0.2",
       "file": "deepseek-ai-cordis-4.0.2.tgz",
-      "sha256": "02fd258a5e644c906202d0c783f53a8857eeb963e2bb1ecffc110705242c39c3"
+      "sha256": "98f6e220473c2874a664f9870029c4e2ee2c854c4b95986dbea8e7948c5624be"
     },
     {
       "name": "@deepseek-ai/cosmokit",
@@ -37,7 +37,7 @@
       "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
-      "sha256": "f51564d56c3b9d634f3c566a4e11be4e8737876deaa67c06e773a84a21143d1d"
+      "sha256": "c01f0490f245c0a143b95b9d4fa2413a55a21aac08cd710b5ac4a70d0256e797"
     }
   ]
 }

@@ -4,6 +4,7 @@ import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "./access-error";
 import { DshPrompt } from "./prompt";
+import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -24,6 +25,7 @@ export interface DshConversation {
   readonly session: dsh.SessionFace;
   readonly conversation: dsh.ConversationBinding;
   readonly prompt: DshPrompt;
+  readonly history: DshHistory;
 }
 
 export interface DshHostRuntime {
@@ -82,6 +84,7 @@ export async function createDshHostRuntime(
         timeZone: options.timeZone,
       },
       selection: options.selection,
+      historyDetailRetention: { maxSerializedChars: 8 * 1024 * 1024 },
     };
     await context.plugin({ apply: dsh.applySessions, inject: dsh.sessionInject }, sessions);
     const pending = new dsh.PendingInteractions();
@@ -106,8 +109,13 @@ export async function createDshHostRuntime(
     });
     let current: { view: DshConversation; binding: dsh.ConversationBindingModel } | null = null;
     let closed = false;
+    const retiringHistory = new Set<Promise<void>>();
     function releaseConversation() {
       if (current === null) return;
+      const retiring = current.view.history
+        .dispose()
+        .finally(() => retiringHistory.delete(retiring));
+      retiringHistory.add(retiring);
       current.view.prompt.dispose();
       current.binding.dispose();
       current = null;
@@ -136,6 +144,11 @@ export async function createDshHostRuntime(
           sessionId: id,
           session: source.session,
           conversation: binding,
+          history: new DshHistory(
+            source.session,
+            connection,
+            () => context.remote.$host.capabilities,
+          ),
           prompt: new DshPrompt(source, connection, () =>
             brandString<dsh.SessionRequestId>(options.randomId()),
           ),
@@ -151,7 +164,7 @@ export async function createDshHostRuntime(
       async dispose() {
         closed = true;
         releaseConversation();
-        await context.fiber.dispose();
+        await Promise.all([context.fiber.dispose(), ...retiringHistory]);
       },
     };
   } catch (error) {
