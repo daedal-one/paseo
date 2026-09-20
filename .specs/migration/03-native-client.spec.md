@@ -4,7 +4,7 @@ type: task
 status: accepted
 summary: "Prove native DSH connectivity and device access."
 owners: [daedal-one]
-progress: in-progress
+progress: done
 addresses:
   [
     "IFC:frontend/dsh-connection",
@@ -119,3 +119,13 @@ Carlo accepted the remaining physical iPhone checks as passed for now on 20 Sept
 Record this disposition as provisional user acceptance. Automated device checks remain unperformed; the decision does not establish observed native-preview behavior. Do not wait for the outstanding device-access request, repeat it or keep iPhone availability as a migration blocker. Preserve that evidence distinction in release reports. Host activation, non-device regression checks, compatibility, publication and later feature work retain their own requirements.
 
 [Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
+
+## Delivery qualification
+
+Frontend application source `491b80343a9342077b5388154d4e3140fd599967` is qualified with native Host source `752e8d433dee797dea1b2e3dc032ce1846c28c85`. Browser and packaged Electron checks cover enrollment, Session reads, prompts, approval/questions, loss and reconnect, protected restore, cross-Host discovery and revocation. The intended dsh-dev Host preserves all 84 existing Sessions; independent native reads and its numeric-tailnet owner QR passed. The published 491b companion server now runs from an isolated release while the original staged checkout remains intact. Existing 18191 and current 491b clients both connect, discover Hosts and read Sessions.
+
+The installed ad-hoc-signed desktop and available TestFlight 0.8.0 build 7003006 use the qualified application source. Documentation-only acceptance records do not change either binary. The physical iPhone disposition above is provisional user acceptance, not an executed device test. Native access remains opt-in under Settings → DSH hosts; the existing interface and companion route remain available. Older history, rich tools, attachments, managed runtime, notarization and cutover retain their own tasks.
+
+The intended Linux Web profile and real rootless Podman checks pass. A separate headless smoke cannot acquire its user-namespace sandbox on this server and fails closed; its macOS owner passes. No host security policy was relaxed. Local evidence under `.dev/daedal-dsh-plan-audit/native-host-activation-20260920/` retains that limitation, exact sources, browser/runtime evidence and two exercised service recoveries with Session IDs preserved. This is phase-specific qualification, not full semantic adherence.
+
+Publish the qualified backend migration branch before the frontend documentation checkpoint. The installed native Client remains pinned to backend `68284837dffe92fd363cc6eb7dcd1422806b5fe6`; its required endpoint modes, fingerprints and semantic revisions match the merged Host. Retain the frozen compatible Host and companion releases and stopped private backups. Their exercised service recovery does not establish general Session data downgrade support.
