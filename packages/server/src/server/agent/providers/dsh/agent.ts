@@ -1,7 +1,9 @@
 import path from "node:path";
+import { DSH_AGENT_PRESET, DSH_MODEL_OVERRIDE } from "@getpaseo/protocol/dsh-profiles";
 import { z } from "zod";
 import type {
   AgentClient,
+  AgentFeature,
   AgentLaunchContext,
   AgentPersistenceHandle,
   AgentSessionConfig,
@@ -17,7 +19,7 @@ import type {
 import { DshConfigSchema, DshConnection, type DshTransport } from "./connection.js";
 import { DshInteractions } from "./interactions.js";
 import { DSH_CAPABILITIES, DshSession } from "./session.js";
-import { CatalogSchema, ListSchema } from "./wire.js";
+import { AgentPresetRosterSchema, CatalogSchema, ListSchema } from "./wire.js";
 
 export class DshAgentClient implements AgentClient {
   readonly provider = "dsh";
@@ -75,6 +77,33 @@ export class DshAgentClient implements AgentClient {
         })),
       ),
     };
+  }
+
+  async listFeatures(_config: AgentSessionConfig): Promise<AgentFeature[]> {
+    const roster = AgentPresetRosterSchema.parse(
+      await this.requireTransport().request("agentPresets/list", {}),
+    );
+    const presets = roster.presets.filter((preset) => preset.broken === undefined);
+    return [
+      {
+        type: "select",
+        id: DSH_AGENT_PRESET,
+        label: "DSH profile",
+        value: presets.find((preset) => preset.isDefault)?.id ?? null,
+        options: presets.map((preset) => ({
+          id: preset.id,
+          label: preset.name ?? preset.id,
+          description: preset.description,
+          isDefault: preset.isDefault,
+        })),
+      },
+      {
+        type: "toggle",
+        id: DSH_MODEL_OVERRIDE,
+        label: "Override profile model",
+        value: false,
+      },
+    ];
   }
 
   async listImportableSessions(
@@ -147,14 +176,35 @@ export class DshAgentClient implements AgentClient {
   ): Promise<DshSession> {
     if (config.systemPrompt)
       throw new Error("DSH session instructions are configured by its profile.");
+    const profileSelection = config.featureValues?.[DSH_AGENT_PRESET];
+    const profileBased =
+      config.featureValues !== undefined && Object.hasOwn(config.featureValues, DSH_AGENT_PRESET);
+    const agentPreset = profileBased
+      ? z.string().min(1).nullable().parse(profileSelection)
+      : undefined;
     const response = await this.requireTransport().request("session/create", {
-      request: { cwd: config.cwd },
+      request: { cwd: config.cwd, ...(agentPreset ? { agentPreset } : {}) },
     });
     const { sessionId } = z.object({ sessionId: z.string() }).parse(response);
     const session = await this.attach(sessionId, config.cwd);
-    if (config.model) await session.setModel(config.model);
-    if (config.thinkingOptionId) await session.setThinkingOption(config.thinkingOptionId);
-    return session;
+    try {
+      if (profileBased) {
+        const modes = await session.getAvailableModes();
+        if (modes.some((mode) => mode.id === "policy-reviewed")) {
+          await session.setMode("policy-reviewed");
+        }
+      }
+      // COMPAT(dshProfileDefaults): added in v0.8.0, remove after 2027-03-20 once all clients send the profile feature.
+      if (!profileBased || config.featureValues?.[DSH_MODEL_OVERRIDE] === true) {
+        if (config.model) await session.setModel(config.model);
+        if (config.thinkingOptionId) await session.setThinkingOption(config.thinkingOptionId);
+      }
+      return session;
+    } catch (error) {
+      await session.close();
+      this.sessions.delete(sessionId);
+      throw error;
+    }
   }
 
   async shutdown(): Promise<void> {

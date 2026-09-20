@@ -13,7 +13,7 @@ blocked_by: ["TASK:migration/04-sessions-and-interactions"]
 
 ## Plan
 
-Expose DSH model/provider/preset selection, redacted settings and credentials, OAuth return paths, skills, plugin inventory and authorized management, memory/context views and portable tool presentation. Backend writes belong to DSH owners.
+After the separately prioritized [companion profile selector](spec:TASK:migration/companion-profiles), expose the remaining DSH model/provider/preset management, redacted settings and credentials, OAuth return paths, skills, plugin inventory and authorized management, memory/context views and portable tool presentation. Backend writes belong to DSH owners.
 
 ## Acceptance
 

@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
+import { DshControlFrame } from "./dsh-profile-controls";
 import { Settings2 } from "lucide-react-native";
 import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
@@ -150,6 +151,9 @@ export interface DraftAgentControlsProps {
   onSelectThinkingOption: (thinkingOptionId: string) => void;
   onApplyAgentProfile: DraftAgentProfileControls["applyProfile"];
   features?: AgentFeature[];
+  featuresLoading?: boolean;
+  featureError?: string;
+  onRetryFeatures?: () => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
@@ -501,10 +505,14 @@ function ControlledAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
 }: ControlledAgentControlsProps) {
+  if (provider === "dsh") {
+    features = undefined;
+    agentProfiles = null;
+  }
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const isCompactFormFactor = useIsCompactFormFactor();
-  const isCompact = isCompactLayout ?? isCompactFormFactor;
+  const isCompact = provider === "dsh" || (isCompactLayout ?? isCompactFormFactor);
   const { fontScale } = useWindowDimensions();
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [openSelector, setOpenSelector] = useState<AgentControlSelector | null>(null);
@@ -1249,7 +1257,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     </View>
   );
 
-  return canSelectModel ? (
+  const modelPicker = canSelectModel ? (
     <CompactModelSheet
       providers={modelSelectorProviders}
       selectedProvider={provider}
@@ -1271,9 +1279,17 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       glyphSize={glyphSize}
       canSwitchProvider={canSwitchProvider}
     >
-      {sheetControls}
+      {provider === "dsh" ? null : sheetControls}
     </CompactModelSheet>
   ) : null;
+  return provider === "dsh" ? (
+    <View style={styles.dshSettingsControls}>
+      {modelPicker}
+      {sheetControls}
+    </View>
+  ) : (
+    modelPicker
+  );
 }
 
 function DesktopFeatureItem({
@@ -1777,32 +1793,34 @@ export const AgentControls = memo(function AgentControls({
     <>
       {commandCenterRegistration}
       {profileEditor.element}
-      <ControlledAgentControls
-        provider={agent.provider}
-        modelSelectorProviders={agentModelSelectorProviders}
-        modelOptions={modelOptions}
-        selectedModelId={modelSelection.activeModelId ?? undefined}
-        onSelectModel={handleSelectModel}
-        agentProfiles={agentProfiles}
-        onApplyAgentProfile={agentProfiles?.applyProfile}
-        onEditAgentProfiles={handleEditAgentProfiles}
-        onCreateAgentProfile={profileActions.create}
-        onEditAgentProfile={profileActions.edit}
-        thinkingOptions={thinkingOptions.length > 1 ? thinkingOptions : undefined}
-        selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
-        onSelectThinkingOption={handleSelectThinkingOption}
-        features={agent.features}
-        onSetFeature={handleSetFeature}
-        isModelLoading={snapshotIsLoading || selectedProviderIsLoading}
-        onModelSelectorOpen={handleModelSelectorOpen}
-        onRetryModelProvider={handleRetryModelProvider}
-        isRetryingModelProvider={snapshotIsRefreshing}
-        onDropdownClose={onDropdownClose}
-        disabled={!client}
-        modeControl={modeControl}
-        modelSelectorServerId={serverId}
-        isCompactLayout={isCompactLayout}
-      />
+      <DshControlFrame provider={agent.provider} features={agent.features} disabled={!client}>
+        <ControlledAgentControls
+          provider={agent.provider}
+          modelSelectorProviders={agentModelSelectorProviders}
+          modelOptions={modelOptions}
+          selectedModelId={modelSelection.activeModelId ?? undefined}
+          onSelectModel={handleSelectModel}
+          agentProfiles={agentProfiles}
+          onApplyAgentProfile={agentProfiles?.applyProfile}
+          onEditAgentProfiles={handleEditAgentProfiles}
+          onCreateAgentProfile={profileActions.create}
+          onEditAgentProfile={profileActions.edit}
+          thinkingOptions={thinkingOptions.length > 1 ? thinkingOptions : undefined}
+          selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
+          onSelectThinkingOption={handleSelectThinkingOption}
+          features={agent.features}
+          onSetFeature={handleSetFeature}
+          isModelLoading={snapshotIsLoading || selectedProviderIsLoading}
+          onModelSelectorOpen={handleModelSelectorOpen}
+          onRetryModelProvider={handleRetryModelProvider}
+          isRetryingModelProvider={snapshotIsRefreshing}
+          onDropdownClose={onDropdownClose}
+          disabled={!client}
+          modeControl={modeControl}
+          modelSelectorServerId={serverId}
+          isCompactLayout={isCompactLayout}
+        />
+      </DshControlFrame>
     </>
   );
 });
@@ -1825,6 +1843,9 @@ export function DraftAgentControls({
   onSelectThinkingOption,
   onApplyAgentProfile,
   features,
+  featuresLoading,
+  featureError,
+  onRetryFeatures,
   onSetFeature,
   onDropdownClose,
   onModelSelectorOpen,
@@ -1895,33 +1916,44 @@ export function DraftAgentControls({
   return (
     <>
       {profileEditor.element}
-      <ControlledAgentControls
-        provider={selectedProvider ?? ""}
-        modelSelectorProviders={modelSelectorProviders}
-        modelOptions={modelOptions}
-        selectedModelId={selectedModel}
-        onSelectModel={onSelectModel}
-        onSelectProviderAndModel={onSelectProviderAndModel}
-        isModelLoading={isAllModelsLoading}
-        agentProfiles={agentProfiles}
-        onApplyAgentProfile={agentProfiles?.applyProfile}
-        onEditAgentProfiles={handleEditAgentProfiles}
-        onCreateAgentProfile={profileActions.create}
-        onEditAgentProfile={profileActions.edit}
-        thinkingOptions={mappedThinkingOptions.length > 0 ? mappedThinkingOptions : undefined}
-        selectedThinkingOptionId={effectiveSelectedThinkingOption}
-        onSelectThinkingOption={onSelectThinkingOption}
+      <DshControlFrame
+        provider={selectedProvider}
         features={features}
-        onSetFeature={onSetFeature}
-        onDropdownClose={onDropdownClose}
-        onModelSelectorOpen={onModelSelectorOpen}
-        onRetryModelProvider={onRetryModelProvider}
-        isRetryingModelProvider={isRetryingModelProvider}
+        draft
         disabled={disabled}
-        modeControl={modeControl}
-        modelSelectorServerId={modelSelectorServerId}
-        isCompactLayout={isCompactLayout}
-      />
+        loading={featuresLoading}
+        error={featureError}
+        onRetry={onRetryFeatures}
+        onSetFeature={onSetFeature}
+      >
+        <ControlledAgentControls
+          provider={selectedProvider ?? ""}
+          modelSelectorProviders={modelSelectorProviders}
+          modelOptions={modelOptions}
+          selectedModelId={selectedModel}
+          onSelectModel={onSelectModel}
+          onSelectProviderAndModel={onSelectProviderAndModel}
+          isModelLoading={isAllModelsLoading}
+          agentProfiles={agentProfiles}
+          onApplyAgentProfile={agentProfiles?.applyProfile}
+          onEditAgentProfiles={handleEditAgentProfiles}
+          onCreateAgentProfile={profileActions.create}
+          onEditAgentProfile={profileActions.edit}
+          thinkingOptions={mappedThinkingOptions.length > 0 ? mappedThinkingOptions : undefined}
+          selectedThinkingOptionId={effectiveSelectedThinkingOption}
+          onSelectThinkingOption={onSelectThinkingOption}
+          features={features}
+          onSetFeature={onSetFeature}
+          onDropdownClose={onDropdownClose}
+          onModelSelectorOpen={onModelSelectorOpen}
+          onRetryModelProvider={onRetryModelProvider}
+          isRetryingModelProvider={isRetryingModelProvider}
+          disabled={disabled}
+          modeControl={modeControl}
+          modelSelectorServerId={modelSelectorServerId}
+          isCompactLayout={isCompactLayout}
+        />
+      </DshControlFrame>
     </>
   );
 }
@@ -1985,6 +2017,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     lineHeight: theme.fontSize.base * 1.4,
   },
+  dshSettingsControls: { flex: 1, gap: theme.spacing[3] },
   combinedSheetControls: {
     gap: theme.spacing[1],
   },

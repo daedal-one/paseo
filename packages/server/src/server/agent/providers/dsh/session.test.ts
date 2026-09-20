@@ -281,3 +281,95 @@ describe("DSH existing sessions", () => {
     }
   });
 });
+
+test("uses Host permission projections for external knob changes and command results", async () => {
+  const transport = new DshTestTransport();
+  let cut = -1;
+  let currentValue = "policy-reviewed";
+  const options = [
+    { value: "policy-reviewed", name: "Policy reviewed" },
+    { value: "read-only", name: "Read only" },
+  ];
+  transport.initial = (endpoint) =>
+    endpoint === "$events"
+      ? { type: "ready", clientId: "client" }
+      : {
+          ...snapshot([], cut),
+          projections: { asOfSeq: cut, values: { permissions: { currentValue, options } } },
+        };
+  const attached = await attach(transport);
+  const main = transport.streams.get("session/follow")!;
+  try {
+    expect(await attached.session.getCurrentMode()).toBe("policy-reviewed");
+    currentValue = "custom";
+    cut = 0;
+    main.value(record(0, "sandbox/mode", { mode: "read-only" }));
+    await vi.waitFor(async () => expect(await attached.session.getCurrentMode()).toBe("custom"));
+    transport.respond = () => ({ result: { kind: "success" } });
+    // A concurrent Host-side change wins over the requested mode.
+    currentValue = "read-only";
+    cut = 1;
+    await attached.session.setMode("policy-reviewed");
+    expect(await attached.session.getCurrentMode()).toBe("read-only");
+    expect(transport.closedStreams.filter((name) => name === "session/follow")).toHaveLength(2);
+    transport.respond = () => ({ result: { kind: "error", text: "Rejected" } });
+    await expect(attached.session.setMode("policy-reviewed")).rejects.toThrow("Rejected");
+    expect(await attached.session.getCurrentMode()).toBe("read-only");
+    await expect(attached.session.setMode("custom")).rejects.toThrow("does not offer");
+  } finally {
+    await attached.close();
+  }
+});
+
+test.each(["detach", "timeout"])(
+  "closes a late control reader after %s without cancelling the Session",
+  async (ending) => {
+    vi.useFakeTimers();
+    const transport = new DshTestTransport();
+    transport.initial = (endpoint) =>
+      endpoint === "$events"
+        ? { type: "ready", clientId: "client" }
+        : {
+            ...snapshot([], -1),
+            projections: {
+              asOfSeq: -1,
+              values: {
+                permissions: {
+                  currentValue: "read-only",
+                  options: [{ value: "read-only", name: "Read only" }],
+                },
+              },
+            },
+          };
+    const attached = await attach(transport);
+    let finishOpen!: (reader: { close: () => void }) => void;
+    let started!: () => void;
+    const opened = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const closeReader = vi.fn();
+    transport.respond = () => ({ result: { kind: "success" } });
+    transport.open = () =>
+      new Promise((resolve) => {
+        finishOpen = resolve;
+        started();
+      });
+    const changing = expect(attached.session.setMode("read-only")).rejects.toThrow(
+      ending === "detach" ? "detached" : "timed out",
+    );
+    try {
+      await opened;
+      if (ending === "detach") await attached.close();
+      else await vi.advanceTimersByTimeAsync(config.requestTimeoutMs);
+      await changing;
+      finishOpen({ close: closeReader });
+      await Promise.resolve();
+      expect(closeReader).toHaveBeenCalledTimes(1);
+      expect(transport.requests.map((request) => request.endpoint)).toEqual(["commands/execute"]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await attached.close();
+      vi.useRealTimers();
+    }
+  },
+);

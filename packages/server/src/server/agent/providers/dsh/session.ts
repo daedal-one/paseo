@@ -1,7 +1,9 @@
+import { DSH_AGENT_PRESET } from "@getpaseo/protocol/dsh-profiles";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
   AgentCapabilityFlags,
+  AgentFeature,
   AgentPermissionResponse,
   AgentPromptInput,
   AgentRunOptions,
@@ -20,6 +22,7 @@ import {
 import { DshInteractions } from "./interactions.js";
 import { DshProjection } from "./projection.js";
 import {
+  PermissionSelectSchema,
   PageSchema,
   RecordSchema,
   SelectionSchema,
@@ -33,7 +36,7 @@ export const DSH_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
-  supportsDynamicModes: false,
+  supportsDynamicModes: true,
   supportsMcpServers: false,
   supportsReasoningStream: true,
   supportsToolInvocations: true,
@@ -66,6 +69,9 @@ export class DshSession implements AgentSession {
   private receipt: TurnReceipt | null = null;
   private connectionError: Error | null = null;
   private opening: Promise<void> | null = null;
+  private agentPreset: string | null = null;
+  private controlCursor = -1;
+  private permissions: z.infer<typeof PermissionSelectSchema> | null = null;
   private selection: z.infer<typeof SelectionSchema> | null = null;
 
   constructor(
@@ -197,19 +203,130 @@ export class DshSession implements AgentSession {
         ? JSON.stringify([this.selection.provider, this.selection.model])
         : null,
       thinkingOptionId: this.selection?.reasoningEffort ?? null,
-      modeId: null,
+      modeId: this.permissions?.currentValue ?? null,
       extra: { connection: this.connectionError ? "disconnected" : "connected" },
     };
   }
+  get features(): AgentFeature[] {
+    return this.agentPreset === null
+      ? []
+      : [
+          {
+            type: "select",
+            id: DSH_AGENT_PRESET,
+            label: "DSH profile",
+            value: this.agentPreset,
+            options: [{ id: this.agentPreset, label: this.agentPreset }],
+          },
+        ];
+  }
   async getAvailableModes() {
-    return [];
+    return (this.permissions?.options ?? [])
+      .filter((option) => option.value !== "custom")
+      .map((option) => ({
+        id: option.value,
+        label: option.name,
+        description: option.description,
+      }));
   }
   async getCurrentMode() {
-    return null;
+    return this.permissions?.currentValue ?? null;
   }
-  async setMode(_modeId: string): Promise<void> {
-    throw new Error("Change DSH permissions in the existing DSH session.");
+  async setMode(modeId: string): Promise<void> {
+    this.assertConnected();
+    if (!(await this.getAvailableModes()).some((mode) => mode.id === modeId)) {
+      throw new Error("This DSH session does not offer that permission mode.");
+    }
+    const value = await this.transport.request(
+      "commands/execute",
+      {
+        agentId: this.id,
+        line: `/permission ${modeId}`,
+        submittedAttachments: [],
+      },
+      this.lifetime.signal,
+    );
+    const response = z
+      .object({ result: z.object({ kind: z.string(), text: z.string().optional() }) })
+      .parse(value);
+    if (response.result.kind !== "success")
+      throw new Error(response.result.text ?? "DSH refused the permission change.");
+    await this.refreshControls();
   }
+
+  /** Read one authoritative projection cut, then detach the temporary reader. */
+  private async refreshControls(): Promise<void> {
+    this.lifetime.signal.throwIfAborted();
+    let subscription: DshSubscription | undefined;
+    let release = () => {};
+    try {
+      const snapshot = await new Promise<DshSnapshot>((resolve, reject) => {
+        const abort = () => reject(new Error("DSH companion detached"));
+        const timeout = setTimeout(
+          () => reject(new Error("DSH control refresh timed out")),
+          this.config.requestTimeoutMs,
+        );
+        this.lifetime.signal.addEventListener("abort", abort, { once: true });
+        let settled = false;
+        release = () => {
+          settled = true;
+          clearTimeout(timeout);
+          this.lifetime.signal.removeEventListener("abort", abort);
+        };
+        void this.transport
+          .open(
+            "session/follow",
+            {
+              request: { address: { kind: "session", sessionId: this.id }, maxMessages: 1 },
+            },
+            {
+              value: (value) => {
+                if (settled) return;
+                const parsed = SnapshotSchema.safeParse(value);
+                if (parsed.success) resolve(parsed.data);
+                else reject(new Error("Invalid DSH control snapshot"));
+                release();
+              },
+              error: reject,
+            },
+          )
+          .then((reader) => {
+            if (settled) reader.close();
+            else subscription = reader;
+            return undefined;
+          }, reject);
+      });
+      this.lifetime.signal.throwIfAborted();
+      if (snapshot.header.id !== this.id) throw new Error("DSH control snapshot identity changed");
+      this.acceptControls(snapshot);
+      this.emit({
+        type: "model_changed",
+        provider: "dsh",
+        runtimeInfo: await this.getRuntimeInfo(),
+      });
+      this.emit({
+        type: "mode_changed",
+        provider: "dsh",
+        currentModeId: this.permissions?.currentValue ?? null,
+        availableModes: await this.getAvailableModes(),
+      });
+    } finally {
+      release();
+      subscription?.close();
+    }
+  }
+
+  private acceptControls(snapshot: DshSnapshot): void {
+    if (snapshot.cursor < this.controlCursor) return;
+    this.controlCursor = snapshot.cursor;
+    const permissions = PermissionSelectSchema.safeParse(snapshot.projections.values.permissions);
+    this.permissions = permissions.success ? permissions.data : null;
+    const selection = z
+      .object({ next: SelectionSchema.nullable() })
+      .safeParse(snapshot.projections.values.modelSelection);
+    if (selection.success) this.selection = selection.data.next;
+  }
+
   getPendingPermissions() {
     return this.interactions.list(this.id);
   }
@@ -432,10 +549,9 @@ export class DshSession implements AgentSession {
     }
     if (this.cursor !== snapshot.cursor)
       throw new DshConnectionError("DSH snapshot has a history gap", "protocol");
-    const selection = z
-      .object({ next: SelectionSchema.nullable() })
-      .safeParse(snapshot.projections.values.modelSelection);
-    if (selection.success) this.selection = selection.data.next;
+    const preset = z.string().nullable().safeParse(snapshot.projections.values.agentPreset);
+    this.agentPreset = preset.success ? preset.data : null;
+    this.acceptControls(snapshot);
     this.snapshot = snapshot;
     this.flushInteractions();
     this.restoreAssistant(snapshot, initial);
@@ -483,6 +599,18 @@ export class DshSession implements AgentSession {
     this.history.push(...events);
     this.acceptReceipt(event);
     if (initial) return;
+    if (
+      [
+        "permission/preset",
+        "sandbox/mode",
+        "approval/policy",
+        "model/selection",
+        "request/header",
+      ].includes(event.type) &&
+      event.seq > this.controlCursor
+    ) {
+      await this.refreshControls();
+    }
     for (const projected of events) this.emit(projected);
   }
 

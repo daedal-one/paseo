@@ -1,146 +1,44 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { z } from "zod";
+import { launchDshTestHost } from "../../../../../../../scripts/testing/dsh-host";
 import { DshAgentClient } from "./agent.js";
 import { DshConfigSchema, DshConnection } from "./connection.js";
-import { UserMessageSchema } from "./wire.js";
+import { z } from "zod";
 
-const fork = fileURLToPath(new URL("../../../../../../..", import.meta.url));
-const repository = process.env.DSH_REPOSITORY ?? path.join(path.dirname(fork), "deepseek-harness");
-
-async function launch(fixtureName: string, permissionMode = "workspace-write") {
-  const home = await mkdtemp(path.join(os.tmpdir(), "paseo-dsh-test-"));
-  const fixture = path.join(repository, "snapshots", fixtureName);
-  const rows: unknown[] = (await readFile(fixture, "utf8"))
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-  const messages = rows.flatMap((row) => {
-    const event = z.object({ type: z.string(), data: z.unknown().optional() }).parse(row);
-    if (event.type !== "user/message") return [];
-    const message = UserMessageSchema.parse(event.data);
-    return message.source.kind === "user" ? [message] : [];
-  });
-  const prompt = messages[0].content
-    .map((block) => (typeof block.text === "string" ? block.text : ""))
-    .join("");
-  const overlay = path.join(home, "companion-test.yml");
-  await writeFile(
-    overlay,
-    "- id: session-title-llm\n  disabled: true\n- id: session-telemetry-otel\n  disabled: true\n",
-  );
-  const process = spawn(
-    globalThis.process.execPath,
-    [
-      "apps/cli/lib/bin.js",
-      "--profile",
-      "web",
-      "--patch",
-      "apps/cli/config/examples/paseo/cordis.yml",
-      "--patch",
-      overlay,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "0",
-      "--no-open",
-    ],
-    {
-      cwd: repository,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...globalThis.process.env,
-        DSH_HOME: home,
-        DSH_SNAPSHOT: "replay",
-        DSH_SNAPSHOT_FILE: fixture,
-        DSH_SNAPSHOT_SESSIONS_ROOT: path.join(home, "sessions"),
-        DSH_PERMISSION_MODE: permissionMode,
-      },
-    },
-  );
-  let output = "";
-  let stopped = false;
-  const exited = new Promise<void>((resolve) =>
-    process.once("exit", () => {
-      stopped = true;
-      resolve();
-    }),
-  );
-  const closeProcess = async () => {
-    if (!stopped) {
-      process.kill("SIGTERM");
-      const timeout = setTimeout(() => process.kill("SIGKILL"), 10_000);
-      try {
-        await exited;
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-    await rm(home, { recursive: true, force: true });
-  };
+async function launch(
+  fixture: string,
+  permissionMode = "workspace-write",
+  profileControls = false,
+) {
+  const host = await launchDshTestHost(fixture, permissionMode, profileControls);
+  const config = DshConfigSchema.parse(host.config);
+  const native = new DshConnection(config);
+  const client = new DshAgentClient(config);
   try {
-    const loginUrl = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("DSH test host did not start")), 30_000);
-      const receive = (chunk: Buffer) => {
-        output += chunk.toString();
-        const match = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_.~-]+/);
-        if (match) {
-          clearTimeout(timeout);
-          resolve(match[0]);
-        }
-      };
-      process.stdout.on("data", receive);
-      process.stderr.on("data", receive);
-      process.once("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-      process.once("exit", () => {
-        clearTimeout(timeout);
-        reject(
-          new Error(
-            `DSH host exited: ${output.replace(/token=\S+/g, "token=[redacted]").slice(-2000)}`,
-          ),
-        );
-      });
-    });
-    const login = await fetch(loginUrl, { redirect: "manual" });
-    expect(login.status).toBe(303);
-    const origin = new URL(loginUrl).origin;
-    const cookie = login.headers.getSetCookie()[0].split(";", 1)[0];
-    const cookieFile = path.join(home, "companion-auth.json");
-    await writeFile(cookieFile, JSON.stringify({ origin, cookie }), { mode: 0o600 });
-    const config = DshConfigSchema.parse({ url: origin, cookieFile });
-    const native = new DshConnection(config);
-    const client = new DshAgentClient(config);
-    const cwd = path.join(home, "workspace");
-    await mkdir(cwd);
     const { sessionId } = z
       .object({ sessionId: z.string() })
-      .parse(await native.request("session/create", { request: { cwd } }));
+      .parse(await native.request("session/create", { request: { cwd: host.cwd } }));
     const imported = await client.importSession(
-      { providerHandleId: sessionId, cwd },
-      { storedConfig: { provider: "dsh", cwd } },
+      { providerHandleId: sessionId, cwd: host.cwd },
+      { storedConfig: { provider: "dsh", cwd: host.cwd } },
     );
     return {
-      prompt,
-      imported,
-      client,
-      sessionId,
-      cwd,
+      ...host,
       native,
+      client,
+      imported,
+      sessionId,
       close: async () => {
         await client.shutdown();
         await native.close();
-        await closeProcess();
+        await host.close();
       },
     };
   } catch (error) {
-    await closeProcess();
+    await client.shutdown();
+    await native.close();
+    await host.close();
     throw error;
   }
 }
@@ -151,6 +49,7 @@ test("attaches, streams a real DSH replay turn, and reloads the same durable ses
     const result = await host.imported.session.run(host.prompt);
     expect(result.sessionId).toBe(host.sessionId);
     expect(result.finalText).toBe("PONG");
+    expect((await host.imported.session.getRuntimeInfo()).model).toContain("deepseek");
     await host.imported.session.close();
     const rows = await host.client.listImportableSessions({ cwd: host.cwd });
     expect(rows.map((row) => row.providerHandleId)).toEqual([host.sessionId]);
@@ -219,6 +118,46 @@ test("returns structured answers to an actual DSH multi-select question", async 
     const [result] = await Promise.all([host.imported.session.run(host.prompt), answer]);
     expect(result.finalText).toBe("DONE");
     expect(host.imported.session.getPendingPermissions()).toEqual([]);
+  } finally {
+    await host.close();
+  }
+}, 60_000);
+
+test("selects a real Host profile before its first turn and exposes permission modes in settings", async () => {
+  const host = await launch("session/text-turn/session.v1.jsonl", "workspace-write", true);
+  try {
+    const features = await host.client.listFeatures({ provider: "dsh", cwd: host.cwd });
+    const profile = features.find((feature) => feature.id === "dsh.agentPreset");
+    expect(profile?.type).toBe("select");
+    if (profile?.type !== "select") throw new Error("Missing DSH profiles");
+    expect(profile.options.some((option) => option.id === "minimal")).toBe(true);
+    const selected = await host.client.createSession({
+      provider: "dsh",
+      cwd: host.cwd,
+      model: '["not-a-provider","must-not-override-profile"]',
+      thinkingOptionId: "not-an-effort",
+      featureValues: { "dsh.agentPreset": "minimal" },
+    });
+    expect(selected.features).toEqual([expect.objectContaining({ value: "minimal" })]);
+    expect(await selected.getCurrentMode()).toBe("policy-reviewed");
+    await selected.setMode("read-only");
+    expect(await selected.getCurrentMode()).toBe("read-only");
+    await selected.setMode("policy-reviewed");
+    const result = await selected.run(host.prompt);
+    expect(result.finalText).toBe("PONG");
+    const persistence = selected.describePersistence();
+    await selected.close();
+    const resumed = await host.client.resumeSession(persistence);
+    expect((await resumed.getRuntimeInfo()).model).toBe('["deepseek-official","deepseek-flash"]');
+    expect(resumed.features).toEqual([expect.objectContaining({ value: "minimal" })]);
+    expect(await resumed.getCurrentMode()).toBe("policy-reviewed");
+    await expect(
+      host.client.createSession({
+        provider: "dsh",
+        cwd: host.cwd,
+        featureValues: { "dsh.agentPreset": "removed-profile" },
+      }),
+    ).rejects.toThrow();
   } finally {
     await host.close();
   }

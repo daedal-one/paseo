@@ -1,4 +1,17 @@
 export const nativeDsh = {
+  profile: {
+    select: "Select DSH profile",
+    hostDefault: "Host default",
+    current: "Profile: {{profile}}",
+    settings: "Session settings",
+    override: "Override profile model",
+    defaults:
+      "Your profile supplies the model and reasoning settings. New sessions use policy-reviewed when the host supports it. Other permission modes are available here after creation.",
+    fixed:
+      "The profile is fixed for this conversation. Model and permission changes apply to this session; host policy and required approvals still apply.",
+    unavailable:
+      "Profile selection is unavailable. Update the companion host to select DSH profiles.",
+  },
   title: "DSH hosts",
   desktopAccess:
     "Connect directly to your DSH hosts. Device access is protected by this computer’s secure storage.",

@@ -19,3 +19,18 @@ export function resolveNextAgentModeId({
 export function resolveAgentControlsMode(agentControls?: DraftAgentControlsProps) {
   return agentControls ? "draft" : "ready";
 }
+
+/** Keep DSH's derived Custom state visible without adding it to the switchable modes. */
+export function resolveDisplayedAgentMode(input: {
+  provider: string;
+  modeOptions: readonly AgentMode[];
+  selectedModeId: string | null | undefined;
+}): AgentMode | null {
+  if (input.modeOptions.length === 0) return null;
+  return (
+    input.modeOptions.find((mode) => mode.id === input.selectedModeId) ??
+    (input.provider === "dsh" && input.selectedModeId
+      ? { id: input.selectedModeId, label: input.selectedModeId }
+      : input.modeOptions[0])
+  );
+}

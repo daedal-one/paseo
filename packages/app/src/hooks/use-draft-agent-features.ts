@@ -1,3 +1,4 @@
+import { DSH_AGENT_PRESET, DSH_MODEL_OVERRIDE } from "@getpaseo/protocol/dsh-profiles";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -27,8 +28,30 @@ export function useDraftAgentFeatures(input: {
   const { t } = useTranslation();
   const { serverId, provider, cwd, modeId, modelId, thinkingOptionId, initialFeatureValues } =
     input;
-  const [localFeatureValues, setLocalFeatureValues] = useState<Record<string, unknown>>(
-    () => initialFeatureValues ?? {},
+  const featureScope = `${serverId ?? ""}:${provider ?? ""}`;
+  const [localSelection, setLocalSelection] = useState(() => ({
+    scope: featureScope,
+    values: initialFeatureValues ?? {},
+  }));
+  const localFeatureValues = useMemo(
+    () => (localSelection.scope === featureScope ? localSelection.values : {}),
+    [localSelection, featureScope],
+  );
+  const setLocalFeatureValues = useCallback(
+    (
+      update:
+        | Record<string, unknown>
+        | ((current: Record<string, unknown>) => Record<string, unknown>),
+    ) => {
+      setLocalSelection((current) => ({
+        scope: featureScope,
+        values:
+          typeof update === "function"
+            ? update(current.scope === featureScope ? current.values : {})
+            : update,
+      }));
+    },
+    [featureScope],
   );
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
@@ -103,7 +126,7 @@ export function useDraftAgentFeatures(input: {
     if (previousProvider !== normalizedProvider) {
       setLocalFeatureValues({});
     }
-  }, [normalizedProvider]);
+  }, [normalizedProvider, setLocalFeatureValues]);
 
   useEffect(() => {
     if (availableFeaturesRaw === undefined) {
@@ -113,9 +136,13 @@ export function useDraftAgentFeatures(input: {
     if (next !== localFeatureValues) {
       setLocalFeatureValues(next);
     }
-  }, [availableFeatures, availableFeaturesRaw, localFeatureValues]);
+  }, [availableFeatures, availableFeaturesRaw, localFeatureValues, setLocalFeatureValues]);
 
-  const effectiveFeatureValues = Object.keys(featureValues).length > 0 ? featureValues : undefined;
+  const effectiveFeatureValues = useMemo(() => {
+    if (provider === "dsh")
+      return { [DSH_AGENT_PRESET]: null, [DSH_MODEL_OVERRIDE]: false, ...featureValues };
+    return Object.keys(featureValues).length > 0 ? featureValues : undefined;
+  }, [featureValues, provider]);
   const setFeatureValue = useCallback(
     (featureId: string, value: unknown) => {
       setLocalFeatureValues((current) => {
@@ -125,7 +152,7 @@ export function useDraftAgentFeatures(input: {
 
         return { ...current, [featureId]: value };
       });
-      if (!provider) {
+      if (!provider || featureId === DSH_AGENT_PRESET || featureId === DSH_MODEL_OVERRIDE) {
         return;
       }
       void updatePreferences((current) =>
@@ -142,17 +169,27 @@ export function useDraftAgentFeatures(input: {
         console.warn("[useDraftAgentFeatures] persist feature preference failed", error);
       });
     },
-    [provider, updatePreferences],
+    [provider, updatePreferences, setLocalFeatureValues],
   );
 
-  const applyProfileFeatureValues = useCallback((values: Record<string, unknown>) => {
-    setLocalFeatureValues(values);
-  }, []);
+  const applyProfileFeatureValues = useCallback(
+    (values: Record<string, unknown>) => {
+      setLocalFeatureValues(values);
+    },
+    [setLocalFeatureValues],
+  );
+
+  const { refetch } = featuresQuery;
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   return {
     features,
     featureValues: effectiveFeatureValues,
     isLoading: featuresQuery.isLoading,
+    error: featuresQuery.error?.message,
+    retry,
     setFeatureValue,
     applyProfileFeatureValues,
   };

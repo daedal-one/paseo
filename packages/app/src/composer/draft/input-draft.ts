@@ -245,6 +245,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   const {
     features: draftFeatures,
+    isLoading: featuresLoading,
+    error: featureError,
+    retry: retryFeatures,
     featureValues: draftFeatureValues,
     setFeatureValue: setDraftFeatureValue,
     applyProfileFeatureValues,
@@ -301,6 +304,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       agentControls: buildDraftAgentControls({
         formState,
         features: draftFeatures,
+        featuresLoading,
+        featureError,
+        onRetryFeatures: retryFeatures,
         onSetFeature: setDraftFeatureValue,
         onApplyAgentProfile: applyDraftAgentProfile,
       }),
@@ -312,6 +318,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     effectiveModelId,
     effectiveThinkingOptionId,
     draftFeatures,
+    featuresLoading,
+    featureError,
+    retryFeatures,
     draftFeatureValues,
     applyDraftAgentProfile,
     formState,

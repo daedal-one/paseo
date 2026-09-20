@@ -1,3 +1,4 @@
+import { DSH_AGENT_PRESET, DSH_MODEL_OVERRIDE } from "@getpaseo/protocol/dsh-profiles";
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
 
 export function pruneFeatureValues(
@@ -51,7 +52,9 @@ export function resolveFeatureValues(args: {
       next[feature.id] = args.localFeatureValues[feature.id];
       continue;
     }
-    if (Object.prototype.hasOwnProperty.call(args.persistedFeatureValues, feature.id)) {
+    if (feature.id === DSH_AGENT_PRESET || feature.id === DSH_MODEL_OVERRIDE) {
+      next[feature.id] = feature.value;
+    } else if (Object.prototype.hasOwnProperty.call(args.persistedFeatureValues, feature.id)) {
       next[feature.id] = args.persistedFeatureValues[feature.id];
     }
   }
