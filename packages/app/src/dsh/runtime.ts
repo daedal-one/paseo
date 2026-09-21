@@ -4,6 +4,7 @@ import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "./access-error";
 import { DshPrompt } from "./prompt";
+import { DshCreationJournal, type DshCreationStorage } from "./creation-journal";
 import { DshCreation } from "./creation";
 import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
@@ -19,6 +20,8 @@ export interface DshHostRuntimeOptions {
   /** Hydrated navigation dedicated to this Host; persistence errors stay in its owner. */
   selection: dsh.SessionSelectionStore;
   network?: dsh.ConnectionNetworkSource;
+  /** Durable Host-qualified mutation recovery; omission disables creation. */
+  creationStorage?: DshCreationStorage;
 }
 
 export interface DshConversation {
@@ -97,7 +100,11 @@ export async function createDshHostRuntime(
       () => context.remote.$host.capabilities,
       () => context.remote.agentPresets.list(),
       () => brandString<dsh.SessionId>(options.randomId()),
+      options.creationStorage === undefined
+        ? undefined
+        : new DshCreationJournal(options.hostId, options.creationStorage),
     );
+    await creation.restore();
     const ownedCreation = creation;
     const pending = new dsh.PendingInteractions();
     await context.plugin({

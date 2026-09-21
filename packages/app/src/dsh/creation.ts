@@ -8,6 +8,7 @@ import {
   type IWorkspaces,
   type SessionId,
 } from "@deepseek-ai/dsh-client";
+import type { DshCreationJournal, StoredCreationOutcome } from "./creation-journal";
 import { dshCreationEndpoints } from "@getpaseo/protocol/dsh-access";
 
 type Request = NonNullable<Parameters<ISessions["create"]>[0]>;
@@ -19,7 +20,8 @@ type Generation = ReturnType<ConnectionHandle["generation"]["getSnapshot"]>;
 type Availability = "available" | "offline" | "unavailable";
 export type DshCreationOutcome =
   | { readonly kind: "idle" }
-  | { readonly kind: "sending" | "accepted"; readonly request: Attempt }
+  | { readonly kind: "sending"; readonly request: Attempt }
+  | { readonly kind: "accepted"; readonly request: Attempt }
   | {
       readonly kind: "rejected";
       readonly request: Attempt;
@@ -32,6 +34,7 @@ export type DshCreationOutcome =
     }
   | { readonly kind: "attachment-failed"; readonly request: Attempt };
 export interface DshCreationSnapshot {
+  readonly storage: "loading" | "ready" | "failed" | "unavailable";
   readonly availability: Availability;
   readonly catalog: Availability;
   readonly roster: "idle" | "loading" | "ready" | "failed";
@@ -56,6 +59,7 @@ const rejections = new Set([
 /** One Host's creation attempt. Shared Session and Workspace state remain the publication authority. */
 export class DshCreation {
   private snapshot: DshCreationSnapshot = {
+    storage: "loading",
     availability: "offline",
     catalog: "offline",
     roster: "idle",
@@ -70,6 +74,8 @@ export class DshCreation {
   private catalogRead: Promise<void> | null = null;
   private creation: Promise<void> | null = null;
   private closed = false;
+  private recovery: Promise<void> | null = null;
+  private persisting: Promise<void> | null = null;
 
   constructor(
     private readonly sessions: Pick<ISessions, "create" | "list" | "refresh">,
@@ -78,7 +84,9 @@ export class DshCreation {
     private readonly capabilities: () => HostCapabilities | undefined,
     private readonly readRoster: Context["remote"]["agentPresets"]["list"],
     private readonly createId: () => SessionId,
+    private readonly journal?: DshCreationJournal,
   ) {
+    if (journal === undefined) this.snapshot = { ...this.snapshot, storage: "unavailable" };
     this.unsubscribe = [
       connection.generation.subscribe(this.sync),
       sessions.list.subscribe(this.reconcileObserved),
@@ -167,8 +175,9 @@ export class DshCreation {
         if (this.catalogRead === task) this.catalogRead = null;
       });
     this.catalogRead = task;
+    this.own(task);
     this.publish({ roster: "loading", profiles: [] });
-    return this.own(task);
+    return task;
   };
 
   /** Dispatch once with a caller-owned identity. A new attempt requires an explicit reset. */
@@ -176,6 +185,7 @@ export class DshCreation {
     if (this.creation !== null) return this.creation;
     if (
       this.closed ||
+      this.snapshot.storage !== "ready" ||
       this.snapshot.availability !== "available" ||
       this.snapshot.outcome.kind !== "idle"
     )
@@ -210,24 +220,33 @@ export class DshCreation {
     // Defer dispatch so observers of sending cannot start a second request reentrantly.
     const task = Promise.resolve()
       .then(async () => {
-        if (this.closed || this.generation === undefined || this.generation !== generation) {
+        let claimed;
+        try {
+          claimed = await this.journal!.claim(request);
+        } catch {
+          // An uncertain local commit prohibits dispatch until an explicit storage recovery.
           this.publish({
-            outcome: {
-              kind: "rejected",
-              request,
-              code: "client/not-dispatched",
-            },
+            storage: "failed",
+            outcome: { kind: "unknown", request, published: false },
           });
-          return undefined;
+          return;
+        }
+        if (!claimed.claimed) {
+          this.publish({ outcome: claimed.outcome });
+          this.reconcileObserved();
+          return;
+        }
+        if (this.closed || this.generation === undefined || this.generation !== generation) {
+          await this.saveOutcome({ kind: "rejected", request, code: "client/not-dispatched" });
+          return;
         }
         try {
           const id = await this.sessions.create(request);
-          this.publish({
-            outcome:
-              id === request.sessionId
-                ? { kind: "accepted", request }
-                : { kind: "unknown", request, published: false },
-          });
+          await this.saveOutcome(
+            id === request.sessionId
+              ? { kind: "accepted", request }
+              : { kind: "unknown", request, published: false },
+          );
         } catch (error: unknown) {
           if (
             error instanceof SessionCreateError &&
@@ -235,15 +254,11 @@ export class DshCreation {
             error.rpcError.details.sessionId === request.sessionId &&
             error.rpcError.details.workspaceId === request.workspaceId
           ) {
-            this.publish({ outcome: { kind: "attachment-failed", request } });
+            await this.saveOutcome({ kind: "attachment-failed", request });
           } else if (error instanceof SessionCreateError && rejections.has(error.rpcError.code)) {
-            this.publish({
-              outcome: { kind: "rejected", request, code: error.rpcError.code },
-            });
+            await this.saveOutcome({ kind: "rejected", request, code: error.rpcError.code });
           } else {
-            this.publish({
-              outcome: { kind: "unknown", request, published: false },
-            });
+            await this.saveOutcome({ kind: "unknown", request, published: false });
           }
         }
         this.reconcileObserved();
@@ -253,32 +268,53 @@ export class DshCreation {
         this.creation = null;
       });
     this.creation = task;
+    this.own(task);
     this.publish({
       outcome: { kind: "sending", request },
       selectionError: null,
     });
-    return this.own(task);
+    return task;
   };
 
   private reconcileObserved = (): void => {
-    if (this.closed || this.generation === undefined) return;
+    if (
+      this.closed ||
+      this.generation === undefined ||
+      this.snapshot.storage !== "ready" ||
+      this.persisting !== null
+    )
+      return;
     const outcome = this.snapshot.outcome;
     if (outcome.kind !== "unknown" && outcome.kind !== "attachment-failed") return;
     const sessions = this.sessions.list.getSnapshot();
     const { request } = outcome;
-    if (sessions.phase !== "ready" || sessions.byId[request.sessionId] === undefined) return;
+    if (
+      sessions.phase !== "ready" ||
+      sessions.error !== null ||
+      sessions.byId[request.sessionId] === undefined
+    )
+      return;
     const workspace = this.workspaces.list.getSnapshot();
     const attached =
       request.workspaceId === undefined ||
       (workspace.phase === "ready" &&
+        workspace.error === null &&
         workspace.items.some(
           (value) =>
             value.workspaceId === request.workspaceId &&
             value.sessionIds.includes(request.sessionId),
         ));
-    if (attached) this.publish({ outcome: { kind: "accepted", request } });
+    let next: StoredCreationOutcome | undefined;
+    if (attached) next = { kind: "accepted", request };
     else if (outcome.kind === "unknown" && !outcome.published)
-      this.publish({ outcome: { ...outcome, published: true } });
+      next = { ...outcome, published: true };
+    if (next !== undefined) {
+      const task = this.saveOutcome(next).finally(() => {
+        this.persisting = null;
+        this.reconcileObserved();
+      });
+      this.persisting = this.own(task);
+    }
   };
 
   /** Read-only reconciliation; absence from a bounded list never proves rejection. */
@@ -286,18 +322,84 @@ export class DshCreation {
     if (this.closed || this.generation === undefined) return Promise.resolve();
     const task = this.sessions
       .refresh()
-      .then(this.reconcileObserved)
+      .then(async () => {
+        this.reconcileObserved();
+        await this.persisting;
+        return undefined;
+      })
       .catch(() => {
         // A failed baseline leaves the attempt unknown; the shared list retains its read error.
       });
     return this.own(task);
   };
 
-  reset(): void {
-    if (this.creation !== null || !["accepted", "rejected"].includes(this.snapshot.outcome.kind))
-      return;
-    this.publish({ outcome: { kind: "idle" }, selectionError: null });
+  /** Reread local durable state without dispatching a mutation or fetching a catalog. */
+  restore = (): Promise<void> => {
+    if (this.closed || this.journal === undefined) return Promise.resolve();
+    if (this.recovery !== null) return this.recovery;
+    if (this.creation !== null || this.persisting !== null) return Promise.resolve();
+    const task = Promise.resolve()
+      .then(async () => {
+        try {
+          const outcome = await this.journal!.read();
+          this.publish({ storage: "ready", outcome: outcome ?? { kind: "idle" } });
+          this.reconcileObserved();
+        } catch {
+          this.publish({ storage: "failed" });
+        }
+        return undefined;
+      })
+      .finally(() => {
+        this.recovery = null;
+      });
+    this.recovery = this.own(task);
+    this.publish({ storage: "loading" });
+    return task;
+  };
+
+  private async saveOutcome(outcome: StoredCreationOutcome): Promise<void> {
+    try {
+      const stored = await this.journal!.settle(outcome);
+      this.publish({ outcome: stored ?? { kind: "idle" } });
+    } catch {
+      // The pre-dispatch record remains authoritative when recording the result fails.
+      this.publish({ storage: "failed", outcome });
+    }
   }
+
+  /** Confirmed outcomes clear only after the identity-checked durable reset commits. */
+  reset = (): Promise<void> => {
+    const outcome = this.snapshot.outcome;
+    if (
+      this.closed ||
+      this.creation !== null ||
+      this.persisting !== null ||
+      this.recovery !== null ||
+      this.snapshot.storage !== "ready" ||
+      (outcome.kind !== "accepted" && outcome.kind !== "rejected")
+    )
+      return Promise.resolve();
+    const task = Promise.resolve()
+      .then(async () => {
+        try {
+          const retained = await this.journal!.clear(outcome.request.sessionId);
+          this.publish({
+            storage: "ready",
+            outcome: retained ?? { kind: "idle" },
+            selectionError: null,
+          });
+        } catch {
+          this.publish({ storage: "failed" });
+        }
+        return undefined;
+      })
+      .finally(() => {
+        this.recovery = null;
+      });
+    this.recovery = this.own(task);
+    this.publish({ storage: "loading" });
+    return task;
+  };
 
   /** Close publication immediately; the Host connection owner cancels carriers while these calls join. */
   async dispose(): Promise<void> {
@@ -306,6 +408,6 @@ export class DshCreation {
       for (const unsubscribe of this.unsubscribe) unsubscribe();
       this.listeners.clear();
     }
-    await Promise.allSettled(this.owned);
+    while (this.owned.size > 0) await Promise.allSettled(this.owned);
   }
 }

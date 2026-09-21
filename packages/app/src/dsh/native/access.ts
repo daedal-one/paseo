@@ -1,3 +1,4 @@
+import { createDshCreationStorage } from "../creation-storage";
 import { randomUUID } from "expo-crypto";
 import { getCalendars } from "expo-localization";
 import {
@@ -87,6 +88,7 @@ export async function openSavedDshHost(options: OpenDshHostOptions): Promise<Dsh
   let runtime: DshHostRuntime;
   try {
     runtime = await createDshHostRuntime({
+      creationStorage: createDshCreationStorage(),
       ...options,
       baseUrl: record.origin,
       isLocal,

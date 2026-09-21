@@ -52,6 +52,14 @@ Coalesce duplicate creation gestures and refuse dispatch offline or without comp
 
 Qualify held/lost replies, stream-before-reply, partial attachment, missing profile, offline taps, duplicate calls, stale catalog replies and disposal against typed ports and an isolated real built Host. Keep visible creation and registration controls unavailable until their persisted uncertain-attempt recovery, native UI and platform flows are separately qualified. Workspace registration, creation UI, catalog UI and remaining Phase 4 gates are not completed by this composition increment.
 
+## Durable creation recovery increment
+
+Persist the Host-qualified request and allocated Session identity before dispatch. Claim one outstanding attempt atomically across application owners, including concurrent browser or Electron windows. Only the successful claimant may send; every other owner restores the retained attempt without replay. Restore an unfinished request as unknown, then use exact shared Session identity and requested Workspace membership for read-only reconciliation. A missing record in a bounded Session list is not rejection. Preserve unresolved attempts when switching Hosts, closing the application, losing access or forgetting a pairing; pairing credentials are not part of these records.
+
+Use a dedicated transactional store, separate from discardable replica caches. Validate durable records and fail closed on unreadable, malformed, unsupported-version or unwritable storage. Never overwrite a corrupt record with an empty state. Confirmed outcomes remain retained until an explicit, identity-checked reset completes durably. An old owner cannot clear a replacement request, downgrade a confirmed outcome or erase observed publication and attachment-failure evidence. Storage failures after dispatch retain the identity and prohibit a new attempt. Explicit recovery may reread and reconcile; it never repeats creation. Dispose joins owned persistence and carrier calls without canceling the Session.
+
+Qualify write-before-send, storage failures before and after dispatch, two competing owners, late completion, atomic reset, Host isolation, cold reload and an actual accepted-but-lost reply. Exercise browser/Electron storage with the real database and native storage through its SQLite transaction owner; label iOS exports separately from physical execution. Keep creation UI hidden until visible profile, target and outcome controls have their own real browser/Electron qualification. This prerequisite does not complete Phase 4 or authorize a phase release.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
@@ -59,6 +67,7 @@ Qualify held/lost replies, stream-before-reply, partial attachment, missing prof
 - [Native transcript presentation](spec:src:packages/app/src/dsh/ui/conversation.tsx)
 - [Shared workspace receipt presentation](spec:src:packages/app/src/dsh/ui/workspace-outcome.tsx)
 - [Native creation and catalog ownership](spec:src:packages/app/src/dsh/creation.ts)
+- [Durable creation ownership](spec:src:packages/app/src/dsh/creation-journal.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
 
@@ -94,7 +103,17 @@ An isolated built Host accepted three native creation requests and retained exac
 
 All eleven core/history/creation endpoint descriptors match the exact TestFlight 7003007 archive, installed Client and built Host metadata. This does not remove the older clients' required-workspace-event incompatibility. Web and iOS exports and the desktop main build pass. No new Electron creation UI or physical iPhone execution is claimed. Evidence is `.dev/daedal-dsh-plan-audit/native-creation-20260921/verification.json`.
 
-Creation controls stay unavailable pending persisted uncertain-attempt recovery and native UI qualification. Workspace registration and remaining Phase 4 requirements remain open. This local component is not a phase release, source publication, deployment or new TestFlight delivery.
+Creation controls stay unavailable pending native UI qualification; durable recovery is qualified below. Workspace registration and remaining Phase 4 requirements remain open. This local component is not a phase release, source publication, deployment or new TestFlight delivery.
+
+## Durable creation recovery qualification
+
+The creation journal commits one Host-qualified request before dispatch and retains it through runtime replacement. SQLite tests use actual on-disk transactions and new connections; a real Chromium case races independent IndexedDB connections. Controller cases cover competing claimants, unreadable records, failure before dispatch, failed outcome/reset writes, disposal during a pending claim and exact Workspace reconciliation. The selected owner checks total 77 Node cases plus one browser case. Two negative controls fail when durable claiming or terminal-result protection is removed. An additional failing regression reproduced a late owner erasing partial-publication evidence; the journal now preserves it and explicit attachment failures. Full workspace types, final app types, lint and direct spec lint pass.
+
+An isolated built `f9b05abb` Host accepted three requests and retained exactly three durable Sessions. After the third reply was deliberately lost, the native runtime closed, reopened offline from its SQLite record and reconciled the original identity and Workspace membership after reconnect with no redispatch. Production browser reload and development Electron cold restart separately restored seeded records for that actual accepted request and persisted acceptance through their real Session readers. Electron retained protected pairing and used native IPC. Both opened the recovered Session and fixed composer with no JavaScript errors; normal client exit left the external Host alive. These seeded browser/Electron records qualify application restoration, not an executed creation gesture in those UIs.
+
+Web, Electron and iOS exports and desktop main build pass. Native SQLite orchestration is exercised through Node's real SQLite driver; the Expo adapter is typechecked and exported, not executed on a physical iPhone. Carlo's provisional physical acceptance for the current delivered build remains separate. Evidence is `.dev/daedal-dsh-plan-audit/creation-recovery-20260921/verification.json`.
+
+The durable recovery prerequisite is locally complete. Visible creation/profile/target controls, Workspace registration and the remaining Phase 4 gates stay open. No source publication, deployment, installed-app replacement or TestFlight delivery occurred.
 
 ## Acceptance
 

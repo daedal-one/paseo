@@ -1,3 +1,4 @@
+import { createDshCreationStorage } from "../creation-storage.web";
 import type { ConnectionHostId, SessionSelectionStore } from "@deepseek-ai/dsh-client";
 import { desktopDshHostsSchema, DshAccessError } from "@getpaseo/protocol/dsh-access";
 import { createDshHostRuntime, type DshHostRuntime } from "../runtime";
@@ -40,6 +41,7 @@ export async function openDesktopDshHost(options: {
   let runtime: DshHostRuntime | undefined;
   try {
     runtime = await createDshHostRuntime({
+      creationStorage: createDshCreationStorage(),
       hostId: options.hostId,
       selection: options.selection,
       baseUrl: transport.origin,

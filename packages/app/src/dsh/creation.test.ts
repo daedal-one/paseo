@@ -12,6 +12,7 @@ import {
   type SessionId,
 } from "@deepseek-ai/dsh-client";
 import { dshCreationEndpoints } from "@getpaseo/protocol/dsh-access";
+import { DshCreationJournal, type DshCreationStorage } from "./creation-journal";
 import { DshCreation, type DshCreationSelection } from "./creation";
 const id = brandString<SessionId>("candidate");
 const workspaceId = brandString<NonNullable<DshCreationSelection["workspaceId"]>>("workspace");
@@ -56,7 +57,20 @@ const profile = {
   name: "Minimal",
   description: "Small profile",
 };
-function fixture() {
+function memoryStorage() {
+  const rows = new Map<string, string>();
+  const storage: DshCreationStorage = {
+    async transact(hostId, update) {
+      const before = rows.get(hostId) ?? null;
+      const after = update(before);
+      if (after === null) rows.delete(hostId);
+      else rows.set(hostId, after);
+      return { before, after };
+    },
+  };
+  return storage;
+}
+async function fixture(storage: DshCreationStorage = memoryStorage()) {
   const generation = cell<ReturnType<ConnectionHandle["generation"]["getSnapshot"]>>({
     id: 1,
     host: { home: "/fixture", identity },
@@ -123,7 +137,9 @@ function fixture() {
     () => capabilities,
     readRoster,
     createId,
+    new DshCreationJournal(identity.hostId, storage),
   );
+  await creation.restore();
   return {
     creation,
     sessions,
@@ -206,7 +222,7 @@ describe("native creation ownership", () => {
   it.each(["missing", "unavailable", "mode", "wire", "semantic"] as const)(
     "gates only the incompatible optional operation: %s",
     async (kind) => {
-      const f = fixture();
+      const f = await fixture();
       try {
         f.capability((base) => changedCapabilities(base, kind));
         expect(f.creation.getSnapshot()).toMatchObject({
@@ -223,7 +239,7 @@ describe("native creation ownership", () => {
     },
   );
   it("reads the actual healthy roster explicitly and forwards one identity/profile/workspace on duplicate gestures", async () => {
-    const f = fixture();
+    const f = await fixture();
     const result = deferred<SessionId>();
     f.sessions.create.mockReturnValue(result.promise);
     try {
@@ -233,7 +249,7 @@ describe("native creation ownership", () => {
       const first = f.creation.create(request);
       const duplicate = f.creation.create({ cwd: "/other" });
       expect(duplicate).toBe(first);
-      await Promise.resolve();
+      await vi.waitFor(() => expect(f.sessions.create).toHaveBeenCalledOnce());
       expect(f.sessions.create).toHaveBeenCalledExactlyOnceWith({
         ...request,
         sessionId: id,
@@ -246,7 +262,7 @@ describe("native creation ownership", () => {
       });
       await f.creation.create({});
       expect(f.sessions.create).toHaveBeenCalledTimes(1);
-      f.creation.reset();
+      await f.creation.reset();
       await f.creation.create({});
       expect(f.sessions.create).toHaveBeenLastCalledWith({ sessionId: id });
     } finally {
@@ -255,7 +271,7 @@ describe("native creation ownership", () => {
     }
   });
   it("rejects stale/removed selections without defaulting or dispatching", async () => {
-    const f = fixture();
+    const f = await fixture();
     try {
       await f.creation.create({ agentPreset: "minimal" });
       expect(f.creation.getSnapshot().selectionError).toBe("profile-unavailable");
@@ -274,7 +290,7 @@ describe("native creation ownership", () => {
     }
   });
   it("keeps roster failures explicit and coalesces explicit retries", async () => {
-    const f = fixture();
+    const f = await fixture();
     const read = deferred<Awaited<ReturnType<typeof f.readRoster>>>();
     f.readRoster.mockRejectedValueOnce(new Error("carrier"));
     try {
@@ -299,7 +315,7 @@ describe("native creation ownership", () => {
     }
   });
   it("discards old-generation catalog success and joins it while a new read completes", async () => {
-    const f = fixture();
+    const f = await fixture();
     const old = deferred<Awaited<ReturnType<typeof f.readRoster>>>();
     f.readRoster.mockReturnValueOnce(old.promise);
     const first = f.creation.refreshProfiles();
@@ -329,7 +345,7 @@ describe("native creation ownership", () => {
     expect(f.workspaces.list.listeners.size).toBe(0);
   });
   it("rejects offline taps and a generation change before dispatch", async () => {
-    const f = fixture();
+    const f = await fixture();
     try {
       f.generation.set(undefined);
       await f.creation.create({});
@@ -348,7 +364,7 @@ describe("native creation ownership", () => {
     }
   });
   it("reconciles a lost reply only by the original identity, never title or path", async () => {
-    const f = fixture();
+    const f = await fixture();
     f.sessions.create.mockRejectedValueOnce(new Error("lost reply"));
     try {
       await f.creation.create({ cwd: "/host/project" });
@@ -356,13 +372,14 @@ describe("native creation ownership", () => {
       f.publish(brandString<SessionId>("other"));
       await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome.kind).toBe("unknown");
-      f.creation.reset();
+      await f.creation.reset();
       await f.creation.create({});
       expect(f.sessions.create).toHaveBeenCalledTimes(1);
       f.generation.set(undefined);
       f.capability((base) => base);
       expect(f.sessions.create).toHaveBeenCalledTimes(1);
       f.publish();
+      await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome.kind).toBe("accepted");
       f.sessions.list.set({
         ...f.sessions.list.getSnapshot(),
@@ -375,7 +392,7 @@ describe("native creation ownership", () => {
     }
   });
   it("accepts an authoritative stream that preceded a lost reply", async () => {
-    const f = fixture();
+    const f = await fixture();
     const reply = deferred<SessionId>();
     f.sessions.create.mockReturnValueOnce(reply.promise);
     try {
@@ -385,32 +402,35 @@ describe("native creation ownership", () => {
       expect(f.creation.getSnapshot().outcome.kind).toBe("sending");
       reply.reject(new Error("lost"));
       await call;
+      await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome.kind).toBe("accepted");
     } finally {
       await f.creation.dispose();
     }
   });
   it("does not turn missing Workspace membership into successful creation or retry", async () => {
-    const f = fixture();
+    const f = await fixture();
     f.sessions.create.mockRejectedValueOnce(new Error("lost"));
     try {
       await f.creation.create({ workspaceId });
       f.publish();
+      await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome).toMatchObject({
         kind: "unknown",
         published: true,
       });
-      f.creation.reset();
+      await f.creation.reset();
       await f.creation.create({ workspaceId });
       expect(f.sessions.create).toHaveBeenCalledTimes(1);
       f.attach();
+      await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome.kind).toBe("accepted");
     } finally {
       await f.creation.dispose();
     }
   });
   it("retains explicit attachment failure until authoritative membership arrives", async () => {
-    const f = fixture();
+    const f = await fixture();
     f.sessions.create.mockRejectedValueOnce(
       new SessionCreateError(
         new RemoteError("session/workspace-attach-failed", "failed", {
@@ -424,17 +444,18 @@ describe("native creation ownership", () => {
       await f.creation.create({ workspaceId });
       f.publish();
       expect(f.creation.getSnapshot().outcome.kind).toBe("attachment-failed");
-      f.creation.reset();
+      await f.creation.reset();
       await f.creation.create({});
       expect(f.sessions.create).toHaveBeenCalledTimes(1);
       f.attach();
+      await f.creation.reconcile();
       expect(f.creation.getSnapshot().outcome.kind).toBe("accepted");
     } finally {
       await f.creation.dispose();
     }
   });
   it("reports definite profile refusal without default retry", async () => {
-    const f = fixture();
+    const f = await fixture();
     f.sessions.create.mockRejectedValueOnce(
       new SessionCreateError(
         new RemoteError("agent-preset/not-found", "removed", {
@@ -457,11 +478,11 @@ describe("native creation ownership", () => {
     }
   });
   it("does not publish a late success after disposal, and joins its carrier", async () => {
-    const f = fixture();
+    const f = await fixture();
     const reply = deferred<SessionId>();
     f.sessions.create.mockReturnValueOnce(reply.promise);
     const pending = f.creation.create({});
-    await Promise.resolve();
+    await vi.waitFor(() => expect(f.sessions.create).toHaveBeenCalledOnce());
     const listener = vi.fn();
     f.creation.subscribe(listener);
     let joined = false;
@@ -478,7 +499,7 @@ describe("native creation ownership", () => {
     expect(f.creation.getSnapshot().outcome.kind).toBe("sending");
   });
   it("never dispatches work queued just before disposal", async () => {
-    const f = fixture();
+    const f = await fixture();
     const read = f.creation.refreshProfiles();
     const create = f.creation.create({});
     const close = f.creation.dispose();
@@ -487,7 +508,7 @@ describe("native creation ownership", () => {
     expect(f.readRoster).not.toHaveBeenCalled();
   });
   it("coalesces a roster refresh requested synchronously by a loading observer", async () => {
-    const f = fixture();
+    const f = await fixture();
     let notifications = 0;
     const nested: Promise<void>[] = [];
     const off = f.creation.subscribe(() => {
@@ -503,4 +524,169 @@ describe("native creation ownership", () => {
       await f.creation.dispose();
     }
   });
+});
+
+describe("durable creation recovery", () => {
+  it("claims before dispatch and stops when storage fails", async () => {
+    const base = memoryStorage();
+    let fail = false;
+    const storage: DshCreationStorage = {
+      transact: (host, update) => {
+        if (fail) return Promise.reject(new Error("disk"));
+        return base.transact(host, update);
+      },
+    };
+    const f = await fixture(storage);
+    fail = true;
+    await f.creation.create({ cwd: "/host/project" });
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    expect(f.creation.getSnapshot().storage).toBe("failed");
+    await f.creation.reset();
+    await f.creation.create({});
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    fail = false;
+    await f.creation.restore();
+    expect(f.creation.getSnapshot().outcome.kind).toBe("idle");
+    f.sessions.create.mockImplementation(async (request) => {
+      expect(await new DshCreationJournal(identity.hostId, storage).read()).toMatchObject({
+        kind: "unknown",
+        request,
+      });
+      return id;
+    });
+    await f.creation.create({});
+    await f.creation.dispose();
+  });
+  it("restores a lost reply across owners, preserves exact membership, and never resends", async () => {
+    const storage = memoryStorage();
+    const first = await fixture(storage);
+    first.sessions.create.mockRejectedValueOnce(new Error("lost"));
+    await first.creation.create({ workspaceId });
+    await first.creation.dispose();
+    const next = await fixture(storage);
+    expect(next.creation.getSnapshot().outcome).toMatchObject({
+      kind: "unknown",
+      request: { sessionId: id, workspaceId },
+    });
+    await next.creation.create({});
+    next.publish();
+    await next.creation.reconcile();
+    expect(next.creation.getSnapshot().outcome).toMatchObject({ kind: "unknown", published: true });
+    next.attach();
+    await next.creation.reconcile();
+    expect(next.creation.getSnapshot().outcome.kind).toBe("accepted");
+    expect(next.sessions.create).not.toHaveBeenCalled();
+    await next.creation.dispose();
+    const cold = await fixture(storage);
+    expect(cold.creation.getSnapshot().outcome.kind).toBe("accepted");
+    await cold.creation.reset();
+    expect(await new DshCreationJournal(identity.hostId, storage).read()).toBeNull();
+    await cold.creation.dispose();
+  });
+  it("permits only one concurrent claimant to dispatch", async () => {
+    const storage = memoryStorage();
+    const one = await fixture(storage);
+    const two = await fixture(storage);
+    await Promise.all([one.creation.create({}), two.creation.create({ cwd: "/other" })]);
+    expect(one.sessions.create.mock.calls.length + two.sessions.create.mock.calls.length).toBe(1);
+    await Promise.all([one.creation.dispose(), two.creation.dispose()]);
+  });
+  it("retains an accepted identity when recording the outcome fails", async () => {
+    const base = memoryStorage();
+    let fail = false;
+    const storage: DshCreationStorage = {
+      transact: (host, update) =>
+        fail ? Promise.reject(new Error("disk")) : base.transact(host, update),
+    };
+    const f = await fixture(storage);
+    f.sessions.create.mockImplementation(async () => {
+      fail = true;
+      return id;
+    });
+    await f.creation.create({});
+    expect(f.creation.getSnapshot()).toMatchObject({
+      storage: "failed",
+      outcome: { kind: "accepted" },
+    });
+    await f.creation.reset();
+    await f.creation.create({});
+    expect(f.sessions.create).toHaveBeenCalledOnce();
+    fail = false;
+    f.publish();
+    await f.creation.restore();
+    await f.creation.reconcile();
+    expect(f.creation.getSnapshot()).toMatchObject({
+      storage: "ready",
+      outcome: { kind: "accepted" },
+    });
+    await f.creation.dispose();
+  });
+  it("joins a held claim and records no-dispatch after disposal", async () => {
+    const base = memoryStorage();
+    const held = deferred<void>();
+    let hold = false;
+    const storage: DshCreationStorage = {
+      async transact(host, update) {
+        if (hold) await held.promise;
+        return base.transact(host, update);
+      },
+    };
+    const f = await fixture(storage);
+    hold = true;
+    const pending = f.creation.create({});
+    let joined = false;
+    const close = f.creation.dispose().then(() => {
+      joined = true;
+      return undefined;
+    });
+    await Promise.resolve();
+    expect(joined).toBe(false);
+    held.resolve();
+    await Promise.all([pending, close]);
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    expect(await new DshCreationJournal(identity.hostId, storage).read()).toMatchObject({
+      kind: "rejected",
+      code: "client/not-dispatched",
+    });
+  });
+  it("fails closed on unreadable retained records", async () => {
+    const storage: DshCreationStorage = {
+      async transact(_host, update) {
+        const text = "corrupt";
+        return { before: text, after: update(text) };
+      },
+    };
+    const f = await fixture(storage);
+    expect(f.creation.getSnapshot().storage).toBe("failed");
+    await f.creation.create({});
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    await f.creation.dispose();
+  });
+});
+
+it("retains confirmed identity when durable reset fails", async () => {
+  const base = memoryStorage();
+  let fail = false;
+  const storage: DshCreationStorage = {
+    transact: (host, update) =>
+      fail ? Promise.reject(new Error("disk")) : base.transact(host, update),
+  };
+  const f = await fixture(storage);
+  try {
+    await f.creation.create({});
+    fail = true;
+    await f.creation.reset();
+    expect(f.creation.getSnapshot()).toMatchObject({
+      storage: "failed",
+      outcome: { kind: "accepted" },
+    });
+    await f.creation.create({ cwd: "/new" });
+    expect(f.sessions.create).toHaveBeenCalledOnce();
+    fail = false;
+    await f.creation.restore();
+    await f.creation.reset();
+    expect(await new DshCreationJournal(identity.hostId, storage).read()).toBeNull();
+  } finally {
+    await f.creation.dispose();
+  }
 });
