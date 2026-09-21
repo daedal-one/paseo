@@ -28,6 +28,13 @@ export const styles = StyleSheet.create((theme) => ({
   composer: { flexShrink: 1, gap: theme.spacing[3] },
   composerFields: { flexShrink: 1, flexGrow: 0 },
   row: { gap: theme.spacing[2], paddingVertical: theme.spacing[3] },
+  creationActions: {
+    width: "100%",
+    flexShrink: 1,
+    flexDirection: "row",
+    gap: theme.spacing[3],
+    flexWrap: "wrap",
+  },
   actions: { flexDirection: "row", gap: theme.spacing[3], flexWrap: "wrap" },
   title: {
     fontSize: theme.fontSize.lg,

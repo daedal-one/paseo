@@ -13,6 +13,7 @@ import {
 } from "@deepseek-ai/dsh-client";
 import { dshCreationEndpoints } from "@getpaseo/protocol/dsh-access";
 import { DshCreationJournal, type DshCreationStorage } from "./creation-journal";
+import { DshCreationForm } from "./creation-form";
 import { DshCreation, type DshCreationSelection } from "./creation";
 const id = brandString<SessionId>("candidate");
 const workspaceId = brandString<NonNullable<DshCreationSelection["workspaceId"]>>("workspace");
@@ -689,4 +690,146 @@ it("retains confirmed identity when durable reset fails", async () => {
   } finally {
     await f.creation.dispose();
   }
+});
+
+describe("native creation form", () => {
+  it("captures explicit displays and forwards one immutable selection while closing only its readers", async () => {
+    const f = await fixture();
+    const form = new DshCreationForm(f.creation, f.workspaces);
+    const close = form.connect();
+    expect(f.readRoster).not.toHaveBeenCalled();
+    expect(form.getSnapshot().canSubmit).toBe(false);
+    await form.refreshProfiles();
+    form.chooseProfile("minimal", {
+      label: "Captured profile",
+      description: "Captured description",
+    });
+    form.setDirectory("/host/project with spaces");
+    expect(form.getSnapshot().canSubmit).toBe(true);
+    const gate = deferred<SessionId>();
+    f.sessions.create.mockReturnValueOnce(gate.promise);
+    const first = form.submit();
+    expect(form.submit()).toBe(first);
+    form.setDirectory("/not-submitted");
+    await vi.waitFor(() => expect(f.sessions.create).toHaveBeenCalledTimes(1));
+    expect(f.sessions.create).toHaveBeenCalledWith({
+      cwd: "/host/project with spaces",
+      agentPreset: "minimal",
+      sessionId: id,
+    });
+    close();
+    gate.resolve(id);
+    await first;
+    expect(f.creation.getSnapshot().outcome.kind).toBe("accepted");
+    const reopened = new DshCreationForm(f.creation, f.workspaces);
+    const closeReopened = reopened.connect();
+    expect(reopened.getSnapshot().openSession).toBe(id);
+    expect(reopened.getSnapshot().canSubmit).toBe(false);
+    closeReopened();
+    await f.creation.dispose();
+    expect(f.workspaces.list.listeners.size).toBe(0);
+  });
+
+  it("retains selected labels while profile and Workspace removal block submission without substitution", async () => {
+    const f = await fixture();
+    const form = new DshCreationForm(f.creation, f.workspaces);
+    const close = form.connect();
+    await form.refreshProfiles();
+    form.chooseProfile("minimal", { label: "Original label" });
+    form.chooseTarget("workspace");
+    form.chooseWorkspace(workspaceId, {
+      label: "Original workspace",
+      description: "/host/project",
+    });
+    expect(form.getSnapshot().canSubmit).toBe(true);
+    f.readRoster.mockResolvedValueOnce({
+      ok: true,
+      value: { presets: [{ ...profile, id: "replacement" }], authorable: false },
+    });
+    await form.refreshProfiles();
+    f.workspaces.list.set({ ...f.workspaces.list.getSnapshot(), items: [] });
+    expect(form.getSnapshot()).toMatchObject({
+      canSubmit: false,
+      profileMissing: true,
+      workspaceMissing: true,
+      profile: { value: "minimal", display: { label: "Original label" } },
+      workspace: { value: workspaceId, display: { label: "Original workspace" } },
+    });
+    await form.submit();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    close();
+    await f.creation.dispose();
+  });
+
+  it("keeps directory and profile input across catalog failure and reconnect without automatic reads", async () => {
+    const f = await fixture();
+    const form = new DshCreationForm(f.creation, f.workspaces);
+    const close = form.connect();
+    await form.refreshProfiles();
+    form.chooseProfile("minimal", { label: "Minimal" });
+    form.setDirectory("/retained");
+    f.readRoster.mockRejectedValueOnce(new Error("catalog carrier unavailable"));
+    await form.refreshProfiles();
+    expect(form.getSnapshot().canSubmit).toBe(false);
+    expect(form.getSnapshot().cwd).toBe("/retained");
+    const generation = f.generation.getSnapshot();
+    f.generation.set(undefined);
+    await form.submit();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    f.generation.set(generation);
+    expect(f.readRoster).toHaveBeenCalledTimes(2);
+    expect(form.getSnapshot().canSubmit).toBe(false);
+    await form.refreshProfiles();
+    expect(form.getSnapshot().canSubmit).toBe(true);
+    close();
+    await f.creation.dispose();
+  });
+
+  it("retained unknown attempts expose status checks and cannot be reset or submitted again", async () => {
+    const f = await fixture();
+    f.sessions.create.mockRejectedValueOnce(new Error("reply lost"));
+    await f.creation.create({ cwd: "/retained", agentPreset: undefined });
+    const form = new DshCreationForm(f.creation, f.workspaces);
+    const close = form.connect();
+    expect(form.getSnapshot()).toMatchObject({
+      editable: false,
+      canSubmit: false,
+      openSession: null,
+      creation: { outcome: { kind: "unknown" } },
+    });
+    await form.reset();
+    await form.submit();
+    expect(f.sessions.create).toHaveBeenCalledTimes(1);
+    f.publish();
+    await form.checkStatus();
+    expect(form.getSnapshot().openSession).toBe(id);
+    await form.reset();
+    expect(form.getSnapshot().creation.outcome.kind).toBe("idle");
+    expect(f.sessions.create).toHaveBeenCalledTimes(1);
+    close();
+    await f.creation.dispose();
+  });
+
+  it("storage failure keeps a fresh form disabled even when the Host and catalog are available", async () => {
+    const f = await fixture({
+      transact: async () => {
+        throw new Error("storage unavailable");
+      },
+    });
+    const form = new DshCreationForm(f.creation, f.workspaces);
+    const close = form.connect();
+    await form.refreshProfiles();
+    form.chooseProfile("minimal", { label: "Minimal" });
+    form.setDirectory("/host");
+    expect(form.getSnapshot()).toMatchObject({
+      editable: false,
+      canSubmit: false,
+      creation: { storage: "failed" },
+    });
+    await form.submit();
+    await form.checkStatus();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    close();
+    await f.creation.dispose();
+  });
 });

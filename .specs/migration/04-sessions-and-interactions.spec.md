@@ -60,6 +60,14 @@ Use a dedicated transactional store, separate from discardable replica caches. V
 
 Qualify write-before-send, storage failures before and after dispatch, two competing owners, late completion, atomic reset, Host isolation, cold reload and an actual accepted-but-lost reply. Exercise browser/Electron storage with the real database and native storage through its SQLite transaction owner; label iOS exports separately from physical execution. Keep creation UI hidden until visible profile, target and outcome controls have their own real browser/Electron qualification. This prerequisite does not complete Phase 4 or authorize a phase release.
 
+## Native creation presentation increment
+
+Expose Session creation in the opt-in native Host directory using the qualified creation controller and durable journal. A form owns its draft and captures explicit healthy profile and existing Workspace selections, or an explicit Host directory. Catalog refresh, removal, disconnection and Host replacement never substitute a selection. Opening the form may explicitly read profiles; reconnect never does. Show the Host default profile as advertised, with profile descriptions. Retain input through retry and keep the form's submission action reachable at narrow and wide widths.
+
+Present sending, accepted, rejected, unknown publication, partial Workspace attachment and storage failure separately. Show the retained request identity and target for unresolved outcomes, with an explicit read-only status check. Unknown or partial outcomes cannot start another attempt. A confirmed outcome permits an explicit durable reset; opening the created Session never clears the journal. Closing a form only releases its subscriptions and does not cancel or repeat the Host operation. Reopening and cold restart display the controller's retained outcome.
+
+Qualify actual browser and Electron creation gestures, profile and target forwarding, catalog failure/retry, duplicate input, interrupted accepted replies, cold recovery and zero redispatch. Inspect the real durable Host headers and Workspace membership. Include removed-choice and storage-state form regressions, narrow/wide layouts and normal client teardown. Keep Workspace registration and all other Phase 4 gates separate; this component does not authorize phase publication.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
@@ -67,6 +75,8 @@ Qualify write-before-send, storage failures before and after dispatch, two compe
 - [Native transcript presentation](spec:src:packages/app/src/dsh/ui/conversation.tsx)
 - [Shared workspace receipt presentation](spec:src:packages/app/src/dsh/ui/workspace-outcome.tsx)
 - [Native creation and catalog ownership](spec:src:packages/app/src/dsh/creation.ts)
+- [Native creation draft](spec:src:packages/app/src/dsh/creation-form.ts)
+- [Native creation controls](spec:src:packages/app/src/dsh/ui/creation-sheet.tsx)
 - [Durable creation ownership](spec:src:packages/app/src/dsh/creation-journal.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
@@ -103,7 +113,7 @@ An isolated built Host accepted three native creation requests and retained exac
 
 All eleven core/history/creation endpoint descriptors match the exact TestFlight 7003007 archive, installed Client and built Host metadata. This does not remove the older clients' required-workspace-event incompatibility. Web and iOS exports and the desktop main build pass. No new Electron creation UI or physical iPhone execution is claimed. Evidence is `.dev/daedal-dsh-plan-audit/native-creation-20260921/verification.json`.
 
-Creation controls stay unavailable pending native UI qualification; durable recovery is qualified below. Workspace registration and remaining Phase 4 requirements remain open. This local component is not a phase release, source publication, deployment or new TestFlight delivery.
+Durable recovery and visible creation controls are qualified below. Workspace registration and remaining Phase 4 requirements remain open. This local component is not a phase release, source publication, deployment or new TestFlight delivery.
 
 ## Durable creation recovery qualification
 
@@ -113,7 +123,17 @@ An isolated built `f9b05abb` Host accepted three requests and retained exactly t
 
 Web, Electron and iOS exports and desktop main build pass. Native SQLite orchestration is exercised through Node's real SQLite driver; the Expo adapter is typechecked and exported, not executed on a physical iPhone. Carlo's provisional physical acceptance for the current delivered build remains separate. Evidence is `.dev/daedal-dsh-plan-audit/creation-recovery-20260921/verification.json`.
 
-The durable recovery prerequisite is locally complete. Visible creation/profile/target controls, Workspace registration and the remaining Phase 4 gates stay open. No source publication, deployment, installed-app replacement or TestFlight delivery occurred.
+The durable recovery prerequisite is locally complete. Visible controls are qualified below; Workspace registration and the remaining Phase 4 gates stay open. No source publication, deployment, installed-app replacement or TestFlight delivery occurred.
+
+## Native creation presentation qualification
+
+The opt-in native directory exposes a draft-owned creation sheet with explicit healthy profile selection, advertised default labels, existing Workspace selection or a Host directory. Catalog failures retry explicitly; removed choices retain their labels and block submission. Retained outcomes distinguish rejection, uncertainty, publication with incomplete attachment and confirmed creation. Checking status never resends; starting another Session requires the journal's explicit durable reset. Closing a form releases its readers while the Host-owned attempt remains available.
+
+Thirty focused creation cases pass, including five form regressions for stale selections, failure/reconnect input retention, duplicate gestures, closing during creation, storage refusal and retained unknown outcomes. Full workspace types, final app types, lint, direct spec lint, Web/Electron/iOS exports and desktop main build pass. Real UI inspection found a compact footer overflow; its corrected layout keeps every footer button within the viewport. No generated RPC, portable artifact or backend source changed.
+
+Actual production browser exports at 390px and 1280px and development Electron created seven durable Sessions through visible controls. The isolated built Host retained the exact selected minimal/standard profile headers and requested Workspace membership. Duplicate taps produced one creation request. The browser deliberately lost an accepted reply, retained an unknown request through reload and reconciled its original identity after reconnect without redispatch or automatic catalog reads. Electron independently enrolled through protected device access, used real native IPC for creation and restored its confirmed result after a cold restart. Browser and Electron JavaScript error lists were empty; normal client disposal left the external Host alive. These records were created by the application UI, not seeded into its journal.
+
+Evidence is `.dev/daedal-dsh-plan-audit/creation-ui-20260921/verification.json`. The iOS export is not physical execution; Carlo's provisional acceptance remains attached to the current delivered build. Electron qualification used the development application, not a new packaged release. Workspace registration, search, fork, queue, attachments, remaining tools/subagents/interactions and Phase 4 release gates remain open. No source publication, deployment, installed-app replacement or TestFlight upload occurred.
 
 ## Acceptance
 

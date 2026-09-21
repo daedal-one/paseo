@@ -184,7 +184,7 @@ The opt-in native runtime admits creation and profile reads independently from i
 
 One Host-qualified request is committed before dispatch to a dedicated transaction-backed journal: SQLite on native devices and IndexedDB in browser/Electron. Concurrent owners compete for the same outstanding slot; only its first claimant sends. Unfinished attempts restore as unknown and reconcile only through the exact Session identity and requested Workspace membership. Confirmed outcomes require an explicit durable reset. Storage errors disable new attempts until explicit recovery succeeds. Forgetting pairing retains the non-credential attempt record so re-pairing cannot silently lose an uncertain mutation. Clearing application data also removes these records and must not be used to retry an uncertain request.
 
-Creation controls remain hidden pending visible profile, target and outcome UI qualification. Durable recovery does not establish Workspace registration, full interaction parity or Phase 4 completion.
+Use **New session** in the native Host directory to choose a healthy profile and an existing Workspace or explicit Host directory. Opening the form reads profiles once; **Refresh profiles** retries or refreshes the roster. A removed selection stays visible and blocks submission until you choose again. Closing the form keeps a dispatched attempt available under **Review session creation**. Uncertain or partially attached Sessions offer **Check creation status**, which reads state without resending. Confirmed outcomes offer an explicit **Start another session** reset. Opening a Session retains its creation record. Workspace registration, full interaction parity and Phase 4 acceptance remain separate work.
 
 ### Native interaction requests
 
