@@ -89,6 +89,7 @@ export async function openSavedDshHost(options: OpenDshHostOptions): Promise<Dsh
   try {
     runtime = await createDshHostRuntime({
       creationStorage: createDshCreationStorage(),
+      registrationStorage: createDshCreationStorage("daedal-dsh-registration.db"),
       ...options,
       baseUrl: record.origin,
       isLocal,

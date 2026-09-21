@@ -42,6 +42,7 @@ export async function openDesktopDshHost(options: {
   try {
     runtime = await createDshHostRuntime({
       creationStorage: createDshCreationStorage(),
+      registrationStorage: createDshCreationStorage("daedal-dsh-registration"),
       hostId: options.hostId,
       selection: options.selection,
       baseUrl: transport.origin,

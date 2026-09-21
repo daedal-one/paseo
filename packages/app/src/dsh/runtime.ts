@@ -6,6 +6,8 @@ import { DshAccessError } from "./access-error";
 import { DshPrompt } from "./prompt";
 import { DshCreationJournal, type DshCreationStorage } from "./creation-journal";
 import { DshCreation } from "./creation";
+import { DshRegistration } from "./registration";
+import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
 import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
@@ -22,6 +24,8 @@ export interface DshHostRuntimeOptions {
   network?: dsh.ConnectionNetworkSource;
   /** Durable Host-qualified mutation recovery; omission disables creation. */
   creationStorage?: DshCreationStorage;
+  /** Dedicated Workspace registration database; omission disables registration. */
+  registrationStorage?: DshCreationStorage;
 }
 
 export interface DshConversation {
@@ -39,6 +43,7 @@ export interface DshHostRuntime {
   readonly sessions: dsh.ISessions;
   readonly workspaces: dsh.IWorkspaces;
   readonly creation: DshCreation;
+  readonly registration: DshRegistration;
   readonly pending: dsh.PendingInteractions["source"];
   openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
   closeConversation(): void;
@@ -66,6 +71,7 @@ export async function createDshHostRuntime(
     }),
   });
   let creation: DshCreation | undefined;
+  let registration: DshRegistration | undefined;
   try {
     context.provide("connection", connection);
     await context.plugin({ apply: dsh.applyRegistry, inject: dsh.registryInject });
@@ -106,6 +112,17 @@ export async function createDshHostRuntime(
     );
     await creation.restore();
     const ownedCreation = creation;
+    registration = new DshRegistration(
+      context.workspaces,
+      connection,
+      () => context.remote.$host.capabilities,
+      () => brandString<RegistrationAttemptId>(options.randomId()),
+      options.registrationStorage === undefined
+        ? undefined
+        : new DshRegistrationJournal(options.hostId, options.registrationStorage),
+    );
+    await registration.restore();
+    const ownedRegistration = registration;
     const pending = new dsh.PendingInteractions();
     await context.plugin({
       inject: ["remote", "sessions"],
@@ -148,6 +165,7 @@ export async function createDshHostRuntime(
       workspaces: context.workspaces,
       pending: pending.source,
       creation: ownedCreation,
+      registration: ownedRegistration,
       openConversation(id, scheduler) {
         if (closed) throw new DshAccessError("transport-disposed");
         const source = context.sessions.binding(id);
@@ -184,11 +202,16 @@ export async function createDshHostRuntime(
       async dispose() {
         closed = true;
         releaseConversation();
-        await Promise.all([ownedCreation.dispose(), context.fiber.dispose(), ...retiringHistory]);
+        await Promise.all([
+          ownedRegistration.dispose(),
+          ownedCreation.dispose(),
+          context.fiber.dispose(),
+          ...retiringHistory,
+        ]);
       },
     };
   } catch (error) {
-    await Promise.all([creation?.dispose(), context.fiber.dispose()]);
+    await Promise.all([registration?.dispose(), creation?.dispose(), context.fiber.dispose()]);
     throw error;
   }
 }

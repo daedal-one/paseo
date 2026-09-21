@@ -182,5 +182,8 @@ export const dshSessionEndpoints = [
 /** Optional native history reads; absent operations do not reject basic Session admission. */
 export const dshHistoryEndpoints = ["session/page", "session/historyDetail"] as const;
 
+/** Optional native Workspace registration and explicit current-state lookup. */
+export const dshRegistrationEndpoints = ["workspace/create", "workspace/resolveByPath"] as const;
+
 /** Optional native Session creation and Host profile catalog. */
 export const dshCreationEndpoints = ["session/create", "agentPresets/list"] as const;

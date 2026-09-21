@@ -68,6 +68,18 @@ Present sending, accepted, rejected, unknown publication, partial Workspace atta
 
 Qualify actual browser and Electron creation gestures, profile and target forwarding, catalog failure/retry, duplicate input, interrupted accepted replies, cold recovery and zero redispatch. Inspect the real durable Host headers and Workspace membership. Include removed-choice and storage-state form regressions, narrow/wide layouts and normal client teardown. Keep Workspace registration and all other Phase 4 gates separate; this component does not authorize phase publication.
 
+## Durable native Workspace registration increment
+
+Pin the qualified shared Client from DSH `7f6b311e46debdd3fa93a32ab28c9c3190e39571`. Admit generated `workspace/create` and `workspace/resolveByPath` independently from basic Session admission, with exact desktop paths. Keep registration controls hidden until the separate visible workflow has real browser/Electron qualification.
+
+One Host-qualified durable registration attempt records its exact requested Host path and a local ownership identity before dispatch. The local identity is not a Host request receipt. Claim atomically across application owners in a separate transactional database from Session creation. Only the claimant sends once; duplicate gestures, another owner, reconnect, cold restart and restoration never resend. Corrupt, unsupported, unavailable or unwritable storage fails closed and preserves the retained record. Forgetting pairing does not clear non-credential operation records.
+
+A successful shared create reply confirms registration. All create failures after dispatch remain unknown, including `workspace/invalid-path`, whose existing Host implementation also covers storage failures. Cancellation before dispatch can record a local not-dispatched result. An explicit lookup observes the current canonical registration, absence or failure without changing the mutation outcome or shared followed list. Generation change clears this observation and aborts the read; reconnect starts no lookup. Absence and matching list paths do not prove rejection or acceptance.
+
+A user may explicitly adopt a positively observed current registration to finish an unknown attempt, retaining a distinct adopted outcome rather than claiming the original request succeeded. This is a local acknowledgement with the observed Workspace identity and canonical path, not a Host mutation. Confirmed, adopted or not-dispatched outcomes permit an explicit identity-checked durable reset. Late owners cannot downgrade an outcome, clear a replacement or publish stale lookup results. Lookup results are observations, not durable authority for current existence; visible selection must still use the shared Workspace list.
+
+Qualify atomic claim and reset, Host/database isolation, corruption, storage errors, broad Host errors, generation changes, held reads, joined disposal and cold recovery with real SQLite and browser IndexedDB. Exercise the actual installed runtime against an isolated built Host with accepted-but-lost registration, retained unknown status across restart, explicit current lookup/adoption, canonical alias changes and zero mutation replay. Existing Session creation/history and device transports remain regression owners. Native UI, physical iPhone execution, packaged release acceptance and Phase 4 publication remain separate gates.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
@@ -78,12 +90,14 @@ Qualify actual browser and Electron creation gestures, profile and target forwar
 - [Native creation draft](spec:src:packages/app/src/dsh/creation-form.ts)
 - [Native creation controls](spec:src:packages/app/src/dsh/ui/creation-sheet.tsx)
 - [Durable creation ownership](spec:src:packages/app/src/dsh/creation-journal.ts)
+- [Native Workspace registration ownership](spec:src:packages/app/src/dsh/registration.ts)
+- [Durable registration journal](spec:src:packages/app/src/dsh/registration-journal.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
 
 ## Shared history Client prerequisites
 
-The application distribution is pinned to DSH `f9b05abb2b23f5b62cd009939f2566410109ef1a`, containing renderer-independent workspace receipts, explicit creation profile forwarding, explicit older-page failures and retry, joined deferred-detail cancellation and an optional Host-wide retained-detail allowance. The native composition enables that allowance and view-owned cancellation. Shared-owner and package checks do not establish native scrolling, capability admission or complete Phase 4 acceptance.
+The application distribution is pinned to DSH `7f6b311e46debdd3fa93a32ab28c9c3190e39571`, containing read-only canonical Workspace lookup, renderer-independent workspace receipts, explicit creation profile forwarding, explicit older-page failures and retry, joined deferred-detail cancellation and an optional Host-wide retained-detail allowance. The native composition enables that allowance and view-owned cancellation. Shared-owner and package checks do not establish native scrolling, capability admission or complete Phase 4 acceptance.
 
 The `a6bef716` native read composition passed 172 focused app/desktop cases, full workspace types/lint, two failing negative controls and the iOS export. The actual app runtime with Node carriers reads a 10,000-event fixture plus four authoritative activation events from an isolated built Host: 41 page responses including a held canceled response, maximum 49,806 response bytes, retained history after injected failure, explicit retry and coalesced reads. Fresh views complete page and detail reads before old canceled responses settle; late replies leave accepted history unchanged. Across 128 explicit 65,536-character detail reads, the native allowance evicts the oldest hydration back to its exact compact record; explicit reload restores the exact content and all 10,004 records remain. Disposal sends no Session cancellation and leaves the external Host running.
 
@@ -134,6 +148,16 @@ Thirty focused creation cases pass, including five form regressions for stale se
 Actual production browser exports at 390px and 1280px and development Electron created seven durable Sessions through visible controls. The isolated built Host retained the exact selected minimal/standard profile headers and requested Workspace membership. Duplicate taps produced one creation request. The browser deliberately lost an accepted reply, retained an unknown request through reload and reconciled its original identity after reconnect without redispatch or automatic catalog reads. Electron independently enrolled through protected device access, used real native IPC for creation and restored its confirmed result after a cold restart. Browser and Electron JavaScript error lists were empty; normal client disposal left the external Host alive. These records were created by the application UI, not seeded into its journal.
 
 Evidence is `.dev/daedal-dsh-plan-audit/creation-ui-20260921/verification.json`. The iOS export is not physical execution; Carlo's provisional acceptance remains attached to the current delivered build. Electron qualification used the development application, not a new packaged release. Workspace registration, search, fork, queue, attachments, remaining tools/subagents/interactions and Phase 4 release gates remain open. No source publication, deployment, installed-app replacement or TestFlight upload occurred.
+
+## Native Workspace registration ownership qualification
+
+The installed Client is the exact prepared `7f6b311e` distribution. The native runtime admits Workspace creation and canonical lookup independently and retains one local attempt in a dedicated transactional journal. A dispatched failure remains unknown. Explicit current lookup and adoption retain their separate meanings; neither reconnect nor restoration repeats a mutation or lookup. Registration controls remain hidden pending visible workflow qualification.
+
+The selected app owners pass 127 cases, including 14 registration cases and real SQLite persistence, with 13 desktop cases and two actual Chromium IndexedDB cases. Two deliberate negative controls fail when atomic claiming or terminal-outcome preservation is disabled. Full workspace types, final app types, lint, direct 26-spec lint, formatting, Web/Electron/iOS exports and desktop main build pass. Initial typed fixture, expected transport count and lint failures were repaired; failed and successful action receipts remain in the evidence.
+
+An actual installed native runtime against an isolated built Host deliberately lost one accepted registration reply. Its unknown request survived offline runtime replacement and Host restart in real SQLite. Explicit lookup returned the same durable Workspace identity without confirming the earlier mutation or resending it. Retargeting the requested symlink produced absence and blocked adoption/reset; restoring the target allowed explicit adoption. Only a subsequent explicit reset and new request produced the second registration. The Host retained exactly two Workspaces and no Sessions. Client disposal left the external Host alive; owned Hosts were joined and private state removed.
+
+Evidence is `.dev/daedal-dsh-plan-audit/native-registration-20260921/verification.json`. SQLite orchestration uses the Node driver; the Expo adapter is typechecked and exported, not physically executed. No new registration UI or packaged Electron acceptance is claimed. Physical iPhone acceptance remains provisional for the current delivered build. Phase 4 stays in progress with registration presentation and remaining features/release gates open; no source publication, deployment, installed-app replacement or TestFlight upload occurred.
 
 ## Acceptance
 

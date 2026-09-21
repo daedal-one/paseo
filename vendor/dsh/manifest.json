@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "f9b05abb2b23f5b62cd009939f2566410109ef1a",
+  "sourceCommit": "7f6b311e46debdd3fa93a32ab28c9c3190e39571",
   "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
@@ -37,7 +37,7 @@
       "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
-      "sha256": "533a9ff2a4ee28b76ef9e03791a456cd9003b517957009eda300ed02afc12f0c"
+      "sha256": "de3fc9bd2ab1b677d5f94419cd9d3ffd002112d6f1c271a493c5b772d7e52988"
     }
   ]
 }

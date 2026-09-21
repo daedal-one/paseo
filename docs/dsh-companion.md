@@ -178,6 +178,12 @@ Each native conversation owns cancellation and transient detail-read status. Vie
 
 The transcript mounts a virtualized window of shared Chat rows. Navigation and the composer stay outside its scroller. Prepending history preserves the visible keyed row, and **Latest messages** returns to end following. Output follows while you remain at the end. Browser and Electron measure row positions independently of React Native’s native visible-content preservation.
 
+### Native Workspace registration ownership
+
+The native runtime has a separate durable registration owner; visible registration controls remain unavailable until their UI qualification. It admits the generated Workspace create and canonical lookup operations independently. The Host resolves paths. An atomic journal in a dedicated SQLite or IndexedDB database retains the exact requested path and local ownership identity before one dispatch, surviving Host replacement and cold restart. The local identity is not a Host request receipt. Storage errors fail closed; forgetting pairing retains these non-credential records.
+
+A create reply confirms registration. A dispatched error remains unknown because the Host's invalid-path response can also cover storage failures. An explicit lookup reports current registration, absence or failure without changing the earlier mutation outcome. A positive observation can be explicitly adopted, recorded separately from confirmed creation. Generation change clears observations; reconnect performs no lookup or mutation. Only a confirmed, explicitly adopted or locally not-dispatched attempt permits a durable reset. The current shared Workspace list remains the authority for selection, including deletion or re-registration after an observation.
+
 ### Native creation ownership
 
 The opt-in native runtime admits creation and profile reads independently from its required Session operations. It forwards an existing Workspace identity or Host directory and selected healthy profile through shared DSH services. Missing choices fail explicitly. Catalog reads and retries are explicit; reconnect never repeats a creation request.

@@ -32,6 +32,7 @@ export async function openBrowserDshHost(options: {
     if (options.signal.aborted) throw new DshAccessError("request-cancelled");
     runtime = await createDshHostRuntime({
       creationStorage: createDshCreationStorage(),
+      registrationStorage: createDshCreationStorage("daedal-dsh-registration"),
       hostId: identity.value.hostId,
       baseUrl: transport.origin,
       isLocal: ["localhost", "127.0.0.1", "[::1]"].includes(new URL(transport.origin).hostname),

@@ -1,3 +1,5 @@
+import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
+import type { WorkspaceId } from "@deepseek-ai/dsh-client";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -80,4 +82,94 @@ describe("durable SQLite creation records", () => {
       await rm(home, { recursive: true, force: true });
     }
   });
+});
+
+it("keeps Workspace registration separate and protects durable identity through fresh SQLite connections", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dsh-registration-"));
+  function storage(name: string) {
+    return createSqliteCreationStorage(async () => {
+      const db = new DatabaseSync(join(home, name));
+      return {
+        async exec(sql) {
+          db.exec(sql);
+        },
+        async run(sql, params) {
+          db.prepare(sql).run(...params);
+        },
+        async get(sql, params) {
+          return (db.prepare(sql).get(...params) as { payload: string } | undefined) ?? null;
+        },
+        async close() {
+          db.close();
+        },
+      };
+    });
+  }
+  const registrationRequest = {
+    attemptId: brandString<RegistrationAttemptId>("one"),
+    path: "/host/alias",
+  };
+  const workspace = {
+    workspaceId: brandString<WorkspaceId>("workspace"),
+    path: "/host/project",
+    title: "Project",
+  };
+  try {
+    const session = new DshCreationJournal(host, storage("session.db"));
+    await session.claim({ sessionId: brandString<SessionId>("session") });
+    const one = new DshRegistrationJournal(host, storage("registration.db"));
+    expect((await one.claim(registrationRequest)).claimed).toBe(true);
+    const cold = new DshRegistrationJournal(host, storage("registration.db"));
+    expect(await cold.read()).toEqual({ kind: "unknown", request: registrationRequest });
+    expect(
+      (
+        await cold.claim({
+          ...registrationRequest,
+          attemptId: brandString<RegistrationAttemptId>("two"),
+        })
+      ).claimed,
+    ).toBe(false);
+    expect((await cold.clear(registrationRequest.attemptId))?.kind).toBe("unknown");
+    await cold.settle({ kind: "adopted", request: registrationRequest, workspace });
+    await one.settle({ kind: "unknown", request: registrationRequest });
+    expect((await cold.read())?.kind).toBe("adopted");
+    await cold.clear(registrationRequest.attemptId);
+    const next = { ...registrationRequest, attemptId: brandString<RegistrationAttemptId>("next") };
+    await cold.claim(next);
+    await one.clear(registrationRequest.attemptId);
+    await one.settle({ kind: "confirmed", request: registrationRequest, workspace });
+    expect((await cold.read())?.request).toEqual(next);
+    expect((await session.read())?.request.sessionId).toBe("session");
+    expect(
+      await new DshRegistrationJournal(
+        brandString<ConnectionHostId>("host-b"),
+        storage("registration.db"),
+      ).read(),
+    ).toBeNull();
+    const store = storage("registration.db");
+    for (const corrupt of [
+      "{",
+      JSON.stringify({ version: 2 }),
+      JSON.stringify({
+        version: 1,
+        hostId: "wrong",
+        outcome: { kind: "unknown", request: registrationRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { kind: "confirmed", request: registrationRequest },
+      }),
+    ]) {
+      await store.transact(host, () => corrupt);
+      await expect(cold.read()).rejects.toThrow();
+      await expect(cold.claim(registrationRequest)).rejects.toThrow();
+      await expect(
+        cold.settle({ kind: "confirmed", request: registrationRequest, workspace }),
+      ).rejects.toThrow();
+      expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
