@@ -77,3 +77,38 @@ it("atomically claims registration across browser connections without consuming 
       });
   }
 });
+
+it("restores rejection across browser connections while preserving earlier records and late-owner guards", async () => {
+  const name = `dsh-registration-rejection-${crypto.randomUUID()}`;
+  const host = brandString<ConnectionHostId>("host");
+  const storage = createDshCreationStorage(name);
+  const request = { attemptId: brandString<RegistrationAttemptId>("old"), path: "/missing" };
+  const legacy = JSON.stringify({
+    version: 1,
+    hostId: host,
+    outcome: { kind: "unknown", request },
+  });
+  try {
+    await storage.transact(host, () => legacy);
+    const one = new DshRegistrationJournal(host, storage);
+    const cold = new DshRegistrationJournal(host, createDshCreationStorage(name));
+    expect(await cold.read()).toEqual({ kind: "unknown", request });
+    expect((await storage.transact(host, (text) => text)).after).toBe(legacy);
+    const rejected = { kind: "rejected" as const, request, message: "Directory does not exist" };
+    await one.settle(rejected);
+    await one.settle({ kind: "unknown", request });
+    expect(await cold.read()).toEqual(rejected);
+    await cold.clear(request.attemptId);
+    const next = { ...request, attemptId: brandString<RegistrationAttemptId>("next") };
+    await cold.claim(next);
+    await one.settle(rejected);
+    await one.clear(request.attemptId);
+    expect((await cold.read())?.request).toEqual(next);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase(name);
+      deletion.addEventListener("success", () => resolve());
+      deletion.addEventListener("error", () => reject(deletion.error));
+    });
+  }
+});

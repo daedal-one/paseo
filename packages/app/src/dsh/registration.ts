@@ -1,5 +1,6 @@
 import {
   selectRemoteCapabilities,
+  WorkspaceCreateError,
   type ConnectionHandle,
   type HostCapabilities,
   type IWorkspaces,
@@ -112,7 +113,7 @@ export class DshRegistration {
       lookup: { kind: "idle" },
     });
   };
-  /** Commit local ownership before the only dispatch. Carrier and Host failures remain unknown. */
+  /** Commit ownership before dispatch; only a qualified pre-write rejection permits correction. */
   register = (path: string): Promise<void> => {
     if (this.mutation !== null) return this.mutation;
     if (
@@ -147,9 +148,14 @@ export class DshRegistration {
         let workspace;
         try {
           workspace = await this.workspaces.create({ path });
-        } catch {
-          // workspace/invalid-path also covers storage failures; no dispatched error proves non-publication.
-          await this.save({ kind: "unknown", request });
+        } catch (error) {
+          // Broad Host and carrier errors cannot establish whether registration was written.
+          await this.save(
+            error instanceof WorkspaceCreateError &&
+              error.rpcError.code === "workspace/create-rejected"
+              ? { kind: "rejected", request, message: error.rpcError.message }
+              : { kind: "unknown", request },
+          );
           return;
         }
         await this.save({ kind: "confirmed", request, workspace: reference(workspace) });

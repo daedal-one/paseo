@@ -180,6 +180,106 @@ describe("native Workspace registration ownership", () => {
     expect(f.registration.getSnapshot().outcome.kind).toBe("unknown");
     expect(f.workspaces.create).toHaveBeenCalledTimes(1);
   });
+  it("persists qualified rejection through cold owners and requires reset before a corrected request", async () => {
+    const shared = store();
+    const one = await fixture(shared.storage);
+    one.workspaces.create.mockRejectedValueOnce(
+      new WorkspaceCreateError(
+        new RemoteError("workspace/create-rejected", "Directory does not exist", {
+          path: "/missing",
+        }),
+      ),
+    );
+    await one.registration.register("/missing");
+    expect(await one.journal.read()).toMatchObject({
+      kind: "rejected",
+      request: { path: "/missing" },
+      message: "Directory does not exist",
+    });
+    await one.registration.dispose();
+    const cold = await fixture(shared.storage);
+    cold.generation.set(undefined);
+    expect(cold.registration.getSnapshot().outcome.kind).toBe("rejected");
+    cold.change((value) => value);
+    await cold.registration.checkCurrent();
+    await cold.registration.register("/corrected");
+    expect(cold.workspaces.resolveByPath).not.toHaveBeenCalled();
+    expect(cold.workspaces.create).not.toHaveBeenCalled();
+    await cold.registration.reset();
+    await cold.registration.register("/corrected");
+    expect(cold.workspaces.create).toHaveBeenCalledExactlyOnceWith({ path: "/corrected" });
+    expect(cold.registration.getSnapshot().outcome.kind).toBe("confirmed");
+  });
+  it("does not treat a matching error code outside the shared create error as rejection", async () => {
+    const f = await fixture();
+    f.workspaces.create.mockRejectedValueOnce(
+      new RemoteError("workspace/create-rejected", "unqualified", { path: "/project" }),
+    );
+    await f.registration.register("/project");
+    expect(f.registration.getSnapshot().outcome.kind).toBe("unknown");
+    await f.registration.reset();
+    expect(f.registration.getSnapshot().outcome.kind).toBe("unknown");
+  });
+  it.each([false, true])(
+    "blocks reset after a rejected outcome write loses acknowledgement (committed: %s)",
+    async (committed) => {
+      const shared = store();
+      let fail = false;
+      const f = await fixture({
+        async transact(host, update) {
+          if (fail && !committed) throw new Error("write failed");
+          const value = await shared.storage.transact(host, update);
+          if (fail) throw new Error("write ack lost");
+          return value;
+        },
+      });
+      f.workspaces.create.mockImplementationOnce(async () => {
+        fail = true;
+        throw new WorkspaceCreateError(
+          new RemoteError("workspace/create-rejected", "Not a directory", { path: "/file" }),
+        );
+      });
+      await f.registration.register("/file");
+      expect(f.registration.getSnapshot()).toMatchObject({
+        storage: "failed",
+        outcome: { kind: "rejected" },
+      });
+      await f.registration.reset();
+      await f.registration.register("/corrected");
+      expect(f.workspaces.create).toHaveBeenCalledTimes(1);
+      fail = false;
+      await f.registration.restore();
+      expect(f.registration.getSnapshot().outcome.kind).toBe(committed ? "rejected" : "unknown");
+      if (committed) {
+        fail = true;
+        await f.registration.reset();
+        expect(f.registration.getSnapshot().storage).toBe("failed");
+        await f.registration.register("/corrected");
+        expect(f.workspaces.create).toHaveBeenCalledTimes(1);
+        fail = false;
+        await f.registration.restore();
+        expect(f.registration.getSnapshot().outcome.kind).toBe("idle");
+      }
+    },
+  );
+  it("refuses revision-one creation without consuming a journal or disabling lookup", async () => {
+    const f = await fixture();
+    f.change((value) => {
+      const capabilities = [];
+      for (const item of value.capabilities)
+        capabilities.push(
+          item.endpoint === "workspace/create" ? { ...item, semanticRevision: 1 } : item,
+        );
+      return { ...value, capabilities };
+    });
+    expect(f.registration.getSnapshot()).toMatchObject({
+      availability: "unavailable",
+      lookupAvailability: "available",
+    });
+    await f.registration.register("/project");
+    expect(f.workspaces.create).not.toHaveBeenCalled();
+    expect(await f.journal.read()).toBeNull();
+  });
   it("keeps a positive lookup separate from acceptance until explicit adoption", async () => {
     const f = await fixture();
     await uncertain(f);

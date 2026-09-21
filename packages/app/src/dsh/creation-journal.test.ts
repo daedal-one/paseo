@@ -147,9 +147,45 @@ it("keeps Workspace registration separate and protects durable identity through 
       ).read(),
     ).toBeNull();
     const store = storage("registration.db");
+    const rejected = {
+      kind: "rejected" as const,
+      request: next,
+      message: "Directory does not exist",
+    };
+    await cold.settle(rejected);
+    const restored = new DshRegistrationJournal(host, storage("registration.db"));
+    expect(await restored.read()).toEqual(rejected);
+    await cold.settle({ kind: "unknown", request: next });
+    await cold.settle({ kind: "confirmed", request: next, workspace });
+    expect(await restored.read()).toEqual(rejected);
+    expect(JSON.parse((await store.transact(host, (text) => text)).after!).version).toBe(2);
+    await restored.clear(next.attemptId);
+    await restored.claim(registrationRequest);
+    await cold.settle(rejected);
+    await cold.clear(next.attemptId);
+    expect((await restored.read())?.request).toEqual(registrationRequest);
+    for (const outcome of [
+      { kind: "unknown", request: registrationRequest },
+      { kind: "not-dispatched", request: registrationRequest },
+      { kind: "confirmed", request: registrationRequest, workspace },
+      { kind: "adopted", request: registrationRequest, workspace },
+    ]) {
+      const legacy = JSON.stringify({ version: 1, hostId: host, outcome });
+      await store.transact(host, () => legacy);
+      expect(await restored.read()).toEqual(outcome);
+      expect((await store.transact(host, (text) => text)).after).toBe(legacy);
+      if (outcome.kind !== "unknown") {
+        await restored.settle({ kind: "rejected", request: registrationRequest, message: "late" });
+        expect(await restored.read()).toEqual(outcome);
+      }
+    }
+
     for (const corrupt of [
       "{",
       JSON.stringify({ version: 2 }),
+      JSON.stringify({ version: 3, hostId: host, outcome: rejected }),
+      JSON.stringify({ version: 1, hostId: host, outcome: rejected }),
+      JSON.stringify({ version: 2, hostId: host, outcome: { ...rejected, message: undefined } }),
       JSON.stringify({
         version: 1,
         hostId: "wrong",

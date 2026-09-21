@@ -11,6 +11,7 @@ export interface RegistrationRequest {
 export type RegistrationWorkspace = Pick<WorkspaceView, "workspaceId" | "path" | "title">;
 export type StoredRegistrationOutcome =
   | { readonly kind: "unknown" | "not-dispatched"; readonly request: RegistrationRequest }
+  | { readonly kind: "rejected"; readonly request: RegistrationRequest; readonly message: string }
   | {
       readonly kind: "confirmed" | "adopted";
       readonly request: RegistrationRequest;
@@ -20,26 +21,37 @@ const requestSchema = z.object({ attemptId: z.string().min(1), path: z.string().
 const workspaceSchema = z
   .object({ workspaceId: z.string().min(1), path: z.string().min(1), title: z.string() })
   .strict();
-const recordSchema = z
-  .object({
-    version: z.literal(1),
-    hostId: z.string().min(1),
-    outcome: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("unknown"), request: requestSchema }).strict(),
-      z.object({ kind: z.literal("not-dispatched"), request: requestSchema }).strict(),
-      z
-        .object({
-          kind: z.literal("confirmed"),
-          request: requestSchema,
-          workspace: workspaceSchema,
-        })
-        .strict(),
-      z
-        .object({ kind: z.literal("adopted"), request: requestSchema, workspace: workspaceSchema })
-        .strict(),
-    ]),
-  })
-  .strict();
+const legacyOutcomes = [
+  z.object({ kind: z.literal("unknown"), request: requestSchema }).strict(),
+  z.object({ kind: z.literal("not-dispatched"), request: requestSchema }).strict(),
+  z
+    .object({ kind: z.literal("confirmed"), request: requestSchema, workspace: workspaceSchema })
+    .strict(),
+  z
+    .object({ kind: z.literal("adopted"), request: requestSchema, workspace: workspaceSchema })
+    .strict(),
+] as const;
+const recordSchema = z.discriminatedUnion("version", [
+  z
+    .object({
+      version: z.literal(1),
+      hostId: z.string().min(1),
+      outcome: z.discriminatedUnion("kind", legacyOutcomes),
+    })
+    .strict(),
+  z
+    .object({
+      version: z.literal(2),
+      hostId: z.string().min(1),
+      outcome: z.discriminatedUnion("kind", [
+        ...legacyOutcomes,
+        z
+          .object({ kind: z.literal("rejected"), request: requestSchema, message: z.string() })
+          .strict(),
+      ]),
+    })
+    .strict(),
+]);
 
 /** Uses a dedicated registration database, never the Session creation database. */
 export class DshRegistrationJournal {
@@ -56,7 +68,7 @@ export class DshRegistrationJournal {
     return record.outcome as StoredRegistrationOutcome;
   }
   private encode(outcome: StoredRegistrationOutcome): string {
-    return JSON.stringify({ version: 1, hostId: this.hostId, outcome });
+    return JSON.stringify({ version: 2, hostId: this.hostId, outcome });
   }
   async read(): Promise<StoredRegistrationOutcome | null> {
     const { after } = await this.storage.transact(this.hostId, (text) => {
