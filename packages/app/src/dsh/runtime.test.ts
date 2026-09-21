@@ -421,6 +421,89 @@ function conversationHost() {
 }
 
 describe("native DSH Conversation ownership", () => {
+  it("keeps workspace receipts separate from the answer and replaces one shared outcome row", async () => {
+    const host = conversationHost();
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      const target = view.conversation.target("chat");
+      const unsubscribe = target.subscribe(() => {});
+      try {
+        await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+        host.push({
+          type: "event",
+          event: { type: "turn/start", seq: 1, time: 2, data: { turn: 1 } },
+        });
+        const receipt = {
+          workspaceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          turn: 1,
+          phase: "ready",
+          baseline: "b".repeat(40),
+          checkpoint: 1,
+          checkpointHash: "c".repeat(64),
+          branches: {},
+        };
+        host.push({
+          type: "event",
+          event: { type: "workspace/state", seq: 2, time: 3, data: receipt },
+        });
+        await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+        const outcomes = () =>
+          target
+            .getSnapshot()!
+            .nodes.values()
+            .filter((node) => node.kind === "workspace-state");
+        expect(outcomes()).toEqual([]);
+        const pending = {
+          ...receipt,
+          phase: "pending",
+          error: "Result branch changed outside this conversation.",
+        };
+        host.push({
+          type: "event",
+          event: { type: "workspace/state", seq: 3, time: 4, data: pending },
+        });
+        await vi.waitFor(() => expect(outcomes()).toHaveLength(1));
+        const first = outcomes()[0];
+        expect(first.data).toEqual(pending);
+        const source = target.getSnapshot()!.nodes.source(first.key);
+        const returned = {
+          ...receipt,
+          phase: "returned",
+          checkpoint: 2,
+          branches: { "refs/heads/dsh/example/main/turn-1": "d".repeat(40) },
+        };
+        host.push({
+          type: "event",
+          event: { type: "workspace/state", seq: 4, time: 5, data: returned },
+        });
+        await vi.waitFor(() => expect(outcomes()[0].data).toEqual(returned));
+        expect(outcomes()).toHaveLength(1);
+        expect(target.getSnapshot()!.nodes.source(first.key)).toBe(source);
+        expect(source.getSnapshot()?.data).toEqual(returned);
+        expect(
+          target
+            .getSnapshot()!
+            .nodes.values()
+            .filter((node) => node.kind === "assistant-step"),
+        ).toEqual([]);
+        expect(
+          target
+            .getSnapshot()!
+            .nodes.values()
+            .find((node) => node.kind === "user")?.data,
+        ).toMatchObject({ content: [{ type: "text", text: "Read this existing conversation" }] });
+        runtime.closeConversation();
+        expect(host.calls).not.toContain("session/cancel");
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("opens shared Session history once and closes its view without cancelling the Session", async () => {
     const host = conversationHost();
     const runtime = await createDshHostRuntime(host.options);

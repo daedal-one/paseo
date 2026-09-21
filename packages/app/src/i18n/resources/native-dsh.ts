@@ -111,6 +111,14 @@ export const nativeDsh = {
     empty: "No messages to display.",
     older: "Earlier history is available in the current DSH interface.",
   },
+  workspace: {
+    saving: "Saving workspace…",
+    returned: "Changes saved to host branches",
+    checkpointed: "Workspace saved for recovery",
+    pending: "Workspace save needs attention",
+    details: "Show save details",
+    hideDetails: "Hide save details",
+  },
   history: {
     loadOlder: "Load earlier messages",
     retryOlder: "Retry earlier messages",

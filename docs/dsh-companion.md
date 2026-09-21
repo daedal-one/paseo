@@ -164,6 +164,12 @@ Each candidate is an untrusted label, identity claim and probe-derived address. 
 
 Disconnecting, switching or forgetting the assisting host cancels its read and removes candidates. Reconnection starts a new read after DSH admits the generation; pairing and messages are never replayed. Native discovery lifecycle and installed protocol tests are separate from actual tailnet reachability and physical iPhone qualification.
 
+### Native workspace receipts
+
+The direct preview shows DSH workspace save progress separately from the agent's answer. **Changes saved to host branches** lists the returned Host branch names. **Workspace saved for recovery** and **Workspace save needs attention** retain their distinct meanings; neither claims that changes reached a Host branch. **Show save details** expands the exact recorded diagnostic in a selectable, bounded-height scroller. Workspace rows use the shared Chat Definition and update in place. Reading receipts does not enable automatic Git workspaces or retry a save.
+
+Clients predating workspace event support refuse Sessions containing those required events. Keep automatic Git workspaces opt-in until every intended reader has a compatible build; normal endpoint compatibility alone cannot establish event compatibility.
+
 ### Native history read ownership
 
 The direct DSH preview admits optional `session/page` and `session/historyDetail` operations independently using generated mode, schema fingerprint and semantic revision. Missing optional operations do not prevent basic Session access. The desktop carrier admits those exact paths; ordinary RPC access cannot obtain device grants.

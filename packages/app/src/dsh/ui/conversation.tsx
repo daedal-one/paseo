@@ -8,6 +8,7 @@ import type { DshConversation, DshHostRuntime } from "../runtime";
 import type { DshHistory } from "../history";
 import { HistoryList } from "./history-list";
 import { styles } from "./styles";
+import { WorkspaceOutcome } from "./workspace-outcome";
 
 // The installed Chat Definitions own the payload for each registered renderer kind.
 function nodeIs<K extends dsh.ChatNodeKind>(
@@ -157,6 +158,7 @@ function ChatContent({
         })}
       </Text>
     );
+  if (nodeIs(node, "workspace-state")) return <WorkspaceOutcome node={node} />;
   if (nodeIs(node, "turn-tail")) return null;
   if (nodeIs(node, "turn-error"))
     return (
