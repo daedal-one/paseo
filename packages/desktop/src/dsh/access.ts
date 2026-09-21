@@ -9,6 +9,7 @@ import {
   parseDshPairing,
   dshSessionEndpoints,
   dshHistoryEndpoints,
+  dshCreationEndpoints,
   type DesktopDshCommand,
   type DesktopDshSocketEvent,
   type DesktopDshHost,
@@ -20,9 +21,11 @@ import { createDesktopDshTransport, type DesktopDshTransport } from "./transport
 // Device enrollment has a separate main-process operation; its grant response cannot
 // be obtained through the renderer's ordinary generated-RPC carrier.
 const rpcPaths = new Set([
-  ...selectRemoteCapabilities([...dshSessionEndpoints, ...dshHistoryEndpoints]).map(
-    ({ endpoint }) => `/api/${endpoint}`,
-  ),
+  ...selectRemoteCapabilities([
+    ...dshSessionEndpoints,
+    ...dshHistoryEndpoints,
+    ...dshCreationEndpoints,
+  ]).map(({ endpoint }) => `/api/${endpoint}`),
   "/api/connection/identity",
   `/api/${HOST_DISCOVERY_ENDPOINT}`,
   "/api/$capabilities",

@@ -178,6 +178,10 @@ Each native conversation owns cancellation and transient detail-read status. Vie
 
 The transcript mounts a virtualized window of shared Chat rows. Navigation and the composer stay outside its scroller. Prepending history preserves the visible keyed row, and **Latest messages** returns to end following. Output follows while you remain at the end. Browser and Electron measure row positions independently of React Native’s native visible-content preservation.
 
+### Native creation ownership
+
+Native creation controls are not exposed yet. The Host runtime provides a creation controller using the shared Session and Workspace services, with optional generated admission for Session creation and profile reads. It retains one attempt identity through reconnect and distinguishes a published Session from confirmed Workspace attachment. Profile reads and uncertain-outcome reconciliation are explicit; reconnect never repeats creation. The controller has runtime lifetime only. Persisted uncertain-attempt recovery, creation/profile pickers and Workspace registration must be qualified before exposing this flow.
+
 ### Native interaction requests
 
 The native Host runtime uses DSH's shared pending registry and Remote approval/question consumers. Each Session row identifies waiting requests; the conversation composer displays the effective request. Tool approvals allow once or reject. Questions retain verbatim choices, free text, explicit skips and complete-batch submission; plan reviews show their full detail. A higher-priority request preserves the hidden form's draft. Leaving a conversation retains Host-owned work; leaving the directory releases its interaction consumers.

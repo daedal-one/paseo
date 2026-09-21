@@ -4,6 +4,7 @@ import { brandString } from "@deepseek-ai/dsh-brand";
 import * as dsh from "@deepseek-ai/dsh-client";
 import { DshAccessError } from "./access-error";
 import { DshPrompt } from "./prompt";
+import { DshCreation } from "./creation";
 import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
@@ -34,6 +35,7 @@ export interface DshHostRuntime {
   readonly remote: Context["remote"];
   readonly sessions: dsh.ISessions;
   readonly workspaces: dsh.IWorkspaces;
+  readonly creation: DshCreation;
   readonly pending: dsh.PendingInteractions["source"];
   openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
   closeConversation(): void;
@@ -60,6 +62,7 @@ export async function createDshHostRuntime(
       randomId: () => brandString<dsh.RpcId>(options.randomId()),
     }),
   });
+  let creation: DshCreation | undefined;
   try {
     context.provide("connection", connection);
     await context.plugin({ apply: dsh.applyRegistry, inject: dsh.registryInject });
@@ -87,6 +90,15 @@ export async function createDshHostRuntime(
       historyDetailRetention: { maxSerializedChars: 8 * 1024 * 1024 },
     };
     await context.plugin({ apply: dsh.applySessions, inject: dsh.sessionInject }, sessions);
+    creation = new DshCreation(
+      context.sessions,
+      context.workspaces,
+      connection,
+      () => context.remote.$host.capabilities,
+      () => context.remote.agentPresets.list(),
+      () => brandString<dsh.SessionId>(options.randomId()),
+    );
+    const ownedCreation = creation;
     const pending = new dsh.PendingInteractions();
     await context.plugin({
       inject: ["remote", "sessions"],
@@ -128,6 +140,7 @@ export async function createDshHostRuntime(
       sessions: context.sessions,
       workspaces: context.workspaces,
       pending: pending.source,
+      creation: ownedCreation,
       openConversation(id, scheduler) {
         if (closed) throw new DshAccessError("transport-disposed");
         const source = context.sessions.binding(id);
@@ -164,11 +177,11 @@ export async function createDshHostRuntime(
       async dispose() {
         closed = true;
         releaseConversation();
-        await Promise.all([context.fiber.dispose(), ...retiringHistory]);
+        await Promise.all([ownedCreation.dispose(), context.fiber.dispose(), ...retiringHistory]);
       },
     };
   } catch (error) {
-    await context.fiber.dispose();
+    await Promise.all([creation?.dispose(), context.fiber.dispose()]);
     throw error;
   }
 }

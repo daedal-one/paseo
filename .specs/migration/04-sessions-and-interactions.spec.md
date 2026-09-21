@@ -44,12 +44,21 @@ Pin the clean shared Client containing the renderer-independent workspace Chat D
 
 Qualify the installed artifact against an isolated built Host using the committed workspace-outcomes Session and actual browser/Electron rendering at narrow and wide sizes. Check pending-to-returned replacement through one shared node identity, selectable branch/error content, retained draft and unchanged external Host lifetime. Compare the recorded outcome with DSH Web. Include installed-runtime creation with the selected profile and existing history/error/interaction tests. This read-only presentation does not enable automatic Git workspaces, expose new mutation routes or establish native creation/catalog controls. Older installed clients remain unable to read Sessions containing the new required workspace events; retain that compatibility limit in Phase 4 release qualification.
 
+## Native creation composition increment
+
+Prepare a Host-owned native creation controller before exposing creation controls. Admit generated `session/create` and `agentPresets/list` independently from the seven required Session endpoints, retaining a narrow desktop allowlist. Read the selected Host's healthy profile roster with explicit failure/retry and generation-scoped publication. Creation selects an existing shared Workspace identity or an explicit Host directory, forwards the selected profile unchanged and uses one caller-preallocated Session identity. Missing or removed selections must not fall back. Omitted profile means the Host default.
+
+Coalesce duplicate creation gestures and refuse dispatch offline or without compatible optional capabilities. Distinguish success, definite rejection, uncertain publication and a published Session whose Workspace attachment is unconfirmed or failed. Reconcile an uncertain attempt only from its exact Session identity in shared Session state and, for a requested Workspace, authoritative membership in that Workspace. Do not infer admission from matching paths, titles or profiles, and do not resend on reconnect. Retain the original request and allow explicit read-only reconciliation. Join owned reads and creation calls on runtime disposal; late results must not publish into another Host runtime.
+
+Qualify held/lost replies, stream-before-reply, partial attachment, missing profile, offline taps, duplicate calls, stale catalog replies and disposal against typed ports and an isolated real built Host. Keep visible creation and registration controls unavailable until their persisted uncertain-attempt recovery, native UI and platform flows are separately qualified. Workspace registration, creation UI, catalog UI and remaining Phase 4 gates are not completed by this composition increment.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
 - [View-owned optional history reads](spec:src:packages/app/src/dsh/history.ts)
 - [Native transcript presentation](spec:src:packages/app/src/dsh/ui/conversation.tsx)
 - [Shared workspace receipt presentation](spec:src:packages/app/src/dsh/ui/workspace-outcome.tsx)
+- [Native creation and catalog ownership](spec:src:packages/app/src/dsh/creation.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
 
@@ -76,6 +85,16 @@ The exact `f9b05abb` application distribution renders recorded workspace outcome
 The installed Client also passes actual isolated-Host creation with explicit directory/workspace profiles, same-ID adoption and missing/conflicting-profile refusal without fallback. Refreshed 10,000-event history, read cancellation, explicit retry, coalescing, bounded details and unknown-required-event refusal pass. The nine core/history endpoint descriptors match TestFlight 7003007 and the built Host; older clients still refuse required workspace events. Full workspace types, 119 focused app/desktop cases, lint, spec lint and web/Electron/iOS exports passed. The iOS export is not physical execution, and development Electron is not packaged acceptance.
 
 Evidence is `.dev/daedal-dsh-plan-audit/native-workspace-reader-20260921/verification.json`. This local component is not published or deployed. Native creation/catalog controls and the remaining Phase 4 work stay in progress; automatic Git workspaces remain opt-in.
+
+## Native creation composition qualification
+
+The native controller uses the installed `f9b05abb` shared Client. Eighteen creation cases and the existing selected runtime, history, directory, interaction and desktop owners total 100 passing cases. Full workspace types and lint pass; final app types and lint also pass after a regression exposed and fixed reentrant roster coalescing. A loading subscriber now joins the already registered catalog read. No automatic catalog read or mutation is added on reconnect.
+
+An isolated built Host accepted three native creation requests and retained exactly three durable Sessions: a directory Session using `minimal`, a Workspace Session using `standard`, and a Workspace Session using `minimal` whose reply was deliberately lost after acceptance. Reconnect reconciled the original Session identity and authoritative Workspace membership without another creation request. Duplicate gestures coalesced, offline taps dispatched nothing, and explicit catalog retry recovered from an injected carrier failure. The real production browser opened the reconciled Session at 390px with no JavaScript errors. Typed port tests separately cover definite refusal, partial attachment, stale catalogs and joined disposal; partial attachment was not forced on the actual Host.
+
+All eleven core/history/creation endpoint descriptors match the exact TestFlight 7003007 archive, installed Client and built Host metadata. This does not remove the older clients' required-workspace-event incompatibility. Web and iOS exports and the desktop main build pass. No new Electron creation UI or physical iPhone execution is claimed. Evidence is `.dev/daedal-dsh-plan-audit/native-creation-20260921/verification.json`.
+
+Creation controls stay unavailable pending persisted uncertain-attempt recovery and native UI qualification. Workspace registration and remaining Phase 4 requirements remain open. This local component is not a phase release, source publication, deployment or new TestFlight delivery.
 
 ## Acceptance
 
