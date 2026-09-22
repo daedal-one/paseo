@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { BrowserContext } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 const repository = process.env.DSH_REPOSITORY ?? "/home/carlo/devel/deepseek-harness-daedal-dsh";
 const testFixture = "session/text-turn/session.v1.jsonl";
@@ -178,18 +178,44 @@ export async function launchMountedDshHost() {
   }
 }
 
-/*
- * Remaining work for the fork gesture. A Session must exist before the conversation header (and
- * its visible fork control) can render, and the replay fixture persists none. Create it through
- * the app's own creation form so the request carries the app's generated compatibility
- * descriptor; a direct `session/create` RPC is refused with `gateway/api-incompatible` because
- * that endpoint needs the descriptor rather than the `session/list` fingerprint.
+/**
+ * Create one Session through the app's own creation form so the request carries the app's
+ * generated compatibility descriptor. A direct `session/create` RPC is refused with
+ * `gateway/api-incompatible` because that endpoint needs the descriptor rather than the
+ * `session/list` fingerprint. The replay fixture persists no Session, so a browser run has to
+ * create its subject before the conversation header (and its visible fork control) can render.
  *
- * The form needs a directory and then a profile from the Host roster. The profile control stays
- * disabled until that roster resolves, and one attempt to drive it lost the Host connection
- * mid-form. Both the roster wait and that disconnect need to be understood before a fork gesture
- * can be qualified here.
+ * The form needs a directory and then a profile: read the Host roster explicitly, wait for the
+ * profile control to leave its disabled placeholder state, then take the Host default.
  */
+/**
+ * Observed state after this helper, for whoever continues the fork gesture: opening the
+ * conversation header's fork control and submitting a retained attempt disconnects the browser
+ * client mid-dispatch. The owner then fails closed, showing an unconfirmed attempt with its exact
+ * requested child and anchor and "will not be sent again" — the correct no-replay behavior, but
+ * not a confirmed fork. The Host process itself stays alive and logs nothing. Diagnose the
+ * disconnect before asserting dsh-fork-outcome-confirmed here.
+ */
+export async function createHostSession(page: Page, cwd: string): Promise<void> {
+  await page.getByTestId("dsh-create-session").click();
+  const directory = page.getByTestId("dsh-create-directory");
+  await directory.waitFor({ state: "visible", timeout: 30_000 });
+  await directory.fill(cwd);
+  await page.getByTestId("dsh-create-profiles-refresh").click({ timeout: 30_000 });
+  const profile = page.getByTestId("dsh-create-profile");
+  await profile.waitFor({ state: "visible", timeout: 30_000 });
+  await expect(profile).toBeEnabled({ timeout: 60_000 });
+  await profile.click();
+  const option = page.locator('[data-testid^="dsh-create-profile-"]').first();
+  await option.waitFor({ state: "visible", timeout: 30_000 });
+  await option.click();
+  const submit = page.getByTestId("dsh-create-submit");
+  await expect(submit).toBeEnabled({ timeout: 30_000 });
+  await submit.click();
+  await page
+    .getByTestId("dsh-create-outcome-accepted")
+    .waitFor({ state: "visible", timeout: 60_000 });
+}
 
 /** Reproduce the Host's signed-in browser session without printing credentials. */
 export async function attachDshSession(
