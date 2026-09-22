@@ -106,6 +106,16 @@ Unknown attempts offer an explicit current-registration lookup with loading, fai
 
 Qualify narrow and wide production browser exports and development Electron using actual invalid path rejection, explicit correction, duplicate taps, interrupted accepted replies, cold recovery, current lookup/adoption and shared-list Session selection. Inspect the actual Host registry and Session membership. Include draft/lifetime, storage failure, stale generation and list removal controls, selectable diagnostics and reachable compact footer actions. No automatic lookup, replay, default-profile substitution or new RPC is permitted. Packaged acceptance, physical execution and Phase 4 publication remain separate gates.
 
+## Native fork presentation increment
+
+Expose the qualified durable native fork through the existing DSH conversation instead of a new surface. One control per open conversation opens a sheet for the exact source Session; the fork point is an explicit whole non-negative position or the end of the conversation. An invalid position is visible and cannot be sent. Offering the control does not create a second owner, a second journal or a new RPC.
+
+The sheet renders the retained attempt from the shared owner: sending, not-dispatched, unknown, confirmed, typed Workspace attachment failure and explicit adoption stay visually distinct. A retained non-idle attempt replaces the anchor field, so a repeated review cannot resend it. Reset is offered only for terminal outcomes and remains identity-checked and durable. Only the exact typed attachment failure identifies its requested Workspace.
+
+Current-child review calls the shared exact summary reader through the owner. Found shows the exact child identity and parent and offers explicit adoption as the CURRENT child; absence, wrong lineage and failed reads cannot authorize adoption, reset or another fork. Workspace membership is read from the shared Workspace list as a separate current observation, where an unavailable baseline differs from a ready-empty membership. Lookup and adoption never rename, attach, open history or resend. Closing the sheet releases only the review reader and leaves the durable attempt owned by the runtime.
+
+Qualify the visible control in narrow and wide browser and development Electron, including anchor acceptance and refusal, one dispatch, unconfirmed review, absence/wrong-lineage refusal, explicit adoption and terminal reset. Keep packaged desktop, physical iPhone execution and Phase 4 publication as separate gates.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
@@ -120,6 +130,10 @@ Qualify narrow and wide production browser exports and development Electron usin
 - [Native registration draft](spec:src:packages/app/src/dsh/registration-form.ts)
 - [Native registration controls](spec:src:packages/app/src/dsh/ui/registration-sheet.tsx)
 - [Durable registration journal](spec:src:packages/app/src/dsh/registration-journal.ts)
+- [Native fork presentation](spec:src:packages/app/src/dsh/ui/fork-sheet.tsx)
+- [Native fork review lifetime](spec:src:packages/app/src/dsh/use-fork.ts)
+- [Durable fork ownership](spec:src:packages/app/src/dsh/fork.ts)
+- [Durable fork journal](spec:src:packages/app/src/dsh/fork-journal.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
 
@@ -236,6 +250,16 @@ Forty-two app/runtime/SQLite cases, thirteen desktop access/transport cases and 
 The actual installed native runtime forked a committed completed-turn recording on an isolated built Host. A deliberately lost accepted reply remained unknown across offline runtime replacement and Host restart. Explicit summary review found the exact retained child and parent; adoption remained separate from original-request confirmation. The lost attempt dispatched once with zero replay. A subsequent explicit reset and fork produced the second child. Both stored inherited prefixes matched the recording; source bytes were unchanged, child history was openable, and no model request or live Session mutation occurred. Client disposal left the external Host alive; owned Hosts and private homes were removed. Workspace attachment failure is qualified by typed owners; no real Host storage fault was induced.
 
 Evidence is `.dev/daedal-dsh-plan-audit/native-fork-20260922/verification.json`, mirrored in both migration checkouts. The prepared distribution was installed through an isolated consumer without a full workspace installation; required SD links remain intact. This proves native ownership and recovery, not visible fork gestures, packaged acceptance or physical iPhone execution. The current delivered iPhone build remains provisionally accepted by Carlo. Phase 4 remains in progress for visible fork and the remaining conversation/release requirements.
+
+## Native fork presentation qualification
+
+The source conversation header now exposes the durable native fork that was previously hidden. Opening the sheet binds one review view to the shared owner; the sheet names the exact source Session and accepts a fork point only as a whole non-negative position, with an empty field meaning the end of the conversation. An invalid position renders a visible error and the submit action stays disabled, so no request is sent. A non-idle retained attempt replaces the anchor field and cannot be resent from the review.
+
+The visible control mounts the real `DshFork` owner over an in-memory transaction-backed journal: submitting an exact anchor sends exactly one request with that integer, an empty field sends exactly one request without an anchor, and the confirmed outcome renders over the retained attempt with reset offered and submit withdrawn. An unconfirmed reply stays unknown and offers an explicit check; absence and wrong lineage render distinct lookup states and never offer adoption; a matching child shows its exact identity, parent and current Workspace membership and offers explicit adoption as the current child, after which the adopted outcome renders without a second dispatch. The control's own label changes from the fork title to a review label once an attempt is retained.
+
+Six visible-control cases and three anchor-model cases pass in the jsdom unit project; the DSH unit suites reach 258 passing cases. The full application unit project reports 5495 passing cases with three pre-existing failures in `src/desktop/daemon/daemon-management-error.test.ts`, which fail identically on pristine `bb157d84`. The real Chromium browser project passes 127 cases. Full workspace lint, scoped formatting, the application typecheck and the i18n resource/locale suites pass. The stand-in host sheet used by the test runner is a harness boundary, not product behavior.
+
+An earlier local browser run needed the missing Playwright headless chromium shell, installed as a separate Linux dependency. This is browser and development-surface qualification only: packaged desktop, physical iPhone execution, source publication and Phase 4 completion remain separate gates. Evidence is `.dev/daedal-dsh-plan-audit/native-fork-ui-20260922/verification.json`.
 
 ## Acceptance
 

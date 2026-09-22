@@ -28,6 +28,63 @@ export const nativeDsh = {
     unavailable:
       "Profile selection is unavailable. Update the companion host to select DSH profiles.",
   },
+  fork: {
+    title: "Fork session",
+    review: "Review fork",
+    submit: "Fork from here",
+    anchor: "Fork point",
+    anchorHint: "Leave empty to fork from the end of the conversation.",
+    anchorInvalid: "Enter a whole message position of zero or more.",
+    source: "Source session",
+    explanation: "Create a new session that inherits this conversation. One attempt is kept.",
+    offline: "Host disconnected. Reconnect before forking a session.",
+    unavailable: "Forking is unavailable on this Host or device.",
+    sent: "Fork requested. Check the new session before treating it as created; this request will not be sent again.",
+    storage: {
+      loading: "Reading the saved fork attempt…",
+      failed: "Could not save or read the fork attempt. Read the saved status before proceeding.",
+      unavailable: "Fork storage is unavailable on this device.",
+    },
+    outcome: {
+      sending: "Forking session…",
+      "not-dispatched": "This fork was not sent. Review it before trying again.",
+      unknown: "Fork is unconfirmed. It stays retained here and will not be sent again.",
+      confirmed: "Fork confirmed by the Host.",
+      "attachment-failed":
+        "The new session was created but could not be added to the target Workspace.",
+      adopted: "Current child session selected. The earlier fork request stays unconfirmed.",
+    },
+    lookupAvailability: {
+      offline: "Reconnect to check the new session.",
+      unavailable: "Checking the new session is unavailable on this Host.",
+    },
+    lookup: {
+      loading: "Checking the new session…",
+      failed: "Could not check the new session. Try the check again.",
+      absent: "No session with the expected identity is present. The fork stays unconfirmed.",
+      mismatch:
+        "A session exists but its identity or parent does not match this fork. It cannot confirm the request.",
+      found: "A matching child session is present. This does not confirm the earlier request.",
+    },
+    child: {
+      adopted: "Adopted child session",
+      observed: "Observed child session",
+      parent: "Recorded parent",
+      title: "Title",
+    },
+    workspace: {
+      none: "This session is not currently in a Workspace.",
+      baseline: "Workspace membership could not be read on this Host.",
+      some: "Workspace: {{names}}",
+      failedTarget: "Requested Workspace: {{id}}",
+    },
+    adopt: "Use current child session",
+    check: "Check new session",
+    reset: "Forget this attempt",
+    close: "Close",
+    unavailableStorage: "Fork storage is unavailable.",
+  },
+
   registration: {
     title: "Register workspace",
     review: "Review registration",

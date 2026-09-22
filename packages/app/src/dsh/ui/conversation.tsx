@@ -7,6 +7,7 @@ import type { DshDirectory } from "../directory";
 import type { DshConversation, DshHostRuntime } from "../runtime";
 import type { DshHistory } from "../history";
 import { HistoryList } from "./history-list";
+import { ForkControl } from "./fork-sheet";
 import { styles } from "./styles";
 import { WorkspaceOutcome } from "./workspace-outcome";
 
@@ -254,6 +255,7 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
           {t("nativeDsh.conversation.back")}
         </Button>
         <Text style={styles.title}>{title}</Text>
+        <ForkControl runtime={runtime} sessionId={view.sessionId} busy={busy} />
         {generation === undefined && (
           <>
             <Text style={styles.muted}>{t("nativeDsh.conversation.offline")}</Text>
