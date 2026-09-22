@@ -11,10 +11,17 @@ const UserMessageSchema = z.object({
 const fork = path.resolve(__dirname, "../..");
 const repository = process.env.DSH_REPOSITORY ?? path.join(path.dirname(fork), "deepseek-harness");
 
+export interface DshTestHostOptions {
+  /** Absolute index.html of a built companion export to serve from the Host's own origin. */
+  absoluteDistIndex?: string;
+  mountPath?: string;
+}
+
 export async function launchDshTestHost(
   fixtureName: string,
   permissionMode = "workspace-write",
   profileControls = false,
+  options: DshTestHostOptions = {},
 ) {
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-dsh-test-"));
   const fixture = path.join(repository, "snapshots", fixtureName);
@@ -58,7 +65,18 @@ export async function launchDshTestHost(
       policy-reviewed: { sandbox: danger-full-access, approval: ask }
       danger-full-access: { sandbox: danger-full-access, approval: never }
 `
-        : ""),
+        : "") +
+      (options.absoluteDistIndex === undefined
+        ? ""
+        : `
+- insert:
+    - id: daedal-browser-preview
+      name: '@deepseek-ai/dsh-host-frontend-static'
+      config:
+        distIndex: ${options.absoluteDistIndex}
+        mountPath: ${options.mountPath ?? "/daedal"}
+        indexPaths: [/dsh-hosts]
+`),
   );
   const process = spawn(
     globalThis.process.execPath,
