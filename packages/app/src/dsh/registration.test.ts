@@ -12,6 +12,7 @@ import {
   type WorkspaceView,
 } from "@deepseek-ai/dsh-client";
 import { dshRegistrationEndpoints } from "@getpaseo/protocol/dsh-access";
+import { DshRegistrationForm } from "./registration-form";
 import { DshRegistration } from "./registration";
 import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
 import type { DshCreationStorage } from "./creation-journal";
@@ -477,5 +478,150 @@ describe("native Workspace registration ownership", () => {
     await call;
     expect((await f.journal.read())?.kind).toBe("not-dispatched");
     expect(f.workspaces.create).not.toHaveBeenCalled();
+  });
+});
+
+function workspaceList() {
+  return {
+    list: cell<ReturnType<IWorkspaces["list"]["getSnapshot"]>>({
+      items: [workspace],
+      phase: "ready",
+      state: "idle",
+      error: null,
+      archivedSessionIds: [],
+    }),
+  };
+}
+describe("native registration form", () => {
+  it("retains the exact path offline and closes during one dispatched request", async () => {
+    const f = await fixture();
+    const form = new DshRegistrationForm(f.registration, workspaceList());
+    const close = form.connect();
+    form.setPath("/host/with space ");
+    f.generation.set(undefined);
+    expect(form.getSnapshot().canSubmit).toBe(false);
+    await form.submit();
+    expect(f.workspaces.create).not.toHaveBeenCalled();
+    f.change((value) => value);
+    const held = deferred<WorkspaceView>();
+    const entered = deferred<void>();
+    f.workspaces.create.mockImplementationOnce(async () => {
+      entered.resolve();
+      return held.promise;
+    });
+    const task = form.submit();
+    expect(form.submit()).toBe(task);
+    await entered.promise;
+    close();
+    held.resolve(workspace);
+    await task;
+    expect(f.workspaces.create).toHaveBeenCalledExactlyOnceWith({ path: "/host/with space " });
+    const reopened = new DshRegistrationForm(f.registration, workspaceList());
+    const done = reopened.connect();
+    expect(reopened.getSnapshot().registration.outcome.kind).toBe("confirmed");
+    done();
+  });
+  it("preserves rejected input for explicit correction and uses authoritative Workspace identity", async () => {
+    const f = await fixture();
+    const list = workspaceList();
+    const form = new DshRegistrationForm(f.registration, list);
+    const close = form.connect();
+    try {
+      f.workspaces.create.mockRejectedValueOnce(
+        new WorkspaceCreateError(
+          new RemoteError("workspace/create-rejected", "Missing", { path: "/missing" }),
+        ),
+      );
+      form.setPath("/missing");
+      await form.submit();
+      expect(form.getSnapshot().canReset).toBe(true);
+      await form.submit();
+      expect(f.workspaces.create).toHaveBeenCalledTimes(1);
+      await form.reset();
+      expect(form.getSnapshot().path).toBe("/missing");
+      form.setPath("/corrected");
+      await form.submit();
+      expect(form.getSnapshot().currentWorkspace?.workspaceId).toBe(workspace.workspaceId);
+      list.list.set({
+        ...list.list.getSnapshot(),
+        items: [{ ...workspace, workspaceId: brandString<WorkspaceId>("replacement") }],
+      });
+      expect(form.getSnapshot().currentWorkspace).toBeNull();
+    } finally {
+      close();
+    }
+  });
+  it("keeps found and absent observations distinct from acceptance and clears adoption on reconnect", async () => {
+    const f = await fixture();
+    const form = new DshRegistrationForm(f.registration, workspaceList());
+    const close = form.connect();
+    try {
+      f.workspaces.create.mockRejectedValueOnce(new Error("lost"));
+      form.setPath("/host/alias");
+      await form.submit();
+      expect(form.getSnapshot().canReset).toBe(false);
+      expect(form.getSnapshot().currentWorkspace).toBeNull();
+      f.workspaces.resolveByPath.mockResolvedValueOnce(null);
+      await form.checkCurrent();
+      await form.adoptCurrent();
+      await form.reset();
+      expect(form.getSnapshot().registration.outcome.kind).toBe("unknown");
+      await form.checkCurrent();
+      expect(form.getSnapshot().canAdopt).toBe(true);
+      expect(form.getSnapshot().currentWorkspace).toBeNull();
+      f.change((value) => value);
+      await form.adoptCurrent();
+      expect(form.getSnapshot().registration.outcome.kind).toBe("unknown");
+      await form.checkCurrent();
+      await form.adoptCurrent();
+      expect(form.getSnapshot().registration.outcome.kind).toBe("adopted");
+      expect(form.getSnapshot().currentWorkspace?.workspaceId).toBe(workspace.workspaceId);
+      expect(f.workspaces.create).toHaveBeenCalledTimes(1);
+    } finally {
+      close();
+    }
+  });
+  it("publishes the retained path with the first idle state after cold rejection review", async () => {
+    const f = await fixture();
+    f.workspaces.create.mockRejectedValueOnce(
+      new WorkspaceCreateError(
+        new RemoteError("workspace/create-rejected", "Missing", { path: "/missing" }),
+      ),
+    );
+    await f.registration.register("/missing");
+    const form = new DshRegistrationForm(f.registration, workspaceList());
+    const close = form.connect();
+    const paths: string[] = [];
+    const off = form.subscribe(() => {
+      if (form.getSnapshot().registration.outcome.kind === "idle")
+        paths.push(form.getSnapshot().path);
+    });
+    try {
+      await form.reset();
+      expect(paths.length).toBeGreaterThan(0);
+      expect(paths.every((path) => path === "/missing")).toBe(true);
+    } finally {
+      off();
+      close();
+    }
+  });
+  it("blocks form submission when its attempt cannot be stored", async () => {
+    const f = await fixture({
+      async transact() {
+        throw new Error("disk");
+      },
+    });
+    const form = new DshRegistrationForm(f.registration, workspaceList());
+    const close = form.connect();
+    try {
+      form.setPath("/project");
+      expect(form.getSnapshot().canSubmit).toBe(false);
+      await form.submit();
+      await form.restore();
+      expect(f.workspaces.create).not.toHaveBeenCalled();
+      expect(form.getSnapshot().registration.storage).toBe("failed");
+    } finally {
+      close();
+    }
   });
 });

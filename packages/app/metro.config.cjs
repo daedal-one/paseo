@@ -18,6 +18,16 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
+// Metro must see physical dependency targets outside the workspace, including exports.
+config.watchFolders = [
+  ...new Set([
+    ...config.watchFolders,
+    ...config.resolver.nodeModulesPaths
+      .filter((root) => fs.existsSync(root))
+      .map((root) => fs.realpathSync(root)),
+  ]),
+];
+
 const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 
 // Keep app exports deterministic across dev machines and CI. Metro's Watchman

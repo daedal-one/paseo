@@ -12,6 +12,45 @@ export const nativeDsh = {
     unavailable:
       "Profile selection is unavailable. Update the companion host to select DSH profiles.",
   },
+  registration: {
+    title: "Register workspace",
+    review: "Review registration",
+    submit: "Register",
+    reset: "Edit path",
+    check: "Check current registration",
+    adopt: "Use current registration",
+    restore: "Read saved status",
+    path: "Directory on this Host",
+    explanation: "Choose an existing directory on this Host.",
+    offline: "Host disconnected. Reconnect before registering a workspace.",
+    unavailable: "Workspace registration is unavailable on this Host.",
+    selectInSession: "Choose {{name}} under New session → Existing workspace.",
+    notListed: "This workspace is not currently available in the Host list.",
+    storage: {
+      loading: "Reading saved registration status…",
+      failed: "Could not save or read registration status. Read saved status before proceeding.",
+      unavailable: "Registration storage is unavailable on this device.",
+    },
+    outcome: {
+      sending: "Registering workspace…",
+      rejected: "The Host rejected this request. You can correct the path.",
+      "not-dispatched": "This request was not sent. Review the path before proceeding.",
+      unknown: "Registration is unconfirmed. The request will not be sent again.",
+      confirmed: "Workspace registration confirmed.",
+      adopted: "Current registration selected. The earlier request remains unconfirmed.",
+    },
+    lookupAvailability: {
+      offline: "Reconnect to check current registration.",
+      unavailable: "Current-registration lookup is unavailable on this Host.",
+    },
+    lookup: {
+      loading: "Checking current registration…",
+      failed: "Could not check current registration. Try the check again.",
+      absent:
+        "No workspace is currently registered at this path. The earlier request remains unconfirmed.",
+      found: "A workspace is currently registered here. This does not confirm the earlier request.",
+    },
+  },
   creation: {
     title: "New session",
     review: "Review session creation",

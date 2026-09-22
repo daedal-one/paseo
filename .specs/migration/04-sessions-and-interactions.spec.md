@@ -86,6 +86,16 @@ Persist the qualified Host rejection and its diagnostic as a distinct terminal o
 
 Qualify actual fresh-connection SQLite and browser IndexedDB recovery, previous record variants, identity guards, failed outcome/reset writes, wrong error classes, broad errors and optional create revision mismatch. Against an isolated built Host, use the actual installed native runtime for invalid path rejection, cold recovery, explicit corrected registration and accepted-but-lost reply handling. Registration presentation remains a separate package; no phase publication or app delivery is established by this prerequisite.
 
+## Native Workspace registration presentation increment
+
+App exports must resolve existing dependency directories when workspace node_modules entries point to external caches. Include their physical targets in Metro watch folders, retaining default discovery and module identity normalization. Qualify production Web, Electron and iOS exports against the configured dependency layout.
+
+Expose registration in the opt-in Host directory through a plain TypeScript form using the qualified registration owner. Ask for an explicit existing directory on the Host; do not create directories or infer device paths. Show the retained exact request and sending, rejected, not-dispatched, unknown, confirmed or adopted outcome. Correction requires the explicit durable reset already qualified by the owner. Closing the form preserves dispatched attempts; reopening and cold restart review the stored outcome. Storage failures expose an explicit local restore action and block new registration.
+
+Unknown attempts offer an explicit current-registration lookup with loading, failure/retry, absence and found states. Found remains an observation until explicit adoption; absence never permits reset or another mutation. Display the canonical found path and explain that it does not confirm the earlier request. Generation change removes the observation. Confirmed or adopted records remain historical evidence: derive current availability from the shared Workspace list, and use the existing New session Workspace selector for actual selection. Never insert lookup results into that list or replace the authoritative identity by a path match.
+
+Qualify narrow and wide production browser exports and development Electron using actual invalid path rejection, explicit correction, duplicate taps, interrupted accepted replies, cold recovery, current lookup/adoption and shared-list Session selection. Inspect the actual Host registry and Session membership. Include draft/lifetime, storage failure, stale generation and list removal controls, selectable diagnostics and reachable compact footer actions. No automatic lookup, replay, default-profile substitution or new RPC is permitted. Packaged acceptance, physical execution and Phase 4 publication remain separate gates.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
@@ -97,6 +107,8 @@ Qualify actual fresh-connection SQLite and browser IndexedDB recovery, previous 
 - [Native creation controls](spec:src:packages/app/src/dsh/ui/creation-sheet.tsx)
 - [Durable creation ownership](spec:src:packages/app/src/dsh/creation-journal.ts)
 - [Native Workspace registration ownership](spec:src:packages/app/src/dsh/registration.ts)
+- [Native registration draft](spec:src:packages/app/src/dsh/registration-form.ts)
+- [Native registration controls](spec:src:packages/app/src/dsh/ui/registration-sheet.tsx)
 - [Durable registration journal](spec:src:packages/app/src/dsh/registration-journal.ts)
 - [Native operation selection](spec:src:packages/protocol/src/dsh-access.ts)
 - [Desktop transport ownership](spec:src:packages/desktop/src/dsh/access.ts)
@@ -173,7 +185,17 @@ Three new regressions fail before the implementation. The final selected app own
 
 The actual installed native runtime against an isolated built Host rejects relative, missing and file paths with no durable registration. The rejected request survives offline runtime replacement in real SQLite, reconnect causes no lookup or replay, and only explicit reset permits a corrected request. A deliberately lost accepted reply remains unknown through runtime and Host restart; current lookup, symlink retargeting and explicit adoption retain their distinct meanings. Five total explicit create requests produce three pre-write rejections and exactly two durable Workspaces, with no Sessions or model requests. Client disposal leaves the external Host alive; owned Hosts are joined and private state removed.
 
-Evidence is `.dev/daedal-dsh-plan-audit/registration-rejection-20260921/verification.json`. Registration controls remain hidden pending visible browser/Electron qualification. The Expo SQLite adapter is typechecked/exported, not physically executed. Current delivered iPhone acceptance remains provisional. No source publication, deployment, installed app replacement or TestFlight upload occurred; Phase 4 remains in progress.
+Evidence is `.dev/daedal-dsh-plan-audit/registration-rejection-20260921/verification.json`. Visible registration controls are qualified separately below. The Expo SQLite adapter is typechecked/exported, not physically executed. Current delivered iPhone acceptance remains provisional. No source publication, deployment, installed app replacement or TestFlight upload occurred; Phase 4 remains in progress.
+
+## Native registration presentation qualification
+
+The opt-in Host directory exposes registration and retained-outcome review using the existing owner and journal. Rejected input remains available on the first editable render after explicit reset, including after cold review. Found current registrations require explicit adoption; absence never permits a mutation retry. The existing Session form selects only authoritative shared-list identities.
+
+Production browser exports at 390px and 1280px passed invalid-path rejection, reload of rejection, corrected registration, duplicate taps, accepted-but-lost replies, reload of unknown outcomes, explicit failed/absent/found lookup, symlink retargeting, adoption and Session selection. Actual development Electron independently enrolled through protected access and real native IPC, created registrations, deliberately lost an accepted reply, restored that unknown request through cold restart and pairing restore, then explicitly adopted and selected its Workspace. No record was seeded. The isolated built Host retained exactly six Workspaces and three Sessions with minimal/minimal/standard profiles, exact shared membership and no model requests. JavaScript error lists were empty; clients exited with the external Host alive, then owned Hosts and private state were removed.
+
+The final 54 selected creation/registration cases include five new form regressions. The first-render regression failed before its fix. Full workspace types, final app types/lint, direct 26-spec lint, formatting, Web/Electron/iOS Hermes exports and desktop main build pass. Real exports reproduced an external dependency visibility failure; Metro now includes existing dependency realpaths in watched directories while preserving module identity normalization. The separate nested website cache's missing declared Chai type dependency was restored without dependency installation or source changes. Final checks used the SD-backed layout.
+
+Evidence is `.dev/daedal-dsh-plan-audit/registration-ui-20260922/verification.json`, mirrored in both migration checkouts. This is development Electron and browser qualification, not packaged installation or physical iOS execution. No backend API or portable archive changed. The current delivered iPhone acceptance remains provisional by Carlo. Phase 4 remains in progress for the other conversation features and release gates; no source publication, deployment or app upload occurred for this component.
 
 ## Acceptance
 
