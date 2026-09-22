@@ -1,3 +1,4 @@
+import { DshForkJournal } from "./fork-journal";
 import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
 import type { WorkspaceId } from "@deepseek-ai/dsh-client";
 import { expect, it } from "vitest";
@@ -104,6 +105,58 @@ it("restores rejection across browser connections while preserving earlier recor
     await one.settle(rejected);
     await one.clear(request.attemptId);
     expect((await cold.read())?.request).toEqual(next);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase(name);
+      deletion.addEventListener("success", () => resolve());
+      deletion.addEventListener("error", () => reject(deletion.error));
+    });
+  }
+});
+
+it("claims one fork across actual IndexedDB connections and protects adopted/replacement identities", async () => {
+  const name = `dsh-fork-test-${crypto.randomUUID()}`;
+  const host = brandString<ConnectionHostId>("host");
+  const request = {
+    sessionId: brandString<SessionId>("source"),
+    childSessionId: brandString<SessionId>("one"),
+    atSeq: 3,
+  };
+  const one = new DshForkJournal(host, createDshCreationStorage(name));
+  const two = new DshForkJournal(host, createDshCreationStorage(name));
+  try {
+    const claims = await Promise.all([
+      one.claim(request),
+      two.claim({ ...request, childSessionId: brandString<SessionId>("two") }),
+    ]);
+    expect(claims.filter((value) => value.claimed)).toHaveLength(1);
+    const winner = claims.find((value) => value.claimed)!.outcome.request;
+    const cold = new DshForkJournal(host, createDshCreationStorage(name));
+    expect(await cold.read()).toEqual({ kind: "unknown", request: winner });
+    await cold.clear(winner.childSessionId);
+    expect((await cold.read())?.kind).toBe("unknown");
+    await cold.settle({
+      kind: "adopted",
+      request: winner,
+      child: {
+        id: winner.childSessionId,
+        parentId: winner.sessionId,
+        displayTitle: "Child",
+        workspaceIds: [],
+      },
+    });
+    await one.settle({ kind: "confirmed", request: winner });
+    expect((await cold.read())?.kind).toBe("adopted");
+    await cold.clear(winner.childSessionId);
+    const next = { ...request, childSessionId: brandString<SessionId>("next") };
+    await cold.claim(next);
+    await one.clear(winner.childSessionId);
+    await one.settle({ kind: "not-dispatched", request: winner });
+    expect((await cold.read())?.request).toEqual(next);
+    const storage = createDshCreationStorage(name);
+    await storage.transact(host, () => "corrupt");
+    await expect(cold.claim(request)).rejects.toThrow();
+    expect((await storage.transact(host, (text) => text)).after).toBe("corrupt");
   } finally {
     await new Promise<void>((resolve, reject) => {
       const deletion = indexedDB.deleteDatabase(name);

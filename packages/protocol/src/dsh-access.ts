@@ -190,3 +190,6 @@ export const dshCreationEndpoints = ["session/create", "agentPresets/list"] as c
 
 /** Optional native Session full-text search; provider activation remains Host-owned. */
 export const dshSearchEndpoints = ["session/search"] as const;
+
+/** Optional native fork with a caller-owned fresh child identity. */
+export const dshForkEndpoints = ["session/forkTo"] as const;

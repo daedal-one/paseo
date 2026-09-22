@@ -1,3 +1,4 @@
+import { DshForkJournal } from "./fork-journal";
 import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
 import type { WorkspaceId } from "@deepseek-ai/dsh-client";
 import { DatabaseSync } from "node:sqlite";
@@ -203,6 +204,107 @@ it("keeps Workspace registration separate and protects durable identity through 
       await expect(
         cold.settle({ kind: "confirmed", request: registrationRequest, workspace }),
       ).rejects.toThrow();
+      expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+it("retains fork identity and monotone outcomes across fresh SQLite connections", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dsh-fork-"));
+  function storage() {
+    return createSqliteCreationStorage(async () => {
+      const db = new DatabaseSync(join(home, "fork.db"));
+      return {
+        async exec(sql) {
+          db.exec(sql);
+        },
+        async run(sql, params) {
+          db.prepare(sql).run(...params);
+        },
+        async get(sql, params) {
+          return (db.prepare(sql).get(...params) as { payload: string } | undefined) ?? null;
+        },
+        async close() {
+          db.close();
+        },
+      };
+    });
+  }
+  const forkRequest = {
+    sessionId: brandString<SessionId>("source"),
+    childSessionId: brandString<SessionId>("child"),
+    atSeq: 7,
+  };
+  try {
+    const one = new DshForkJournal(host, storage());
+    expect((await one.claim(forkRequest)).claimed).toBe(true);
+    const cold = new DshForkJournal(host, storage());
+    expect(await cold.read()).toEqual({ kind: "unknown", request: forkRequest });
+    expect(
+      (await cold.claim({ ...forkRequest, childSessionId: brandString<SessionId>("other") }))
+        .claimed,
+    ).toBe(false);
+    expect((await cold.clear(forkRequest.childSessionId))?.kind).toBe("unknown");
+    const partial = {
+      kind: "attachment-failed" as const,
+      request: forkRequest,
+      workspaceId: brandString<WorkspaceId>("workspace"),
+    };
+    await cold.settle(partial);
+    await one.settle({ kind: "unknown", request: forkRequest });
+    await one.settle({ kind: "confirmed", request: forkRequest });
+    expect(await cold.read()).toEqual(partial);
+    const adopted = {
+      kind: "adopted" as const,
+      request: forkRequest,
+      child: {
+        id: forkRequest.childSessionId,
+        parentId: forkRequest.sessionId,
+        displayTitle: "Child",
+        workspaceIds: null,
+      },
+    };
+    await cold.settle(adopted);
+    await one.settle(partial);
+    expect(await cold.read()).toEqual(adopted);
+    await cold.clear(forkRequest.childSessionId);
+    const next = { ...forkRequest, childSessionId: brandString<SessionId>("next") };
+    await cold.claim(next);
+    await one.clear(forkRequest.childSessionId);
+    await one.settle({ kind: "confirmed", request: forkRequest });
+    expect((await cold.read())?.request).toEqual(next);
+    expect(
+      await new DshForkJournal(brandString<ConnectionHostId>("other-host"), storage()).read(),
+    ).toBeNull();
+    const store = storage();
+    for (const corrupt of [
+      "{",
+      JSON.stringify({
+        version: 2,
+        hostId: host,
+        outcome: { kind: "unknown", request: forkRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: "other",
+        outcome: { kind: "unknown", request: forkRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { ...adopted, child: { ...adopted.child, id: "foreign" } },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { kind: "unknown", request: { ...forkRequest, atSeq: 1.5 } },
+      }),
+    ]) {
+      await store.transact(host, () => corrupt);
+      await expect(cold.read()).rejects.toThrow();
+      await expect(cold.claim(forkRequest)).rejects.toThrow();
       expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
     }
   } finally {

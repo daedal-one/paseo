@@ -33,6 +33,7 @@ export async function openBrowserDshHost(options: {
     runtime = await createDshHostRuntime({
       creationStorage: createDshCreationStorage(),
       registrationStorage: createDshCreationStorage("daedal-dsh-registration"),
+      forkStorage: createDshCreationStorage("daedal-dsh-fork"),
       hostId: identity.value.hostId,
       baseUrl: transport.origin,
       isLocal: ["localhost", "127.0.0.1", "[::1]"].includes(new URL(transport.origin).hostname),

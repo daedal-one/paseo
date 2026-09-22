@@ -116,6 +116,9 @@ describe("desktop window and grant ownership", () => {
       "/api/session/historyDetail/other",
       "/api/session/page?host=other",
       "/api/session/create/other",
+      "/api/session/fork",
+      "/api/session/forkTo/other",
+      "/api/session/forkTo?host=other",
       "/api/workspace/create/other",
       "/api/workspace/resolveByPath?host=other",
       "/api/agentPresets/select",
@@ -144,6 +147,7 @@ describe("desktop window and grant ownership", () => {
       "/api/workspace/create",
       "/api/workspace/resolveByPath",
       "/api/session/search",
+      "/api/session/forkTo",
     ]) {
       await access.run(1, {
         type: "fetch",
@@ -155,7 +159,7 @@ describe("desktop window and grant ownership", () => {
         headers: {},
       });
     }
-    expect(transport.fetch).toHaveBeenCalledTimes(9);
+    expect(transport.fetch).toHaveBeenCalledTimes(10);
   });
   it("cancels an owner waiting for protected storage without creating a transport", async () => {
     const { access, store } = fixture();

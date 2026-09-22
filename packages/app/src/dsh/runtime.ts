@@ -8,6 +8,8 @@ import { DshCreationJournal, type DshCreationStorage } from "./creation-journal"
 import { DshCreation } from "./creation";
 import { DshRegistration } from "./registration";
 import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
+import { DshFork } from "./fork";
+import { DshForkJournal } from "./fork-journal";
 import { DshSearch } from "./search";
 import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
@@ -27,6 +29,8 @@ export interface DshHostRuntimeOptions {
   creationStorage?: DshCreationStorage;
   /** Dedicated Workspace registration database; omission disables registration. */
   registrationStorage?: DshCreationStorage;
+  /** Dedicated fork database; omission disables forks. */
+  forkStorage?: DshCreationStorage;
 }
 
 export interface DshConversation {
@@ -46,6 +50,7 @@ export interface DshHostRuntime {
   readonly creation: DshCreation;
   readonly registration: DshRegistration;
   readonly search: DshSearch;
+  readonly fork: DshFork;
   readonly pending: dsh.PendingInteractions["source"];
   openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
   closeConversation(): void;
@@ -75,6 +80,7 @@ export async function createDshHostRuntime(
   let creation: DshCreation | undefined;
   let registration: DshRegistration | undefined;
   let search: DshSearch | undefined;
+  let fork: DshFork | undefined;
   try {
     context.provide("connection", connection);
     await context.plugin({ apply: dsh.applyRegistry, inject: dsh.registryInject });
@@ -126,6 +132,18 @@ export async function createDshHostRuntime(
     );
     await registration.restore();
     const ownedRegistration = registration;
+    fork = new DshFork(
+      context.sessions,
+      context.workspaces,
+      connection,
+      () => context.remote.$host.capabilities,
+      () => brandString<dsh.SessionId>(options.randomId()),
+      options.forkStorage === undefined
+        ? undefined
+        : new DshForkJournal(options.hostId, options.forkStorage),
+    );
+    await fork.restore();
+    const ownedFork = fork;
     search = new DshSearch(context.sessions, connection, () => context.remote.$host.capabilities);
     const ownedSearch = search;
     const pending = new dsh.PendingInteractions();
@@ -172,6 +190,7 @@ export async function createDshHostRuntime(
       creation: ownedCreation,
       registration: ownedRegistration,
       search: ownedSearch,
+      fork: ownedFork,
       openConversation(id, scheduler) {
         if (closed) throw new DshAccessError("transport-disposed");
         const source = context.sessions.binding(id);
@@ -209,6 +228,7 @@ export async function createDshHostRuntime(
         closed = true;
         releaseConversation();
         await Promise.all([
+          ownedFork.dispose(),
           ownedSearch.dispose(),
           ownedRegistration.dispose(),
           ownedCreation.dispose(),
@@ -219,6 +239,7 @@ export async function createDshHostRuntime(
     };
   } catch (error) {
     await Promise.all([
+      fork?.dispose(),
       search?.dispose(),
       registration?.dispose(),
       creation?.dispose(),
