@@ -8,6 +8,7 @@ import { DshCreationJournal, type DshCreationStorage } from "./creation-journal"
 import { DshCreation } from "./creation";
 import { DshRegistration } from "./registration";
 import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
+import { DshSearch } from "./search";
 import { DshHistory } from "./history";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
@@ -44,6 +45,7 @@ export interface DshHostRuntime {
   readonly workspaces: dsh.IWorkspaces;
   readonly creation: DshCreation;
   readonly registration: DshRegistration;
+  readonly search: DshSearch;
   readonly pending: dsh.PendingInteractions["source"];
   openConversation(id: dsh.SessionId, scheduler: dsh.ConversationScheduler | null): DshConversation;
   closeConversation(): void;
@@ -72,6 +74,7 @@ export async function createDshHostRuntime(
   });
   let creation: DshCreation | undefined;
   let registration: DshRegistration | undefined;
+  let search: DshSearch | undefined;
   try {
     context.provide("connection", connection);
     await context.plugin({ apply: dsh.applyRegistry, inject: dsh.registryInject });
@@ -123,6 +126,8 @@ export async function createDshHostRuntime(
     );
     await registration.restore();
     const ownedRegistration = registration;
+    search = new DshSearch(context.sessions, connection, () => context.remote.$host.capabilities);
+    const ownedSearch = search;
     const pending = new dsh.PendingInteractions();
     await context.plugin({
       inject: ["remote", "sessions"],
@@ -166,6 +171,7 @@ export async function createDshHostRuntime(
       pending: pending.source,
       creation: ownedCreation,
       registration: ownedRegistration,
+      search: ownedSearch,
       openConversation(id, scheduler) {
         if (closed) throw new DshAccessError("transport-disposed");
         const source = context.sessions.binding(id);
@@ -203,6 +209,7 @@ export async function createDshHostRuntime(
         closed = true;
         releaseConversation();
         await Promise.all([
+          ownedSearch.dispose(),
           ownedRegistration.dispose(),
           ownedCreation.dispose(),
           context.fiber.dispose(),
@@ -211,7 +218,12 @@ export async function createDshHostRuntime(
       },
     };
   } catch (error) {
-    await Promise.all([registration?.dispose(), creation?.dispose(), context.fiber.dispose()]);
+    await Promise.all([
+      search?.dispose(),
+      registration?.dispose(),
+      creation?.dispose(),
+      context.fiber.dispose(),
+    ]);
     throw error;
   }
 }

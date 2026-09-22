@@ -1,4 +1,20 @@
 export const nativeDsh = {
+  search: {
+    title: "Search sessions",
+    query: "Search phrase",
+    empty: "No matches",
+    more: "Showing the first {{count}} matches. Refine your search for more specific results.",
+    searchFailed: "Search failed. Retry or check whether search is enabled on this Host.",
+    failed: "Could not load this session. Try opening it again.",
+    missing: "This session was not found in the Host's current list.",
+    offline: "Reconnect to search this Host.",
+    unavailable: "Search is unavailable on this Host.",
+    validation: {
+      empty: "Enter a search phrase.",
+      "too-long": "Use a phrase of at most 500 characters.",
+    },
+  },
+
   profile: {
     select: "Select DSH profile",
     hostDefault: "Host default",

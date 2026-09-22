@@ -5,6 +5,7 @@ import type { ConversationScheduler, SessionListState, SessionId } from "@deepse
 import { Button } from "@/components/ui/button";
 import type { DshDirectory } from "../directory";
 import type { DshHostRuntime } from "../runtime";
+import { SearchControl } from "./search-sheet";
 import { RegistrationControl } from "./registration-sheet";
 import { CreationControl } from "./creation-sheet";
 import { styles } from "./styles";
@@ -83,6 +84,7 @@ export function Sessions({ runtime, model, busy }: SessionsProps) {
       <Text style={styles.title}>{t("nativeDsh.sessions")}</Text>
       <CreationControl runtime={runtime} onOpenSession={openCreated} busy={busy} />
       <RegistrationControl runtime={runtime} busy={busy} />
+      <SearchControl runtime={runtime} busy={busy} onOpenSession={openCreated} />
       <Text style={styles.muted}>{runtime.hostId}</Text>
       <Text style={styles.text}>{t(`nativeDsh.connection.${status}`)}</Text>
       {!ready && !readFailed && <Text style={styles.muted}>{t("nativeDsh.waiting")}</Text>}

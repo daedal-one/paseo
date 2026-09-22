@@ -187,3 +187,6 @@ export const dshRegistrationEndpoints = ["workspace/create", "workspace/resolveB
 
 /** Optional native Session creation and Host profile catalog. */
 export const dshCreationEndpoints = ["session/create", "agentPresets/list"] as const;
+
+/** Optional native Session full-text search; provider activation remains Host-owned. */
+export const dshSearchEndpoints = ["session/search"] as const;
