@@ -180,7 +180,10 @@ function conversationHost() {
     requestId: string;
     sessionId: string;
     mode: string;
-    content: { type: "text"; text: string }[];
+    content: (
+      | { type: "text"; text: string }
+      | { type: "image"; mediaType: string; data: string; name?: string }
+    )[];
   }[] = [];
   let promptReply: (signal: AbortSignal | null | undefined) => Promise<unknown> = async () => ({
     ok: true,
@@ -240,7 +243,17 @@ function conversationHost() {
                   requestId: z.string(),
                   sessionId: z.string(),
                   mode: z.string(),
-                  content: z.array(z.object({ type: z.literal("text"), text: z.string() })),
+                  content: z.array(
+                    z.union([
+                      z.object({ type: z.literal("text"), text: z.string() }),
+                      z.object({
+                        type: z.literal("image"),
+                        mediaType: z.string(),
+                        data: z.string(),
+                        name: z.string().optional(),
+                      }),
+                    ]),
+                  ),
                 }),
               }),
             }),
@@ -703,6 +716,129 @@ describe("native DSH text submission", () => {
       await runtime.dispose();
     }
   });
+  it("sends an image-only prompt as one ordered image part and clears it on acceptance", async () => {
+    const host = conversationHost();
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      const image = { mediaType: "image/png", data: "iVBORw0KGgo=", name: "shot.png" } as const;
+      expect(view.prompt.getSnapshot().canSend).toBe(false);
+      view.prompt.setImages([image]);
+      expect(view.prompt.getSnapshot()).toMatchObject({ text: "", canSend: true, images: [image] });
+      expect(await view.prompt.send()).toBe(true);
+      expect(host.prompts).toHaveLength(1);
+      expect(host.prompts[0]).toMatchObject({
+        sessionId: host.ids[0],
+        mode: "queue",
+        content: [
+          { type: "image", mediaType: "image/png", data: "iVBORw0KGgo=", name: "shot.png" },
+        ],
+      });
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        text: "",
+        images: [],
+        canSend: false,
+        submission: { kind: "accepted" },
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("keeps text before images in one prompt and preserves an unnamed image as an empty-name part", async () => {
+    const host = conversationHost();
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("Compare these");
+      view.prompt.setImages([
+        { mediaType: "image/jpeg", data: "/9j/4AAQ", name: "a.jpg" },
+        { mediaType: "image/gif", data: "R0lGODlh" },
+      ]);
+      expect(await view.prompt.send()).toBe(true);
+      expect(host.prompts[0]!.content).toEqual([
+        { type: "text", text: "Compare these" },
+        { type: "image", mediaType: "image/jpeg", data: "/9j/4AAQ", name: "a.jpg" },
+        { type: "image", mediaType: "image/gif", data: "R0lGODlh" },
+      ]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("omits the text part for a blank draft and freezes images while an outcome is unknown", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => {
+      throw new Error("Response lost after dispatch");
+    });
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      const image = { mediaType: "image/webp", data: "UklGRg==", name: "shot.webp" } as const;
+      view.prompt.setText("   ");
+      view.prompt.setImages([image]);
+      expect(await view.prompt.send()).toBe(false);
+      expect(host.prompts).toHaveLength(1);
+      expect(host.prompts[0]!.content).toEqual([
+        { type: "image", mediaType: "image/webp", data: "UklGRg==", name: "shot.webp" },
+      ]);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        images: [image],
+        canSend: false,
+        submission: { kind: "unknown", text: "   ", images: [image] },
+      });
+      view.prompt.setImages([{ mediaType: "image/png", data: "iVBORw0KGgo=" }]);
+      view.prompt.setText("A replacement cannot hide uncertainty");
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        images: [image],
+        text: "   ",
+        submission: { kind: "unknown" },
+      });
+      expect(await view.prompt.send()).toBe(false);
+      expect(host.prompts).toHaveLength(1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("keeps a rejected draft's images visible for a deliberate retry", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => ({
+      ok: false,
+      error: { code: "gateway/bad-request", message: "bad", details: {} },
+    }));
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      const image = { mediaType: "image/jpeg", data: "/9j/4AAQ", name: "a.jpg" } as const;
+      view.prompt.setImages([image]);
+      expect(await view.prompt.send()).toBe(false);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        images: [image],
+        canSend: true,
+        submission: { kind: "rejected", code: "gateway/bad-request" },
+      });
+      host.replyToPrompt(async () => ({ ok: true, value: { accepted: true } }));
+      expect(await view.prompt.send()).toBe(true);
+      expect(host.prompts).toHaveLength(2);
+      expect(host.prompts[1]!.requestId).not.toBe(host.prompts[0]!.requestId);
+      expect(view.prompt.getSnapshot()).toMatchObject({
+        images: [],
+        submission: { kind: "accepted" },
+      });
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("prevents duplicate taps while preserving edits made before acceptance", async () => {
     const host = conversationHost();
     let reply: (value: unknown) => void = () => {

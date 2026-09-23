@@ -9,29 +9,78 @@ import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export type DshPromptSubmission =
   | { kind: "idle" }
-  | { kind: "sending"; text: string }
+  | { kind: "sending"; text: string; images: readonly DshPromptImage[] }
   | { kind: "accepted" }
   | { kind: "rejected"; code: string }
-  | { kind: "unknown"; text: string };
+  | { kind: "unknown"; text: string; images: readonly DshPromptImage[] };
 export interface DshPromptSnapshot {
   text: string;
+  images: readonly DshPromptImage[];
   availability: "ready" | "offline" | "unavailable" | "subagent";
   submission: DshPromptSubmission;
   canSend: boolean;
 }
 
+/** The attachment media types the Host's prompt contract admits for browser-owned uploads. */
+export type DshPromptImageMediaType = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+
+/**
+ * One image the client sends as prompt content. The Host promotes these bytes to a durable
+ * attachment reference; the client owns no attachment URL and stores no copy.
+ */
+export interface DshPromptImage {
+  readonly mediaType: DshPromptImageMediaType;
+  readonly data: string;
+  readonly name?: string;
+}
+
+type PromptContent = Parameters<SessionFace["prompt"]>[0];
+type PromptContentPart = PromptContent[number];
+
+function sameImages(left: readonly DshPromptImage[], right: readonly DshPromptImage[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((image, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      image.mediaType === other.mediaType &&
+      image.data === other.data &&
+      image.name === other.name
+    );
+  });
+}
+
 interface PromptAttempt {
   readonly requestId: SessionRequestId;
   readonly text: string;
+  readonly images: readonly DshPromptImage[];
   readonly draftRevision: number;
   readonly admission: PromptAdmission;
   unsubscribe(): void;
+}
+
+/**
+ * Build the wire content for one attempt: the text part only when there is text, then the
+ * images in draft order. A blank draft with images is a valid Host prompt.
+ */
+function promptContent(attempt: PromptAttempt): PromptContent {
+  const content: PromptContentPart[] = [];
+  if (attempt.text.trim() !== "") content.push({ type: "text", text: attempt.text });
+  for (const image of attempt.images)
+    content.push({
+      type: "image",
+      mediaType: image.mediaType,
+      data: image.data,
+      ...(image.name === undefined ? {} : { name: image.name }),
+    });
+  return content;
 }
 
 /** A transient draft with one Host admission attempt; an unknown outcome cannot be resent. */
 export class DshPrompt {
   private snapshot: DshPromptSnapshot = {
     text: "",
+    images: [],
     availability: "unavailable",
     submission: { kind: "idle" },
     canSend: false,
@@ -85,7 +134,7 @@ export class DshPrompt {
       canSend:
         this.pending === null &&
         next.availability === "ready" &&
-        next.text.trim() !== "" &&
+        (next.text.trim() !== "" || next.images.length > 0) &&
         next.submission.kind !== "sending" &&
         next.submission.kind !== "unknown",
     };
@@ -103,6 +152,18 @@ export class DshPrompt {
     });
   };
 
+  /** Replace the ordered image attachments for the next send; an unknown outcome stays frozen. */
+  setImages = (images: readonly DshPromptImage[]): void => {
+    if (this.closed || this.snapshot.submission.kind === "unknown") return;
+    if (!sameImages(images, this.snapshot.images)) this.draftRevision += 1;
+    this.publish({
+      images: [...images],
+      ...(this.snapshot.submission.kind === "accepted"
+        ? { submission: { kind: "idle" as const } }
+        : {}),
+    });
+  };
+
   send(): Promise<boolean> {
     if (this.pending !== null) return this.pending;
     if (this.closed || !this.snapshot.canSend) return Promise.resolve(false);
@@ -111,6 +172,7 @@ export class DshPrompt {
     const attempt: PromptAttempt = {
       requestId,
       text: this.snapshot.text,
+      images: [...this.snapshot.images],
       draftRevision: this.draftRevision,
       admission,
       unsubscribe: admission.subscribe(() => {
@@ -120,7 +182,7 @@ export class DshPrompt {
     this.attempt = attempt;
     const controller = createDshAbortController();
     this.controller = controller;
-    this.publish({ submission: { kind: "sending", text: attempt.text } });
+    this.publish({ submission: { kind: "sending", text: attempt.text, images: attempt.images } });
     this.pending = this.submit(attempt, controller.signal).finally(() => {
       this.controller = null;
       this.pending = null;
@@ -132,8 +194,10 @@ export class DshPrompt {
   private accept(attempt: PromptAttempt): boolean {
     if (this.closed || this.attempt !== attempt) return false;
     this.releaseAttempt();
+    const unchanged = this.draftRevision === attempt.draftRevision;
     this.publish({
-      text: this.draftRevision === attempt.draftRevision ? "" : this.snapshot.text,
+      text: unchanged ? "" : this.snapshot.text,
+      images: unchanged ? [] : this.snapshot.images,
       submission: { kind: "accepted" },
     });
     return true;
@@ -154,7 +218,7 @@ export class DshPrompt {
     let result: Awaited<ReturnType<SessionFace["prompt"]>>;
     try {
       result = await this.binding.session.prompt(
-        [{ type: "text", text: attempt.text }],
+        promptContent(attempt),
         "queue",
         signal,
         attempt.requestId,
@@ -162,7 +226,7 @@ export class DshPrompt {
     } catch {
       // A lost or malformed reply leaves admission unknown until authoritative evidence arrives.
       if (this.acceptObserved(attempt)) return true;
-      this.publish({ submission: { kind: "unknown", text: attempt.text } });
+      this.publish({ submission: { kind: "unknown", text: attempt.text, images: attempt.images } });
       return false;
     }
     if (this.closed) return false;
@@ -178,7 +242,9 @@ export class DshPrompt {
         this.publish({ submission: { kind: "rejected", code: result.error.code } });
         break;
       default:
-        this.publish({ submission: { kind: "unknown", text: attempt.text } });
+        this.publish({
+          submission: { kind: "unknown", text: attempt.text, images: attempt.images },
+        });
     }
     return false;
   }

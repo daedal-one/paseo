@@ -310,6 +310,15 @@ export const nativeDsh = {
     unconfirmed: "Unconfirmed message",
     unknown:
       "Waiting to confirm whether the host received your message. Reconnect to check. It will not be resent, and your draft stays here until the host confirms acceptance.",
+    attach: "Add images",
+    attachFailed:
+      "Could not read the selected images as supported attachments. Nothing was attached.",
+    attachments: "Images to send: {{count}}",
+    attachmentDetail: "{{name}} · {{media}}",
+    attachmentUnnamed: "Unnamed image",
+    attachmentRemove: "Remove",
+    unconfirmedImages:
+      "{{count}} image(s) were part of the unconfirmed message. They will not be sent again while it stays unconfirmed.",
   },
   interactions: {
     approval: "Permission requested",
