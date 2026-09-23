@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import type {
   ConnectionHostId,
+  HostCapabilities,
   SessionId,
   SessionSelection,
   SessionFace,
@@ -173,6 +174,7 @@ interface ConversationFixtureOptions {
   readonly snapshotCursor?: number;
   readonly snapshotHasMore?: boolean;
   readonly pageRecords?: readonly unknown[];
+  readonly fileCapability?: "available" | "unavailable" | "mode" | "fingerprint" | "revision";
 }
 
 const workspaceBranches = {
@@ -334,7 +336,7 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
     hostId: host.options.hostId,
     activationId: "f5292bdb-ebda-41ba-b473-6c587a3c1d02",
   };
-  const capabilities = selectRemoteCapabilities([
+  const capabilities: HostCapabilities["capabilities"][number][] = selectRemoteCapabilities([
     "workspace/follow",
     "session/list",
     "session/control",
@@ -343,7 +345,25 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
     "session/cancel",
     "subagents/list",
     ...(fixture.pageRecords === undefined ? [] : ["session/page" as const]),
-  ]).map((entry) => Object.assign({}, entry, { availability: "available" }));
+  ]).map((entry) => Object.assign({}, entry, { availability: "available" as const }));
+  if (fixture.fileCapability !== undefined) {
+    const [entry] = selectRemoteCapabilities(["fileUploads/upload"]);
+    capabilities.push({
+      ...entry!,
+      ...(fixture.fileCapability === "unavailable"
+        ? { availability: "unavailable" as const, reason: "service" as const }
+        : { availability: "available" as const }),
+      ...(fixture.fileCapability === "mode" ? { mode: "stream" as const } : {}),
+      ...(fixture.fileCapability === "fingerprint"
+        ? { wireFingerprint: `typert-wire-v1:${"0".repeat(64)}` }
+        : {}),
+      ...(fixture.fileCapability === "revision" ? { semanticRevision: 999 } : {}),
+    });
+    capabilities.sort((left, right) => {
+      if (left.endpoint === right.endpoint) return 0;
+      return left.endpoint < right.endpoint ? -1 : 1;
+    });
+  }
   const ids = [brandString<SessionId>("first"), brandString<SessionId>("second")];
   const calls: string[] = [];
   const eventResults: unknown[] = [];
@@ -359,11 +379,17 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
     content: (
       | { type: "text"; text: string }
       | { type: "image"; mediaType: string; data: string; name?: string }
+      | { type: "file"; receiptId: string }
     )[];
   }[] = [];
   let promptReply: (signal: AbortSignal | null | undefined) => Promise<unknown> = async () => ({
     ok: true,
     value: { accepted: true },
+  });
+  const uploads: { agentId: string; request: { data: string; name?: string } }[] = [];
+  let uploadReply: (signal: AbortSignal | null | undefined) => Promise<unknown> = async () => ({
+    ok: true,
+    value: fileUploadValue(),
   });
   function emit(type: string, data: unknown) {
     for (const listener of listeners.get(type) ?? []) {
@@ -413,6 +439,25 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
       case "session/page":
         value = { records: fixture.pageRecords ?? [], hasMore: false };
         break;
+      case "fileUploads/upload": {
+        const frame = z
+          .object({
+            payload: z.object({
+              args: z.object({
+                agentId: z.string(),
+                request: z.object({ data: z.string(), name: z.string().optional() }),
+              }),
+            }),
+          })
+          .parse(JSON.parse(String(init.body)));
+        uploads.push(frame.payload.args);
+        const result = await uploadReply(init.signal);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ type: "server-response", rpcId: request.rpcId, result }),
+        };
+      }
       case "session/prompt": {
         const payload = z
           .object({
@@ -425,6 +470,7 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
                   content: z.array(
                     z.union([
                       z.object({ type: z.literal("text"), text: z.string() }),
+                      z.object({ type: z.literal("file"), receiptId: z.string() }).strict(),
                       z.object({
                         type: z.literal("image"),
                         mediaType: z.string(),
@@ -585,6 +631,10 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
       emit("close", undefined);
     },
     prompts,
+    uploads,
+    replyToUpload(reply: typeof uploadReply) {
+      uploadReply = reply;
+    },
     admitOnReconnect(requestId: string) {
       historyAdmission = requestId;
     },
@@ -1883,4 +1933,454 @@ it("isolates two Hosts and releases unanswered requests when one closes", async 
     await one.dispose();
     await two.dispose();
   }
+});
+
+function fileUploadValue(bytes = 1, name = "safe.txt") {
+  const receiptId: string = crypto.randomUUID();
+  return {
+    receiptId,
+    file: {
+      attachmentId: `sha256:${"a".repeat(64)}`,
+      name,
+      bytes,
+    },
+  };
+}
+function fileDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+async function fileRuntime(fixture: ConversationFixtureOptions = { fileCapability: "available" }) {
+  const host = conversationHost(fixture);
+  const runtime = await createDshHostRuntime(host.options);
+  await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+  const view = runtime.openConversation(host.ids[0], null);
+  await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+  return { host, runtime, view, prompt: view.prompt };
+}
+
+describe("native generic-file receipt ownership", () => {
+  it("does not dispatch for unopened, offline or subagent Session state", async () => {
+    const host = conversationHost({ fileCapability: "available" });
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      expect(await view.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      host.disconnect();
+      await vi.waitFor(() => expect(view.prompt.getSnapshot().availability).toBe("offline"));
+      expect(await view.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      runtime.connection.reconnect();
+      await vi.waitFor(() => expect(view.prompt.getSnapshot().availability).toBe("ready"));
+      // Inject the shared Session's typed subagent observation, not an alternate upload route.
+      const snapshot = view.session.getSnapshot();
+      const read = vi.spyOn(view.session, "getSnapshot").mockReturnValue({
+        ...snapshot,
+        subagent: {
+          address: {
+            parentSessionId: host.ids[1],
+            childSessionId: host.ids[0],
+            mode: "continuable",
+          },
+        },
+      });
+      runtime.connection.reconnect();
+      expect(view.prompt.getSnapshot().fileAvailability).toBe("subagent");
+      expect(await view.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      read.mockRestore();
+      expect(host.uploads).toEqual([]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("rejects duplicate ready receipt identities without prompting or retaining a second authority", async () => {
+    const f = await fileRuntime();
+    try {
+      const value = fileUploadValue();
+      f.host.replyToUpload(async () => ({ ok: true, value }));
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(true);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      expect(f.prompt.getSnapshot().files).toHaveLength(1);
+      expect(f.prompt.getSnapshot().fileUpload.kind).toBe("unknown");
+      expect(await f.prompt.send()).toBe(false);
+      expect(f.prompt.abandonFiles()).toBe(true);
+      expect(f.prompt.getSnapshot().files).toEqual([]);
+      expect(f.host.prompts).toEqual([]);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it("fences synchronous generation loss inside upload dispatch before publishing a result", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToUpload(() => {
+      f.runtime.connection.reconnect();
+      return held.promise;
+    });
+    try {
+      const pending = f.prompt.stageFile({ data: "YQ==" });
+      expect(f.prompt.getSnapshot().fileUpload.kind).toBe("unknown");
+      held.resolve({ ok: true, value: fileUploadValue() });
+      expect(await pending).toBe(false);
+      expect(f.prompt.getSnapshot().files).toEqual([]);
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.host.prompts).toEqual([]);
+    } finally {
+      held.resolve({ ok: true, value: fileUploadValue() });
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each([undefined, "unavailable", "mode", "fingerprint", "revision"] as const)(
+    "keeps basic text and images usable without exact optional admission: %s",
+    async (fileCapability) => {
+      const f = await fileRuntime({ fileCapability });
+      try {
+        expect(f.prompt.getSnapshot().fileAvailability).toBe("unavailable");
+        expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+        f.prompt.setText("ordinary");
+        f.prompt.setImages([{ mediaType: "image/png", data: "iVBORw0KGgo=" }]);
+        expect(await f.prompt.send()).toBe(true);
+        expect(f.host.uploads).toEqual([]);
+        expect(f.host.prompts[0]!.content.map((part) => part.type)).toEqual(["text", "image"]);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "sends receipt-only file parts once, after text and images: mixed=%s",
+    async (mixed) => {
+      const f = await fileRuntime();
+      try {
+        const values = [fileUploadValue(1, "sanitized.txt"), fileUploadValue(0, "empty")];
+        let index = 0;
+        f.host.replyToUpload(async () => ({ ok: true, value: values[index++] }));
+        expect(await f.prompt.stageFile({ data: "YQ==", name: "../original.txt" })).toBe(true);
+        expect(await f.prompt.stageFile({ data: "" })).toBe(true);
+        expect(f.host.prompts).toEqual([]);
+        expect(f.host.uploads).toEqual([
+          { agentId: f.host.ids[0], request: { data: "YQ==", name: "../original.txt" } },
+          { agentId: f.host.ids[0], request: { data: "" } },
+        ]);
+        expect(f.prompt.getSnapshot().files.map((file) => file.name)).toEqual([
+          "sanitized.txt",
+          "empty",
+        ]);
+        expect(JSON.stringify(f.prompt.getSnapshot())).not.toContain(values[0]!.receiptId);
+        const image = { mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+        f.prompt.setText(mixed ? "explain" : " \n ");
+        if (mixed) f.prompt.setImages([image]);
+        expect(await f.prompt.send()).toBe(true);
+        const parts = values.map(({ receiptId }) => ({ type: "file", receiptId }));
+        expect(f.host.prompts[0]!.content).toEqual(
+          mixed
+            ? [{ type: "text", text: "explain" }, { type: "image", ...image }, ...parts]
+            : parts,
+        );
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          text: "",
+          images: [],
+          files: [],
+          canSend: false,
+        });
+        expect(await f.prompt.send()).toBe(false);
+        f.prompt.setText("next revision");
+        expect(await f.prompt.send()).toBe(true);
+        expect(f.host.prompts[1]!.content).toEqual([{ type: "text", text: "next revision" }]);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("rejects invalid inputs locally without blocking an ordinary draft", async () => {
+    const f = await fileRuntime();
+    try {
+      for (const data of ["YQ", "YR==", "YQ==\n", "Y===", "_w=="]) {
+        expect(await f.prompt.stageFile({ data })).toBe(false);
+      }
+      expect(await f.prompt.stageFile({ data: "YQ==", name: "é".repeat(128) })).toBe(false);
+      expect(f.host.uploads).toEqual([]);
+      expect(f.prompt.getSnapshot().fileUpload.kind).toBe("idle");
+      f.prompt.setText("still usable");
+      expect(await f.prompt.send()).toBe(true);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it("coalesces duplicate and reentrant staging but refuses a different pending input", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToUpload(() => held.promise);
+    const input = { data: "YQ==", name: "first" };
+    let reentrant: Promise<boolean> | undefined;
+    const stop = f.prompt.subscribe(() => {
+      if (f.prompt.getSnapshot().fileUpload.kind === "uploading")
+        reentrant = f.prompt.stageFile(input);
+    });
+    try {
+      const pending = f.prompt.stageFile(input);
+      expect(f.prompt.stageFile({ ...input })).toBe(pending);
+      expect(reentrant).toBe(pending);
+      expect(await f.prompt.stageFile({ data: "Yg==", name: "first" })).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==", name: "different" })).toBe(false);
+      expect(await f.prompt.send()).toBe(false);
+      await vi.waitFor(() => expect(f.host.uploads).toHaveLength(1));
+      held.resolve({ ok: true, value: fileUploadValue() });
+      expect(await pending).toBe(true);
+      expect(f.prompt.getSnapshot().files).toHaveLength(1);
+      expect(Object.isFrozen(f.prompt.getSnapshot().files)).toBe(true);
+      expect(Object.isFrozen(f.prompt.getSnapshot().files[0])).toBe(true);
+    } finally {
+      stop();
+      held.resolve({ ok: true, value: fileUploadValue() });
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each(["lost", "error", "receipt", "bytes", "name"])(
+    "keeps dispatched upload %s unknown until explicit local abandonment",
+    async (kind) => {
+      const f = await fileRuntime();
+      try {
+        f.host.replyToUpload(async () => {
+          if (kind === "lost") throw new Error("reply lost after save");
+          if (kind === "error")
+            return {
+              ok: false,
+              error: { code: "gateway/internal", message: "failed", details: {} },
+            };
+          const value = fileUploadValue();
+          if (kind === "receipt") value.receiptId = "not-a-receipt";
+          if (kind === "bytes") value.file.bytes = 2;
+          if (kind === "name") value.file.name = "../unsafe";
+          return { ok: true, value };
+        });
+        f.prompt.setText("whole intent");
+        expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          fileUpload: { kind: "unknown", bytes: 1 },
+          canSend: false,
+        });
+        expect(await f.prompt.send()).toBe(false);
+        expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+        f.runtime.connection.reconnect();
+        await vi.waitFor(() => expect(f.runtime.connection.generation.getSnapshot()).toBeDefined());
+        expect(f.host.uploads).toHaveLength(1);
+        expect(f.host.prompts).toEqual([]);
+        expect(f.prompt.getSnapshot().fileUpload.kind).toBe("unknown");
+        expect(f.prompt.abandonFiles()).toBe(true);
+        f.host.replyToUpload(async () => ({ ok: true, value: fileUploadValue() }));
+        await vi.waitFor(() => expect(f.prompt.getSnapshot().fileAvailability).toBe("ready"));
+        expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(true);
+        expect(f.host.uploads).toHaveLength(2);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("invalidates ready authority on generation loss without silently dropping file intent", async () => {
+    const f = await fileRuntime();
+    try {
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(true);
+      f.runtime.connection.reconnect();
+      expect(f.prompt.getSnapshot().files[0]!.status).toBe("retired");
+      await vi.waitFor(() => expect(f.prompt.getSnapshot().availability).toBe("ready"));
+      f.prompt.setText("no implicit attachment loss");
+      expect(await f.prompt.send()).toBe(false);
+      expect(await f.prompt.stageFile({ data: "Yg==" })).toBe(false);
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.prompt.abandonFiles()).toBe(true);
+      expect(await f.prompt.send()).toBe(true);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each(["abandon", "generation", "view"])(
+    "fences a late upload after %s and keeps the physical gate held",
+    async (loss) => {
+      const f = await fileRuntime();
+      const held = fileDeferred<unknown>();
+      f.host.replyToUpload(() => held.promise);
+      try {
+        const pending = f.prompt.stageFile({ data: "YQ==" });
+        await vi.waitFor(() => expect(f.host.uploads).toHaveLength(1));
+        let active = f.prompt;
+        if (loss === "abandon") expect(f.prompt.abandonFiles()).toBe(true);
+        else if (loss === "generation") {
+          f.runtime.connection.reconnect();
+          await vi.waitFor(() => expect(f.prompt.getSnapshot().fileAvailability).toBe("ready"));
+          expect(f.prompt.getSnapshot().fileUpload.kind).toBe("unknown");
+          expect(f.prompt.abandonFiles()).toBe(true);
+        } else {
+          f.runtime.closeConversation();
+          active = f.runtime.openConversation(f.host.ids[0], null).prompt;
+          await vi.waitFor(() => expect(active.getSnapshot().fileAvailability).toBe("ready"));
+        }
+        expect(await active.stageFile({ data: "Yg==" })).toBe(false);
+        expect(f.host.uploads).toHaveLength(1);
+        held.resolve({ ok: true, value: fileUploadValue() });
+        expect(await pending).toBe(false);
+        expect(active.getSnapshot().files).toEqual([]);
+        f.host.replyToUpload(async () => ({ ok: true, value: fileUploadValue() }));
+        expect(await active.stageFile({ data: "Yg==" })).toBe(true);
+        expect(f.host.uploads).toHaveLength(2);
+        expect(f.host.prompts).toEqual([]);
+      } finally {
+        held.resolve({ ok: true, value: fileUploadValue() });
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("joins an aborted physical upload on runtime disposal", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    let signal: AbortSignal | null | undefined;
+    f.host.replyToUpload((value) => {
+      signal = value;
+      return held.promise;
+    });
+    const pending = f.prompt.stageFile({ data: "YQ==" });
+    await vi.waitFor(() => expect(f.host.uploads).toHaveLength(1));
+    let closed = false;
+    const disposal = f.runtime.dispose().then(() => {
+      closed = true;
+      return undefined;
+    });
+    try {
+      expect(signal?.aborted).toBe(true);
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      held.resolve({ ok: true, value: fileUploadValue() });
+      expect(await pending).toBe(false);
+      await disposal;
+      expect(f.prompt.getSnapshot().files).toEqual([]);
+    } finally {
+      held.resolve({ ok: true, value: fileUploadValue() });
+      await disposal;
+    }
+  });
+
+  it("claims before publication and freezes the whole file draft through a coalesced send", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToPrompt(() => held.promise);
+    const image = { mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+    try {
+      await f.prompt.stageFile({ data: "YQ==" });
+      f.prompt.setText("frozen");
+      f.prompt.setImages([image]);
+      let duplicate: Promise<boolean> | undefined;
+      const stop = f.prompt.subscribe(() => {
+        if (f.prompt.getSnapshot().submission.kind !== "sending") return;
+        expect(f.prompt.getSnapshot().files[0]!.status).toBe("retired");
+        duplicate = f.prompt.send();
+        f.prompt.setText("changed");
+        f.prompt.setImages([]);
+        expect(f.prompt.abandonFiles()).toBe(false);
+      });
+      const pending = f.prompt.send();
+      stop();
+      expect(duplicate).toBe(pending);
+      expect(await f.prompt.stageFile({ data: "Yg==" })).toBe(false);
+      expect(f.prompt.getSnapshot()).toMatchObject({ text: "frozen", images: [image] });
+      await vi.waitFor(() => expect(f.host.prompts).toHaveLength(1));
+      held.resolve({ ok: true, value: { accepted: true } });
+      expect(await pending).toBe(true);
+      expect(f.prompt.getSnapshot()).toMatchObject({ text: "", images: [], files: [] });
+    } finally {
+      held.resolve({ ok: true, value: { accepted: true } });
+      await f.runtime.dispose();
+    }
+  });
+
+  it("retains unusable file metadata after known refusal until explicit abandonment", async () => {
+    const f = await fileRuntime();
+    try {
+      await f.prompt.stageFile({ data: "YQ==" });
+      f.prompt.setText("retained");
+      f.host.replyToPrompt(async () => ({
+        ok: false,
+        error: {
+          code: "session/model-unavailable",
+          message: "no model",
+          details: {},
+        },
+      }));
+      expect(await f.prompt.send()).toBe(false);
+      expect(f.prompt.getSnapshot()).toMatchObject({
+        text: "retained",
+        files: [{ status: "retired" }],
+        submission: { kind: "rejected" },
+        canSend: false,
+      });
+      expect(await f.prompt.send()).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      expect(f.prompt.abandonFiles()).toBe(true);
+      f.host.replyToPrompt(async () => ({ ok: true, value: { accepted: true } }));
+      expect(await f.prompt.send()).toBe(true);
+      expect(f.host.prompts[1]!.content).toEqual([{ type: "text", text: "retained" }]);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each(["lost", "attachment-invalid"])(
+    "reconciles file prompt %s only by exact admission without reuse",
+    async (failure) => {
+      const f = await fileRuntime();
+      try {
+        await f.prompt.stageFile({ data: "YQ==" });
+        f.prompt.setText("frozen intent");
+        f.host.replyToPrompt(async () => {
+          if (failure === "lost") throw new Error("lost accepted reply");
+          return {
+            ok: false,
+            error: {
+              code: "session/attachment-invalid",
+              message: "unknown stage",
+              details: { reason: "FILE_NOT_STAGED" },
+            },
+          };
+        });
+        expect(await f.prompt.send()).toBe(false);
+        expect(f.prompt.getSnapshot().submission.kind).toBe("unknown");
+        expect(f.prompt.abandonFiles()).toBe(false);
+        f.prompt.setText("replacement");
+        f.prompt.setImages([]);
+        expect(f.prompt.getSnapshot().text).toBe("frozen intent");
+        f.host.push(admittedPrompt("unrelated", 1));
+        expect(f.prompt.getSnapshot().submission.kind).toBe("unknown");
+        f.runtime.connection.reconnect();
+        await vi.waitFor(() => expect(f.prompt.getSnapshot().availability).toBe("ready"));
+        expect(await f.prompt.send()).toBe(false);
+        expect(f.prompt.abandonFiles()).toBe(false);
+        f.host.admitOnReconnect(f.host.prompts[0]!.requestId);
+        f.runtime.connection.reconnect();
+        await vi.waitFor(() => expect(f.prompt.getSnapshot().submission.kind).toBe("accepted"));
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          files: [],
+          text: "",
+          images: [],
+          canSend: false,
+        });
+        expect(f.host.uploads).toHaveLength(1);
+        expect(f.host.prompts).toHaveLength(1);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
 });

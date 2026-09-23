@@ -10,6 +10,7 @@ import {
   dshSessionEndpoints,
   dshHistoryEndpoints,
   dshImageEndpoints,
+  dshFileUploadEndpoints,
   dshCreationEndpoints,
   dshRegistrationEndpoints,
   dshSearchEndpoints,
@@ -29,6 +30,7 @@ const rpcPaths = new Set([
     ...dshSessionEndpoints,
     ...dshHistoryEndpoints,
     ...dshImageEndpoints,
+    ...dshFileUploadEndpoints,
     ...dshCreationEndpoints,
     ...dshRegistrationEndpoints,
     ...dshSearchEndpoints,
@@ -48,6 +50,9 @@ function rpcTarget(value: string, socket = false): URL {
   }
   if (
     url.search !== "" ||
+    url.hash !== "" ||
+    value.includes("?") ||
+    value.includes("#") ||
     (socket ? url.pathname !== "/api/remote.mux" : !rpcPaths.has(url.pathname))
   )
     throw new DshAccessError("invalid-origin");

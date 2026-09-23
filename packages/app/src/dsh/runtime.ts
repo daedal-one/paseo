@@ -13,6 +13,7 @@ import { DshForkJournal } from "./fork-journal";
 import { DshSearch } from "./search";
 import { DshHistory } from "./history";
 import { DshImages, DshImageReads } from "./images";
+import { DshFileUploads } from "./files";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -170,6 +171,8 @@ export async function createDshHostRuntime(
     });
     const imageReads = new DshImageReads(context.remote.session);
     context.effect(() => () => imageReads.close());
+    const fileUploads = new DshFileUploads(context.remote.fileUploads);
+    context.effect(() => () => fileUploads.close());
     let current: { view: DshConversation; binding: dsh.ConversationBindingModel } | null = null;
     let closed = false;
     const retiringHistory = new Set<Promise<void>>();
@@ -223,8 +226,14 @@ export async function createDshHostRuntime(
             connection,
             () => context.remote.$host.capabilities,
           ),
-          prompt: new DshPrompt(source, connection, () =>
-            brandString<dsh.SessionRequestId>(options.randomId()),
+          prompt: new DshPrompt(
+            source,
+            connection,
+            () => brandString<dsh.SessionRequestId>(options.randomId()),
+            {
+              capabilities: () => context.remote.$host.capabilities,
+              start: (request) => fileUploads.start(id, request),
+            },
           ),
         };
         releaseConversation();
@@ -240,6 +249,7 @@ export async function createDshHostRuntime(
         imageReads.close();
         releaseConversation();
         await Promise.all([
+          fileUploads.close(),
           ownedFork.dispose(),
           ownedSearch.dispose(),
           ownedRegistration.dispose(),

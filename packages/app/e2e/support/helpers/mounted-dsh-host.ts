@@ -101,7 +101,7 @@ function markerApprovalPolicy(cwd: string): string {
  * Playwright transpiles support helpers without their source directory, so locate the companion
  * checkout by walking up from the runner's working directory instead of trusting __dirname.
  */
-function companionRepoRoot(): string {
+export function companionRepoRoot(): string {
   if (process.env.DAEDAL_REPO_ROOT) return process.env.DAEDAL_REPO_ROOT;
   let current = process.cwd();
   for (let depth = 0; depth < 8; depth += 1) {
@@ -354,6 +354,25 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
         const digest = imageObjectIdSchema.parse(id).slice("sha256:".length);
         return readFile(
           path.join(home, "attachments", "v1", "objects", digest.slice(0, 2), digest),
+        );
+      },
+      /** Generic files live in a different verbatim object namespace from normalized images. */
+      async fileObjectIds() {
+        const objects = path.join(home, "attachments", "v1", "file-objects");
+        if (!existsSync(objects)) return [];
+        const entries = await readdir(objects, { recursive: true });
+        return entries
+          .filter((entry) => {
+            const parsed = path.parse(entry);
+            return parsed.dir === parsed.base.slice(0, 2) && /^[a-f0-9]{64}$/.test(parsed.base);
+          })
+          .map((entry) => `sha256:${path.basename(entry)}`)
+          .sort();
+      },
+      async readFileObject(id: string) {
+        const digest = imageObjectIdSchema.parse(id).slice("sha256:".length);
+        return readFile(
+          path.join(home, "attachments", "v1", "file-objects", digest.slice(0, 2), digest),
         );
       },
       close: closeProcess,

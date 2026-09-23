@@ -18,6 +18,11 @@ import {
 } from "../support/helpers/mounted-dsh-host";
 
 import { detectPromptImageMediaType } from "../../src/dsh/ui/prompt-image-bytes";
+import {
+  closeMountedDshOwner,
+  openMountedDshOwner,
+  type MountedDshOwner,
+} from "../support/helpers/mounted-dsh-runtime";
 
 const WIDTHS = [390, 1280];
 
@@ -72,6 +77,83 @@ const imagePromptSchema = z.object({
     }),
   }),
 });
+
+const genericFileRefSchema = z
+  .object({
+    attachmentId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    name: z.string(),
+    bytes: z.number().int().nonnegative(),
+  })
+  .strict();
+const genericFileReceiptSchema = z.object({
+  receiptId: z.string().min(1),
+  file: genericFileRefSchema,
+});
+const genericFileUploadSchema = z.object({
+  rpcId: z.string(),
+  payload: z.object({
+    args: z.object({
+      agentId: z.string(),
+      request: z.object({ data: z.string(), name: z.string() }),
+    }),
+  }),
+});
+const genericFileReplySchema = z.object({
+  rpcId: z.string(),
+  result: z.object({ ok: z.literal(true), value: genericFileReceiptSchema }),
+});
+const genericFilePromptSchema = z.object({
+  payload: z.object({
+    args: z.object({
+      request: z.object({
+        sessionId: z.string(),
+        requestId: z.string(),
+        mode: z.literal("queue"),
+        content: z.array(
+          z.discriminatedUnion("type", [
+            z.object({ type: z.literal("text"), text: z.string() }),
+            z.object({
+              type: z.literal("image"),
+              mediaType: z.literal("image/png"),
+              data: z.string(),
+              name: z.string(),
+            }),
+            z.object({ type: z.literal("file"), receiptId: z.string() }).strict(),
+          ]),
+        ),
+      }),
+    }),
+  }),
+});
+const genericFileMessageSchema = imageMessageIdentity.extend({
+  seq: z.number().int(),
+  data: z.object({
+    source: z.object({ kind: z.literal("user"), rpcId: z.string() }),
+    content: z.array(
+      z.discriminatedUnion("type", [
+        z.object({ type: z.literal("text"), text: z.string() }),
+        z.object({ type: z.literal("image"), attachment: imageRefSchema }),
+        z.object({ type: z.literal("file"), attachment: genericFileRefSchema }),
+      ]),
+    ),
+  }),
+});
+
+/** Select by user source alone, then validate every candidate instead of hiding malformed files. */
+function genericFileMessages(rows: unknown[]) {
+  return rows
+    .filter((row) => imageMessageIdentity.safeParse(row).success)
+    .map((row) => genericFileMessageSchema.parse(row));
+}
+
+async function expectGenericFileMetadata(page: Page, refs: z.infer<typeof genericFileRefSchema>[]) {
+  const blocks = page.getByTestId("dsh-block-file");
+  await expect(blocks).toHaveCount(refs.length);
+  for (const [index, ref] of refs.entries())
+    await expect(blocks.nth(index)).toContainText(`${ref.name} · ${ref.bytes} bytes`);
+  await expect(page.getByText("PONG", { exact: true }).first()).toBeVisible();
+  await expectReachableComposer(page);
+}
 
 function imageMessages(rows: unknown[]) {
   return rows
@@ -1876,6 +1958,317 @@ test.describe("mounted native DSH workspace provenance compatibility", () => {
       } finally {
         await freshContext.close();
         await host.close();
+      }
+    });
+  }
+});
+
+function readMountedFileAvailability(owner: MountedDshOwner) {
+  return owner.evaluate((value) => value.prompt.getSnapshot().fileAvailability);
+}
+
+function readMountedGeneration(owner: MountedDshOwner) {
+  return owner.evaluate((value) => value.generation());
+}
+
+function readMountedSubmissionKind(owner: MountedDshOwner) {
+  return owner.evaluate((value) => value.prompt.getSnapshot().submission.kind);
+}
+
+/** Executes the product owner through a test-only JSHandle; no file-selection UI is enabled. */
+test.describe("mounted native DSH generic file owner", () => {
+  for (const scenario of [
+    { width: 390, mixed: false },
+    { width: 1280, mixed: true },
+  ]) {
+    test(`abandons an unknown upload before a new ${scenario.mixed ? "mixed" : "file-only"} operation at ${scenario.width}px`, async ({
+      page,
+      context,
+      browser,
+    }, testInfo) => {
+      test.setTimeout(180_000);
+      const host = await launchMountedDshHost();
+      const freshContext = await browser.newContext({
+        viewport: { width: scenario.width, height: 844 },
+      });
+      const mutations: Request[] = [];
+      const errors: string[] = [];
+      let owner: MountedDshOwner | undefined;
+      const acceptedUploads: {
+        request: z.infer<typeof genericFileUploadSchema>;
+        receipt: z.infer<typeof genericFileReceiptSchema>;
+      }[] = [];
+      const bytes = [
+        Buffer.from([0, 1, 255, 128, 10, 13, 65]),
+        Buffer.from("second verbatim file\n", "utf8"),
+      ];
+      const files = bytes.map((data, index) => ({
+        data: data.toString("base64"),
+        name: index === 0 ? "first-note.bin" : "second-note.dat",
+      }));
+      const expectedRefs = bytes.map((data, index) => ({
+        attachmentId: `sha256:${createHash("sha256").update(data).digest("hex")}`,
+        name: files[index]!.name,
+        bytes: data.length,
+      }));
+      try {
+        const image = {
+          mediaType: "image/png" as const,
+          data: (await readFile(mountedDshImageFixturePaths().light)).toString("base64"),
+          name: "mixed-image.png",
+        };
+        await page.setViewportSize({ width: scenario.width, height: 844 });
+        await attachDshSession(context, host.config);
+        await attachDshSession(freshContext, host.config);
+        observeWorkspaceMutations(page, mutations);
+        page.on("pageerror", (error) => errors.push(error.message));
+        const clientIds = observeClientIds(page);
+        await page.route("**/api/fileUploads/upload", async (route) => {
+          const request = genericFileUploadSchema.parse(route.request().postDataJSON());
+          // Forward exactly once to the real Host. Only its first accepted reply is lost.
+          const response = await route.fetch();
+          expect(response.status()).toBe(200);
+          const reply = genericFileReplySchema.parse(await response.json());
+          expect(reply.rpcId).toBe(request.rpcId);
+          acceptedUploads.push({ request, receipt: reply.result.value });
+          if (acceptedUploads.length === 1) await route.abort("failed");
+          else await route.fulfill({ response });
+        });
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await createHostSession(page, host.workspaceDir);
+        const sessionId = await openOnlySession(page, host.companionUrl);
+        owner = await openMountedDshOwner(page, sessionId);
+        await owner.evaluate(
+          (value, draft) => {
+            value.prompt.setText(draft.text);
+            value.prompt.setImages(draft.images);
+          },
+          { text: scenario.mixed ? host.prompt : "", images: scenario.mixed ? [image] : [] },
+        );
+        await expect.poll(() => readMountedFileAvailability(owner!)).toBe("ready");
+        expect(await owner.evaluate((value, file) => value.prompt.stageFile(file), files[0]!)).toBe(
+          false,
+        );
+        const unknown = await owner.evaluate((value) => value.prompt.getSnapshot());
+        expect(unknown.fileUpload).toEqual({
+          kind: "unknown",
+          bytes: bytes[0]!.length,
+          name: files[0]!.name,
+        });
+        expect(unknown.files).toEqual([]);
+        expect(unknown.canSend).toBe(false);
+        expect(acceptedUploads).toHaveLength(1);
+        expect(acceptedUploads[0]!.receipt.file).toEqual(expectedRefs[0]);
+        expect(await host.readFileObject(expectedRefs[0]!.attachmentId)).toEqual(bytes[0]);
+        expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+          "/api/session/create",
+          "/api/fileUploads/upload",
+        ]);
+        const generationBefore = z
+          .number()
+          .parse(await owner.evaluate((value) => value.generation()));
+        await owner.evaluate((value) => value.reconnect());
+        await expect.poll(() => readMountedGeneration(owner!)).toBeGreaterThan(generationBefore);
+        await expect.poll(() => readMountedFileAvailability(owner!)).toBe("ready");
+        const afterReconnect = await owner.evaluate((value) => value.prompt.getSnapshot());
+        const generationAfter = z
+          .number()
+          .parse(await owner.evaluate((value) => value.generation()));
+        expect(generationAfter).toBeGreaterThan(generationBefore);
+        expect(afterReconnect.fileUpload).toEqual(unknown.fileUpload);
+        expect(afterReconnect.files).toEqual([]);
+        expect(afterReconnect.canSend).toBe(false);
+        expect(acceptedUploads).toHaveLength(1);
+        expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+          "/api/session/create",
+          "/api/fileUploads/upload",
+        ]);
+        const unpromptedLog = await host.readSessionLog();
+        expect(genericFileMessages(unpromptedLog.rows)).toEqual([]);
+        expect(completedTurnCount(unpromptedLog.rows)).toBe(0);
+
+        // This abandons uncertainty. The following explicit stage call is a NEW operation,
+        // not retry/recovery, and the lost receipt is never handed back to the product owner.
+        expect(await owner.evaluate((value) => value.prompt.abandonFiles())).toBe(true);
+        expect(await owner.evaluate((value) => value.prompt.getSnapshot().fileUpload)).toEqual({
+          kind: "idle",
+        });
+        expect(await owner.evaluate((value, file) => value.prompt.stageFile(file), files[0]!)).toBe(
+          true,
+        );
+        expect(await owner.evaluate((value, file) => value.prompt.stageFile(file), files[1]!)).toBe(
+          true,
+        );
+        expect(acceptedUploads).toHaveLength(3);
+        expect(new Set(acceptedUploads.map((upload) => upload.receipt.receiptId)).size).toBe(3);
+        expect(acceptedUploads.map((upload) => upload.request.payload.args.agentId)).toEqual([
+          sessionId,
+          sessionId,
+          sessionId,
+        ]);
+        expect(acceptedUploads.map((upload) => upload.request.payload.args.request)).toEqual([
+          files[0],
+          files[0],
+          files[1],
+        ]);
+        expect(acceptedUploads.map((upload) => upload.receipt.file)).toEqual([
+          expectedRefs[0],
+          expectedRefs[0],
+          expectedRefs[1],
+        ]);
+        const staged = await owner.evaluate((value) => value.prompt.getSnapshot());
+        expect(staged.files).toEqual(expectedRefs.map((ref) => ({ ...ref, status: "ready" })));
+        expect(staged.canSend).toBe(true);
+        for (const upload of acceptedUploads)
+          expect(JSON.stringify(staged)).not.toContain(upload.receipt.receiptId);
+        expect(await owner.evaluate((value) => value.prompt.send())).toBe(true);
+        await expect.poll(() => readMountedSubmissionKind(owner!)).toBe("accepted");
+        const accepted = await owner.evaluate((value) => value.prompt.getSnapshot());
+        expect(accepted.files).toEqual([]);
+        expect(accepted.fileUpload).toEqual({ kind: "idle" });
+        expect(accepted.canSend).toBe(false);
+        await expectGenericFileMetadata(page, expectedRefs);
+        const promptRequests = mutations.filter(
+          (request) => new URL(request.url()).pathname === "/api/session/prompt",
+        );
+        expect(promptRequests).toHaveLength(1);
+        const prompt = genericFilePromptSchema.parse(promptRequests[0]!.postDataJSON()).payload.args
+          .request;
+        expect(prompt.sessionId).toBe(sessionId);
+        expect(prompt.content).toEqual([
+          ...(scenario.mixed
+            ? [
+                { type: "text", text: host.prompt },
+                { type: "image", ...image },
+              ]
+            : []),
+          ...acceptedUploads
+            .slice(1)
+            .map((upload) => ({ type: "file", receiptId: upload.receipt.receiptId })),
+        ]);
+        expect(JSON.stringify(prompt)).not.toContain(acceptedUploads[0]!.receipt.receiptId);
+        await expect
+          .poll(async () => completedTurnCount((await host.readSessionLog()).rows))
+          .toBe(1);
+        const log = await host.readSessionLog();
+        expect(log.sessionId).toBe(sessionId);
+        const messages = genericFileMessages(log.rows);
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.data.source.rpcId).toBe(prompt.requestId);
+        expect(messages[0]!.data.content.map((block) => block.type)).toEqual(
+          scenario.mixed ? ["text", "image", "file", "file"] : ["file", "file"],
+        );
+        expect(messages[0]!.data.content.filter((block) => block.type === "file")).toEqual(
+          expectedRefs.map((attachment) => ({ type: "file", attachment })),
+        );
+        expect(messages[0]!.data.content.filter((block) => block.type === "text")).toEqual(
+          scenario.mixed ? [{ type: "text", text: host.prompt }] : [],
+        );
+        const ends = log.rows
+          .filter((row) => turnEndIdentity.safeParse(row).success)
+          .map((row) => turnEndSchema.parse(row));
+        expect(ends).toHaveLength(1);
+        expect(ends[0]!.seq).toBeGreaterThan(messages[0]!.seq);
+        expect(await host.fileObjectIds()).toEqual(
+          expectedRefs.map((ref) => ref.attachmentId).sort(),
+        );
+        for (const [index, ref] of expectedRefs.entries()) {
+          const stored = await host.readFileObject(ref.attachmentId);
+          expect(stored).toEqual(bytes[index]);
+          expect(`sha256:${createHash("sha256").update(stored).digest("hex")}`).toBe(
+            ref.attachmentId,
+          );
+        }
+        await page.screenshot({
+          path: testInfo.outputPath(`generic-file-owner-${scenario.width}-live.png`),
+        });
+        await closeMountedDshOwner(owner);
+        owner = undefined;
+        const beforeReloadClientIds = [...clientIds];
+        await page.reload();
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+        await expectGenericFileMetadata(page, expectedRefs);
+        const reloadedClientId = z.string().min(1).parse(clientIds.at(-1));
+        expect(beforeReloadClientIds).not.toContain(reloadedClientId);
+        await page.screenshot({
+          path: testInfo.outputPath(`generic-file-owner-${scenario.width}-reloaded.png`),
+        });
+        const fresh = await freshContext.newPage();
+        const freshClientIds = observeClientIds(fresh);
+        observeWorkspaceMutations(fresh, mutations);
+        fresh.on("pageerror", (error) => errors.push(error.message));
+        expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+        await expectGenericFileMetadata(fresh, expectedRefs);
+        const freshClientId = z.string().min(1).parse(freshClientIds.at(-1));
+        expect(clientIds).not.toContain(freshClientId);
+        const paths = mutations.map((request) => new URL(request.url()).pathname);
+        expect(paths).toEqual([
+          "/api/session/create",
+          "/api/fileUploads/upload",
+          "/api/fileUploads/upload",
+          "/api/fileUploads/upload",
+          "/api/session/prompt",
+        ]);
+        const finalLog = await host.readSessionLog();
+        expect(genericFileMessages(finalLog.rows)).toEqual(messages);
+        expect(completedTurnCount(finalLog.rows)).toBe(1);
+        expect(await host.fileObjectIds()).toEqual(
+          expectedRefs.map((ref) => ref.attachmentId).sort(),
+        );
+        await fresh.screenshot({
+          path: testInfo.outputPath(`generic-file-owner-${scenario.width}-fresh.png`),
+        });
+        const artifact = testInfo.outputPath(`generic-file-owner-${scenario.width}.json`);
+        await writeFile(
+          artifact,
+          JSON.stringify({
+            width: scenario.width,
+            mixed: scenario.mixed,
+            sessionId,
+            requestId: prompt.requestId,
+            clientIds,
+            freshClientIds,
+            reloadedClientId,
+            freshClientId,
+            generationBefore,
+            generationAfter,
+            unknown,
+            afterReconnect,
+            staged,
+            accepted,
+            acceptedUploads,
+            prompt,
+            messages,
+            completedTurns: ends,
+            objects: expectedRefs,
+            mutations: paths,
+            counts: {
+              creations: 1,
+              uploads: acceptedUploads.length,
+              prompts: promptRequests.length,
+              humanMessages: messages.length,
+              completedTurns: ends.length,
+              genericObjects: expectedRefs.length,
+              cancelledPrompts: paths.filter((value) => value === "/api/session/cancel").length,
+            },
+            boundary:
+              "Test-only JSHandle executes the actual product file owner and authenticated browser transport. The production app renders real Host metadata. No file picker UI, streaming upload, lost-prompt-reply browser recovery, Host restart, or recovered receipt authority is qualified. Post-abandon staging is an explicit new upload operation.",
+          }),
+        );
+        await testInfo.attach("generic-file-owner", {
+          path: artifact,
+          contentType: "application/json",
+        });
+        expect(errors).toEqual([]);
+      } finally {
+        try {
+          if (owner !== undefined) await closeMountedDshOwner(owner);
+        } finally {
+          await freshContext.close();
+          await host.close();
+        }
       }
     });
   }

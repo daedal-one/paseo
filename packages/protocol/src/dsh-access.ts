@@ -185,6 +185,9 @@ export const dshHistoryEndpoints = ["session/page", "session/historyDetail"] as 
 /** Optional authenticated image reads; never required for basic Session admission. */
 export const dshImageEndpoints = ["session/attachment"] as const;
 
+/** Optional generic-file staging; never required for basic Session admission. */
+export const dshFileUploadEndpoints = ["fileUploads/upload"] as const;
+
 /** Optional native Workspace registration and explicit current-state lookup. */
 export const dshRegistrationEndpoints = ["workspace/create", "workspace/resolveByPath"] as const;
 
