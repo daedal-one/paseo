@@ -1,6 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Page, Route } from "@playwright/test";
+import type { APIRequestContext, Page, Request, Route } from "@playwright/test";
 import { z } from "zod";
 import { expect, metroTest as test } from "../support/fixtures";
 import {
@@ -10,9 +11,320 @@ import {
   attachDshSession,
   createHostSession,
   launchMountedDshHost,
+  mountedDshImageFixturePaths,
 } from "../support/helpers/mounted-dsh-host";
 
+import { detectPromptImageMediaType } from "../../src/dsh/ui/prompt-image-bytes";
+
 const WIDTHS = [390, 1280];
+
+const imageRefSchema = z.object({
+  attachmentId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  mediaType: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  bytes: z.number().int().positive(),
+  name: z.string(),
+});
+// Native user/message also carries plugin context. Count every actual user-source message,
+// then strictly validate its identity and content (never select by the expected image shape).
+const imageMessageIdentity = z.object({
+  type: z.literal("user/message"),
+  data: z.object({ source: z.object({ kind: z.literal("user") }) }),
+});
+const imageMessageSchema = imageMessageIdentity.extend({
+  seq: z.number(),
+  data: z.object({
+    source: z.object({ kind: z.literal("user"), rpcId: z.string() }),
+    content: z.tuple([
+      z.object({ type: z.literal("text"), text: z.string() }),
+      z.object({ type: z.literal("image"), attachment: imageRefSchema }),
+      z.object({ type: z.literal("image"), attachment: imageRefSchema }),
+    ]),
+  }),
+});
+const imagePromptSchema = z.object({
+  payload: z.object({
+    args: z.object({
+      request: z.object({
+        sessionId: z.string(),
+        requestId: z.string(),
+        mode: z.literal("queue"),
+        content: z.tuple([
+          z.object({ type: z.literal("text"), text: z.string() }),
+          z.object({
+            type: z.literal("image"),
+            mediaType: z.literal("image/png"),
+            data: z.string(),
+            name: z.string(),
+          }),
+          z.object({
+            type: z.literal("image"),
+            mediaType: z.literal("image/png"),
+            data: z.string(),
+            name: z.string(),
+          }),
+        ]),
+      }),
+    }),
+  }),
+});
+
+function imageMessages(rows: unknown[]) {
+  return rows
+    .filter((row) => imageMessageIdentity.safeParse(row).success)
+    .map((row) => imageMessageSchema.parse(row));
+}
+function observeImageMutations(page: Page, requests: Request[]) {
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      request.method() === "POST" &&
+      (pathname === "/api/session/prompt" || /fileUploads|uploadFile/.test(pathname))
+    )
+      requests.push(request);
+  });
+}
+interface PickerFile {
+  name: string;
+  mimeType: string;
+  buffer: Buffer;
+}
+async function selectImages(page: Page, files: PickerFile[]) {
+  const attach = page.getByTestId("dsh-prompt-attach");
+  await expect(attach).toBeEnabled();
+  const pending = page.waitForEvent("filechooser");
+  await attach.click();
+  const chooser = await pending;
+  expect(chooser.isMultiple()).toBe(true);
+  await chooser.setFiles(files);
+  await expect(attach).toBeEnabled();
+}
+async function expectImageChips(page: Page, names: string[]) {
+  const chips = page.getByTestId("dsh-prompt-attachment");
+  await expect(chips).toHaveCount(names.length);
+  for (const [index, name] of names.entries())
+    await expect(chips.nth(index)).toContainText(`${name} · image/png`);
+}
+async function expectImageTranscript(page: Page, refs: z.infer<typeof imageRefSchema>[]) {
+  const blocks = page.getByTestId("dsh-block-image");
+  await expect(blocks).toHaveCount(refs.length);
+  for (const [index, ref] of refs.entries()) {
+    await expect(blocks.nth(index)).toContainText(
+      `${ref.name} · ${ref.mediaType} · ${ref.width}×${ref.height} · ${ref.bytes} bytes`,
+    );
+  }
+}
+async function readBackImage(
+  request: APIRequestContext,
+  origin: string,
+  sessionId: string,
+  ref: z.infer<typeof imageRefSchema>,
+) {
+  const rpcId = `read-${ref.attachmentId}`;
+  const response = await request.post(`${origin}/api/session/attachment`, {
+    data: {
+      type: "client-request",
+      rpcId,
+      method: "session/attachment",
+      payload: { args: { request: { sessionId, attachmentId: ref.attachmentId } } },
+    },
+  });
+  expect(response.status()).toBe(200);
+  const body = z
+    .object({
+      type: z.literal("server-response"),
+      rpcId: z.literal(rpcId),
+      result: z.object({
+        ok: z.literal(true),
+        value: z.object({ attachment: imageRefSchema, data: z.string() }),
+      }),
+    })
+    .parse(await response.json());
+  expect(body.result.value.attachment).toEqual(ref);
+  const bytes = Buffer.from(body.result.value.data, "base64");
+  expect(bytes.length).toBe(ref.bytes);
+  expect(`sha256:${createHash("sha256").update(bytes).digest("hex")}`).toBe(ref.attachmentId);
+  expect(detectPromptImageMediaType(body.result.value.data)).toBe(ref.mediaType);
+  return {
+    attachment: body.result.value.attachment,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes: bytes.length,
+  };
+}
+
+test.describe("mounted native DSH image admission", () => {
+  for (const width of WIDTHS) {
+    test(`persists actual picker images without partial selection or replay at ${width}px`, async ({
+      page,
+      context,
+      browser,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      const host = await launchMountedDshHost();
+      const freshContext = await browser.newContext({ viewport: { width, height: 844 } });
+      try {
+        await page.setViewportSize({ width, height: 844 });
+        await attachDshSession(context, host.config);
+        await attachDshSession(freshContext, host.config);
+        const mutations: Request[] = [];
+        observeImageMutations(page, mutations);
+        const clients = observeClientIds(page);
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await createHostSession(page, host.workspaceDir);
+        const sessionId = await openOnlySession(page, host.companionUrl);
+        await page.getByTestId("dsh-prompt-text").fill(host.prompt);
+        const paths = mountedDshImageFixturePaths();
+        const first = {
+          name: "misnamed.jpeg",
+          mimeType: "image/jpeg",
+          buffer: await readFile(paths.light),
+        };
+        const second = {
+          name: "second.png",
+          mimeType: "image/png",
+          buffer: await readFile(paths.dark),
+        };
+        await selectImages(page, [first, second]);
+        await expectImageChips(page, [first.name, second.name]);
+        const abandonedChoice = page.waitForEvent("filechooser");
+        await page.getByTestId("dsh-prompt-attach").click();
+        const abandoned = await abandonedChoice;
+        await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+        await page.getByTestId("dsh-prompt-discard-selection").click();
+        await expect(page.getByTestId("dsh-prompt-send")).toBeEnabled();
+        // Deliver a controlled late picker result, not a claimed OS-dialog cancellation.
+        await abandoned.setFiles([first]);
+        await expect(page.getByTestId("file-input")).toHaveCount(0);
+        await expectImageChips(page, [first.name, second.name]);
+        await page.getByTestId("dsh-prompt-attachment-remove").first().click();
+        await expectImageChips(page, [second.name]);
+        const svg = {
+          name: "unsupported.svg",
+          mimeType: "image/svg+xml",
+          buffer: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="red"/></svg>',
+          ),
+        };
+        await selectImages(page, [first, svg]);
+        await expect(page.getByTestId("dsh-prompt-attach-failed")).toBeVisible();
+        await expectImageChips(page, [second.name]);
+        await expect(page.getByTestId("dsh-prompt-text")).toHaveValue(host.prompt);
+        expect(mutations).toHaveLength(0);
+        expect(await host.imageObjectIds()).toEqual([]);
+        await page.screenshot({
+          path: testInfo.outputPath(`images-rejected-selection-${width}.png`),
+          fullPage: true,
+        });
+        await selectImages(page, [first]);
+        await expect(page.getByTestId("dsh-prompt-attach-failed")).toHaveCount(0);
+        await expectImageChips(page, [second.name, first.name]);
+        expect(mutations).toHaveLength(0);
+        expect(await host.imageObjectIds()).toEqual([]);
+        await expectReachableComposer(page);
+        await page.screenshot({
+          path: testInfo.outputPath(`images-selected-${width}.png`),
+          fullPage: true,
+        });
+        await page.getByTestId("dsh-prompt-send").click();
+        await expect(page.getByText("PONG", { exact: true })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(0);
+        expect(mutations).toHaveLength(1);
+        expect(new URL(mutations[0]!.url()).pathname).toBe("/api/session/prompt");
+        const wire = imagePromptSchema.parse(mutations[0]!.postDataJSON()).payload.args.request;
+        expect(wire.sessionId).toBe(sessionId);
+        expect(wire.content).toEqual([
+          { type: "text", text: host.prompt },
+          {
+            type: "image",
+            mediaType: "image/png",
+            data: second.buffer.toString("base64"),
+            name: second.name,
+          },
+          {
+            type: "image",
+            mediaType: "image/png",
+            data: first.buffer.toString("base64"),
+            name: first.name,
+          },
+        ]);
+        await expect
+          .poll(async () => completedTurnCount((await host.readSessionLog()).rows))
+          .toBe(1);
+        const log = await host.readSessionLog();
+        expect(log.sessionId).toBe(sessionId);
+        const messages = imageMessages(log.rows);
+        expect(messages).toHaveLength(1);
+        const ends = log.rows
+          .filter((row) => turnEndIdentity.safeParse(row).success)
+          .map((row) => turnEndSchema.parse(row));
+        expect(ends).toHaveLength(1);
+        expect(ends[0]!.seq).toBeGreaterThan(messages[0]!.seq);
+        expect(messages[0]!.data.source.rpcId).toBe(wire.requestId);
+        expect(messages[0]!.data.content[0]).toEqual({ type: "text", text: host.prompt });
+        const refs = [
+          messages[0]!.data.content[1].attachment,
+          messages[0]!.data.content[2].attachment,
+        ];
+        expect(refs.map((ref) => ref.name)).toEqual([second.name, first.name]);
+        expect(new Set(refs.map((ref) => ref.attachmentId)).size).toBe(2);
+        expect(await host.imageObjectIds()).toEqual(refs.map((ref) => ref.attachmentId).sort());
+        for (const ref of refs) {
+          const stored = await host.readImageObject(ref.attachmentId);
+          expect(stored.length).toBe(ref.bytes);
+          expect(`sha256:${createHash("sha256").update(stored).digest("hex")}`).toBe(
+            ref.attachmentId,
+          );
+          expect(detectPromptImageMediaType(stored.toString("base64"))).toBe(ref.mediaType);
+        }
+        await expectImageTranscript(page, refs);
+        const previousClient = clients.at(-1);
+        expect(previousClient).not.toBeUndefined();
+        expect(await openOnlySession(page, host.companionUrl)).toBe(sessionId);
+        await expect.poll(() => clients.at(-1)).not.toBe(previousClient);
+        await expectImageTranscript(page, refs);
+        const fresh = await freshContext.newPage();
+        observeImageMutations(fresh, mutations);
+        expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+        await expectImageTranscript(fresh, refs);
+        const readbacks = [];
+        for (const ref of refs)
+          readbacks.push(
+            await readBackImage(freshContext.request, host.config.url, sessionId, ref),
+          );
+        expect(imageMessages((await host.readSessionLog()).rows)).toEqual(messages);
+        expect(await host.imageObjectIds()).toEqual(refs.map((ref) => ref.attachmentId).sort());
+        expect(mutations).toHaveLength(1);
+        await expectReachableComposer(fresh);
+        await fresh.screenshot({
+          path: testInfo.outputPath(`images-restored-${width}.png`),
+          fullPage: true,
+        });
+        const artifact = testInfo.outputPath(`durable-images-${width}.json`);
+        await writeFile(
+          artifact,
+          JSON.stringify({
+            sessionId,
+            requestId: wire.requestId,
+            messages,
+            completedTurn: ends[0],
+            readbacks,
+            browserMutationAttempts: mutations.length,
+            clientIds: clients,
+          }),
+        );
+        await testInfo.attach("durable-image-admission", {
+          path: artifact,
+          contentType: "application/json",
+        });
+      } finally {
+        await freshContext.close();
+        await host.close();
+      }
+    });
+  }
+});
 
 async function openOnlySession(page: Page, url: string): Promise<string> {
   await page.goto(url);

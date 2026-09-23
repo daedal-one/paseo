@@ -58,6 +58,16 @@ function companionRepoRoot(): string {
   throw new Error("Could not locate the companion checkout for the mounted DSH preview");
 }
 
+export function mountedDshImageFixturePaths() {
+  const root = companionRepoRoot();
+  return {
+    light: path.join(root, "packages", "app", "assets", "images", "favicon-light.png"),
+    dark: path.join(root, "packages", "app", "assets", "images", "favicon-dark.png"),
+  };
+}
+
+const imageObjectIdSchema = z.string().regex(/^sha256:([a-f0-9]{64})$/);
+
 interface MountedDshHostOptions {
   fixture?: string;
   /** Hold a real model turn until teardown so queue assertions need no timing window. */
@@ -241,6 +251,28 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       },
       async readMarker() {
         return existsSync(marker) ? readFile(marker, "utf8") : null;
+      },
+      async imageObjectIds() {
+        const objects = path.join(home, "attachments", "v1", "objects");
+        if (!existsSync(objects)) return [];
+        const entries = await readdir(objects, { recursive: true });
+        return entries
+          .filter((entry) => {
+            const parsed = path.parse(entry);
+            return (
+              parsed.dir === parsed.base.slice(0, 2) &&
+              /^[a-f0-9]{64}$/.test(parsed.base) &&
+              parsed.dir.length === 2
+            );
+          })
+          .map((entry) => `sha256:${path.basename(entry)}`)
+          .sort();
+      },
+      async readImageObject(id: string) {
+        const digest = imageObjectIdSchema.parse(id).slice("sha256:".length);
+        return readFile(
+          path.join(home, "attachments", "v1", "objects", digest.slice(0, 2), digest),
+        );
       },
       close: closeProcess,
     };

@@ -160,6 +160,22 @@ Winner reload observes a new remote-event client identity. It and a fresh reader
 
 The production Web export, full workspace types/lint, formatting and spec lint pass. Initial fixture insertion and type-style mistakes were corrected; an immediate disk assertion was replaced by bounded observation of the actual persisted events because live waterfall delivery precedes the Host's write-behind flush. No fixed delay or synthesized sequence was added. Approval reply loss, automatic reconnect timing, timeout/cancellation, other waterfall overlaps, Host restart and physical devices remain separate gates. Phase 4 is not complete; no source publication, deployment or TestFlight upload occurred.
 
+## Native image selection and admission increment
+
+Qualify the existing native image picker and inline image prompt contract without introducing a second upload route. Selection must be atomic: if any selected asset cannot be read as an admitted image, show the existing visible failure and preserve the prior draft instead of silently sending a partial selection. Prevent send while the picker is resolving, so an in-flight selection cannot be omitted from a concurrent send. Preserve byte-derived media types, names, order, remove/cancel behavior and unknown-admission no-replay guards.
+
+A picker whose platform callback never arrives must not trap a valid draft behind the send guard. Provide an explicit local Discard image selection action: retain the prior draft, issue no RPC and invalidate the pending selection. Late success, failure and finalization must not change a newer selection or another model/view. This does not claim to cancel an OS dialog, upload or Host operation, and must not release an unknown Host admission.
+
+Use the actual production-browser picker and real isolated Host to verify image bytes become durable Host-owned attachment references on explicit send, with no upload during selection or removal. Confirm transcript metadata and cold-reader behavior without resubmission. Generic file receipts/upload admission, image preview/download, native device execution and whole-phase/platform/release gates remain separate work.
+
+### Native image qualification
+
+Twenty focused image/composer unit cases and two actual production-browser cases at 390px and 1280px pass. The cold Expo picker reads real PNG files, including mismatched reported JPEG MIME/name; chips and prompt content retain byte-derived PNG type, exact names and order. Removal and a mixed valid PNG/decodable-but-unsupported SVG selection preserve the prior draft with visible failure and no prompt/upload or stored object. Local discard releases the picker gate without sending, and a controlled late picker result is ignored. Unit cases cover stale success/error/finally against a newer pending selection, model replacement, unmount and retained unknown Host admission.
+
+Explicit send produces exactly one user-source message with the same Session/request identity, ordered text and two durable image references before a completed turn/end. Plugin runtime-context messages are not user admissions. Stored normalized objects and authenticated test-side attachment readback match each reference's digest, byte count and media type. Reload observes a new event client identity; it and a fresh reader display exact metadata with no extra prompt/upload, changed message or additional stored object. Composer reachability and horizontal bounds pass. Screenshots and actual extracted message/end/reference/readback evidence are retained in handoff `evidence/frontend/native-image-admission-20260923/verification.json`.
+
+Full workspace types/lint, formatting, spec lint and the rebuilt production export pass. The only production changes are atomic image selection, pending-send protection and its local discard escape. Backend, portable Client artifacts, Host admission and transport allowlists remain unchanged. The replay model omits input modalities and its script binds positionally by Session, not by matching prompt text; this proves Host image handling, not a live vision provider. Real OS-dialog cancellation reliability, Safari/native-device behavior, image preview/download, generic file receipts, transport-loss recovery and whole-phase/platform/release gates are not closed. Phase 4 remains in progress.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)

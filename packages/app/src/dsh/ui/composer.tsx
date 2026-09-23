@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -25,19 +33,40 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
   const editor = useRef<EditingTextInputHandle>(null);
   const [picking, setPicking] = useState(false);
   const [pickFailed, setPickFailed] = useState(false);
+  const activePick = useRef<symbol | null>(null);
+  // Invalidate callbacks before a different model/view can receive a late picker completion.
+  useLayoutEffect(() => {
+    activePick.current = null;
+    setPicking(false);
+    setPickFailed(false);
+    return () => {
+      activePick.current = null;
+    };
+  }, [model]);
+  const discardSelection = useCallback(() => {
+    activePick.current = null;
+    setPicking(false);
+    setPickFailed(false);
+  }, []);
   const send = useCallback(async () => {
     await model.send();
   }, [model]);
   const attach = useCallback(async () => {
+    const selection = Symbol("image-selection");
+    activePick.current = selection;
     setPickFailed(false);
     setPicking(true);
     try {
       const picked = await pickImages();
-      if (picked.length > 0) model.setImages([...model.getSnapshot().images, ...picked]);
+      if (activePick.current === selection && picked.length > 0)
+        model.setImages([...model.getSnapshot().images, ...picked]);
     } catch {
-      setPickFailed(true);
+      if (activePick.current === selection) setPickFailed(true);
     } finally {
-      setPicking(false);
+      if (activePick.current === selection) {
+        activePick.current = null;
+        setPicking(false);
+      }
     }
   }, [model, pickImages]);
   const remove = useCallback(
@@ -93,6 +122,16 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
         >
           {t("nativeDsh.composer.attach")}
         </Button>
+        {picking && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={discardSelection}
+            testID="dsh-prompt-discard-selection"
+          >
+            {t("nativeDsh.composer.discardSelection")}
+          </Button>
+        )}
         {pickFailed && (
           <Text style={styles.error} accessibilityRole="alert" testID="dsh-prompt-attach-failed">
             {t("nativeDsh.composer.attachFailed")}
@@ -159,7 +198,7 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
           </View>
         )}
       </ScrollView>
-      <Button disabled={!state.canSend} onPress={send} testID="dsh-prompt-send">
+      <Button disabled={!state.canSend || picking} onPress={send} testID="dsh-prompt-send">
         {state.submission.kind === "sending"
           ? t("nativeDsh.composer.sending")
           : t("nativeDsh.composer.send")}

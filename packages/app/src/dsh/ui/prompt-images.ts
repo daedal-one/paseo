@@ -6,8 +6,8 @@ import { detectPromptImageMediaType } from "./prompt-image-bytes";
  * Pick images and return them as prompt content. Only images the Host's prompt contract admits
  * are returned; the client keeps no copy and uploads nothing before send.
  *
- * @throws when the picker returned assets but none could be read as an admitted image, so the
- * caller can show a visible failure instead of silently attaching nothing.
+ * @throws when any selected asset cannot be read as an admitted image. The whole selection
+ * fails so the caller retains its prior draft instead of silently attaching a partial batch.
  */
 export async function pickPromptImages(): Promise<readonly DshPromptImage[]> {
   const result = await ImagePicker.launchImageLibraryAsync({
@@ -32,7 +32,7 @@ export async function pickPromptImages(): Promise<readonly DshPromptImage[]> {
       ...(asset.fileName === undefined || asset.fileName === null ? {} : { name: asset.fileName }),
     });
   }
-  if (images.length === 0 && unusable > 0)
-    throw new Error("No selected image could be read as an admitted image attachment");
+  if (unusable > 0)
+    throw new Error("One or more selected images could not be read as admitted image attachments");
   return images;
 }

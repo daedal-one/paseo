@@ -3,13 +3,14 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
+import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { DshPrompt, type DshPromptImage } from "../prompt";
 import { Composer } from "./composer";
 
 vi.mock("@/components/adaptive-modal-sheet", async () => {
   const ReactModule = await import("react");
   const AdaptiveModalSheet = () => null;
-  const AdaptiveTextInput = ReactModule.forwardRef<HTMLInputElement, Record<string, unknown>>(
+  const AdaptiveTextInput = ReactModule.forwardRef<EditingTextInputHandle, Record<string, unknown>>(
     (props, ref) => {
       const p = props as {
         initialValue?: string;
@@ -18,8 +19,22 @@ vi.mock("@/components/adaptive-modal-sheet", async () => {
         accessibilityLabel?: string;
         onChangeText?: (next: string) => void;
       };
+      const input = ReactModule.useRef<HTMLInputElement>(null);
+      ReactModule.useImperativeHandle(ref, () => ({
+        focus: () => input.current?.focus(),
+        blur: () => input.current?.blur(),
+        isFocused: () => document.activeElement === input.current,
+        getText: () => input.current?.value ?? "",
+        replaceText: (text) => {
+          if (input.current) input.current.value = text;
+        },
+        reset: () => {
+          if (input.current) input.current.value = "";
+        },
+        getNativeRef: () => input.current,
+      }));
       return ReactModule.createElement("input", {
-        ref,
+        ref: input,
         defaultValue: p.initialValue ?? "",
         disabled: p.editable === false,
         "data-testid": p.testID,
@@ -113,7 +128,115 @@ async function flush(): Promise<void> {
   });
 }
 
+function deferredPick() {
+  let resolve: (images: readonly DshPromptImage[]) => void = () => {};
+  let reject: (error: Error) => void = () => {};
+  const promise = new Promise<readonly DshPromptImage[]>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+const stalePickerOutcomes = [
+  { label: "resolve", settle: (pick: ReturnType<typeof deferredPick>) => pick.resolve([PNG]) },
+  {
+    label: "reject",
+    settle: (pick: ReturnType<typeof deferredPick>) =>
+      pick.reject(new Error("Late picker failure")),
+  },
+];
+
 describe("native DSH composer attachments", () => {
+  it.each(stalePickerOutcomes)(
+    "discards locally and ignores stale $label while a newer picker is pending",
+    async ({ settle }) => {
+      const { prompt, sent } = promptOwner();
+      prompt.setText("Keep existing draft");
+      prompt.setImages([JPEG]);
+      const old = deferredPick();
+      const current = deferredPick();
+      const picker = vi
+        .fn<() => Promise<readonly DshPromptImage[]>>()
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(current.promise);
+      render(prompt, picker);
+      click("dsh-prompt-attach");
+      click("dsh-prompt-discard-selection");
+      expect(disabled("dsh-prompt-send")).toBe(false);
+      expect(prompt.getSnapshot()).toMatchObject({ text: "Keep existing draft", images: [JPEG] });
+      expect(sent).toEqual([]);
+      click("dsh-prompt-attach");
+      await act(async () => {
+        settle(old);
+        await Promise.resolve();
+      });
+      expect(disabled("dsh-prompt-send")).toBe(true);
+      expect(all("dsh-prompt-discard-selection")).toHaveLength(1);
+      expect(all("dsh-prompt-attach-failed")).toHaveLength(0);
+      expect(prompt.getSnapshot().images).toEqual([JPEG]);
+      await act(async () => {
+        current.resolve([PNG]);
+        await current.promise;
+      });
+      expect(prompt.getSnapshot().images).toEqual([JPEG, PNG]);
+      expect(disabled("dsh-prompt-send")).toBe(false);
+      expect(sent).toEqual([]);
+    },
+  );
+
+  it("invalidates a pending selection when the model changes", async () => {
+    const old = promptOwner();
+    const next = promptOwner();
+    const pick = deferredPick();
+    render(old.prompt, () => pick.promise);
+    click("dsh-prompt-attach");
+    render(next.prompt, async () => []);
+    await act(async () => {
+      pick.resolve([PNG]);
+      await pick.promise;
+    });
+    expect(old.prompt.getSnapshot().images).toEqual([]);
+    expect(next.prompt.getSnapshot().images).toEqual([]);
+    expect(all("dsh-prompt-discard-selection")).toHaveLength(0);
+    expect(disabled("dsh-prompt-attach")).toBe(false);
+  });
+
+  it("does not release an unknown Host outcome when discarding a local picker", async () => {
+    const { prompt, sent } = promptOwner(async () => {
+      throw new Error("Reply lost");
+    });
+    prompt.setImages([JPEG]);
+    const pick = deferredPick();
+    render(prompt, () => pick.promise);
+    click("dsh-prompt-attach");
+    // Simulate another owner starting admission while the local picker is pending.
+    await act(async () => {
+      await prompt.send();
+    });
+    click("dsh-prompt-discard-selection");
+    await act(async () => {
+      pick.resolve([PNG]);
+      await pick.promise;
+    });
+    expect(prompt.getSnapshot()).toMatchObject({ images: [JPEG], submission: { kind: "unknown" } });
+    expect(disabled("dsh-prompt-send")).toBe(true);
+    expect(disabled("dsh-prompt-attach")).toBe(true);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("invalidates a pending selection when the composer unmounts", async () => {
+    const { prompt } = promptOwner();
+    const pick = deferredPick();
+    render(prompt, () => pick.promise);
+    click("dsh-prompt-attach");
+    act(() => root.render(null));
+    await act(async () => {
+      pick.resolve([PNG]);
+      await pick.promise;
+    });
+    expect(prompt.getSnapshot().images).toEqual([]);
+  });
+
   it("attaches picked images as ordered chips and allows an image-only send", async () => {
     const { prompt } = promptOwner();
     render(prompt, async () => [PNG, JPEG]);
@@ -150,6 +273,62 @@ describe("native DSH composer attachments", () => {
     expect(prompt.getSnapshot().images).toEqual([]);
     expect(all("dsh-prompt-attachment")).toHaveLength(0);
     expect(disabled("dsh-prompt-send")).toBe(true);
+  });
+
+  it("does not send a draft while the picker is still resolving", async () => {
+    const { prompt, sent } = promptOwner();
+    let finish: (images: readonly DshPromptImage[]) => void = () => {};
+    const picked = new Promise<readonly DshPromptImage[]>((resolve) => {
+      finish = resolve;
+    });
+    prompt.setText("Include this image");
+    render(prompt, () => picked);
+    click("dsh-prompt-attach");
+    expect(disabled("dsh-prompt-send")).toBe(true);
+    click("dsh-prompt-send");
+    await flush();
+    expect(sent).toEqual([]);
+    await act(async () => {
+      finish([PNG]);
+      await picked;
+    });
+    expect(disabled("dsh-prompt-send")).toBe(false);
+    click("dsh-prompt-send");
+    await flush();
+    expect(sent).toEqual([
+      {
+        content: [
+          { type: "text", text: "Include this image" },
+          { type: "image", ...PNG },
+        ],
+      },
+    ]);
+  });
+
+  it("preserves the previous draft when a new selection fails", async () => {
+    const { prompt, sent } = promptOwner();
+    prompt.setText("Keep this draft");
+    prompt.setImages([JPEG]);
+    render(prompt, async () => {
+      throw new Error("Mixed selection could not be read");
+    });
+    click("dsh-prompt-attach");
+    await flush();
+    expect(prompt.getSnapshot()).toMatchObject({ text: "Keep this draft", images: [JPEG] });
+    expect(all("dsh-prompt-attach-failed")).toHaveLength(1);
+    expect(sent).toEqual([]);
+  });
+
+  it("preserves the previous draft when image selection is cancelled", async () => {
+    const { prompt, sent } = promptOwner();
+    prompt.setImages([JPEG]);
+    render(prompt, async () => []);
+    click("dsh-prompt-attach");
+    await flush();
+    expect(prompt.getSnapshot().images).toEqual([JPEG]);
+    expect(all("dsh-prompt-attach-failed")).toHaveLength(0);
+    expect(disabled("dsh-prompt-send")).toBe(false);
+    expect(sent).toEqual([]);
   });
 
   it("freezes the attach control and keeps retained images visible while an outcome is unknown", async () => {
