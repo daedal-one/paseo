@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { z } from "zod";
 import os from "node:os";
 import path from "node:path";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -36,6 +37,8 @@ interface MountedDshHostOptions {
   fixture?: string;
   /** Hold a real model turn until teardown so queue assertions need no timing window. */
   holdTurn?: boolean;
+  /** Serialized provider replay entries, written only inside this test Host's private home. */
+  replayOverride?: string;
 }
 
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
@@ -43,7 +46,9 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
   const fixture = path.join(repository, "snapshots", options.fixture ?? testFixture);
   const override = path.join(home, "replay.override.json");
-  if (options.holdTurn) await writeFile(override, JSON.stringify([{ kind: "hang" }]));
+  const replayOverride =
+    options.replayOverride ?? (options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined);
+  if (replayOverride !== undefined) await writeFile(override, replayOverride);
   const overlay = path.join(home, "companion-mounted.yml");
   await writeFile(
     overlay,
@@ -90,7 +95,7 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
         DSH_HOME: home,
         DSH_SNAPSHOT: "replay",
         DSH_SNAPSHOT_FILE: fixture,
-        ...(options.holdTurn ? { DSH_SNAPSHOT_OVERRIDE: override } : {}),
+        ...(replayOverride === undefined ? {} : { DSH_SNAPSHOT_OVERRIDE: override }),
         DSH_SNAPSHOT_SESSIONS_ROOT: path.join(home, "sessions"),
         DSH_PERMISSION_MODE: "workspace-write",
       },
@@ -184,6 +189,23 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       fixture,
       /** Captured Host output, for diagnosing a Host that exits during a run. */
       outputTail: () => output.replace(/token=\S+/g, "token=[redacted]").slice(-3000),
+      /** Read the only test Session's durable log, never the live Host's Session store. */
+      async readSessionLog() {
+        const root = path.join(home, "sessions");
+        const logs = (await readdir(root, { recursive: true })).filter(
+          (file) => path.basename(file) === "session.v3.jsonl",
+        );
+        if (logs.length !== 1)
+          throw new Error(`Expected one private Session log, got ${logs.length}`);
+        const text = await readFile(path.join(root, logs[0]!), "utf8");
+        // Ignore an in-progress final physical row; the next observation will include it.
+        const rows: unknown[] = text
+          .slice(0, text.lastIndexOf("\n"))
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        const header = z.object({ type: z.literal("session"), id: z.string() }).parse(rows[0]);
+        return { sessionId: header.id, rows: rows.slice(1) };
+      },
       close: closeProcess,
     };
   } catch (error) {

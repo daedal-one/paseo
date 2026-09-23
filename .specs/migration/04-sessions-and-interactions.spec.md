@@ -130,6 +130,20 @@ Forty-four focused transcript/queue/runtime cases pass, including replacement, w
 
 Forge receipts and captured screenshots are recorded in handoff evidence `evidence/frontend/native-queue-read-20260923/verification.json`. Screenshot inspection was unavailable in this Session; browser geometry assertions passed. These are Linux/browser checks, not development or packaged Electron, physical iPhone execution, queue mutation recovery, concurrent interaction-winner qualification or Phase 4 completion. No source publication, deployment, service restart or TestFlight upload occurred.
 
+## Concurrent question qualification increment
+
+Exercise the mounted production app against one isolated real Host from two independent browser contexts. Hold both question-response POSTs before forwarding either so both user choices are made against the live request. Forward one response, then deliver the losing response late; repeat with the winning HTTP reply hidden from the client. Verify exactly one durable tool result with the winning whole batch, including verbatim option labels, multi-select/custom text and an explicit skip. A local form settlement or HTTP success does not establish the Host winner.
+
+After resolution, both clients and a fresh reader must remove the request without replaying an answer. Preserve unsent composer text while the question occupies its surface. Use only private test state and deterministic provider replay; no production Host configuration or permissions change. Approval races, other waterfall overlap states, platform execution and phase/release gates remain separate qualification.
+
+### Concurrent question qualification
+
+Four production-browser cases pass: delivered and dropped winning HTTP replies at 390px and 1280px. Both native clients submit their whole batches before either response reaches the real Host. After the winner settles, the harness delivers the captured losing packet once through its still-active authenticated client; both HTTP replies can be successful, but the private Session log contains exactly one matching tool result with the winner's verbatim labels, multi-select/custom text and explicit skip. Every matching result is parsed; a malformed duplicate cannot be silently excluded.
+
+The winning browser reloads and observes a different remote-event client identity, explicitly opens its deferred result, and shows no pending question. A fresh reader also opens the result without answering again. Exactly two browser-origin answer attempts and one controlled late-wire delivery are distinguished. The losing client's unsent composer draft survives the question surface. These checks establish reload/new-generation and fresh-reader recovery after a lost reply; automatic reconnect timing, Host restart, pending-question draft restoration, real approval races and physical device execution are not claimed.
+
+The app production runtime and pinned Client/backend source are unchanged. The production Web export, full workspace types/lint, formatting and spec lint pass. The initial run failed because it expected a cold deferred result to be expanded; the test now uses the existing explicit full-result gesture. Evidence and retained failure/success Forge receipts are recorded in `evidence/frontend/native-question-races-20260923/verification.json` in the handoff workspace. Phase 4 and all platform/publication gates remain open.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
