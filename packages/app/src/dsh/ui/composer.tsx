@@ -12,8 +12,10 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
-import type { DshPrompt, DshPromptImage } from "../prompt";
+import type { DshPrompt, DshPromptImage, DshPromptSnapshot } from "../prompt";
+import type { DshPromptFileSource } from "../files";
 import { styles } from "./styles";
+import { disposePromptFileSources, pickPromptFiles } from "./prompt-files";
 
 /** The picker seam stays injectable so the composer's attachment wiring is testable without a device. */
 async function pickFromLibrary(): Promise<readonly DshPromptImage[]> {
@@ -21,54 +23,262 @@ async function pickFromLibrary(): Promise<readonly DshPromptImage[]> {
   return await pickPromptImages();
 }
 
+function fileNotice(state: DshPromptSnapshot) {
+  const hasFiles = state.selectedFiles.length > 0 || state.files.length > 0;
+  if (hasFiles && state.submission.kind === "unknown") return "filePromptUnknown";
+  if (state.fileUpload.kind === "unknown") return "fileUploadUnknown";
+  if (state.fileSubmission.kind === "preparing") return "filePreparing";
+  if (state.fileSubmission.kind === "uploading") return "fileUploading";
+  if (state.fileSubmission.kind === "blocked")
+    return state.fileSubmission.code === "prompt-rejected" ? "filePromptRejected" : "fileBlocked";
+  if (
+    state.selectedFiles.some((file) => file.status === "retired") ||
+    state.files.some((file) => file.status === "retired")
+  )
+    return "fileRetired";
+  if (state.fileSubmission.kind === "error") {
+    if (state.fileSubmission.code === "read-failed" || state.fileSubmission.code === "invalid-data")
+      return "fileReadFailed";
+    return "filePreparationStopped";
+  }
+  if (state.fileAvailability === "offline") return "fileOffline";
+  if (state.fileAvailability === "unavailable") return "fileUnavailable";
+  return null;
+}
+
+interface AttachmentSelectionControlsProps {
+  state: DshPromptSnapshot;
+  locked: boolean;
+  picking: "images" | "files" | null;
+  pickFailed: "images" | "files" | null;
+  onPickFiles(): Promise<void>;
+  onDiscardSelection(): void;
+  onAbandonFiles(): void;
+  onRemoveFile: readonly (() => void)[];
+}
+
+/** Presentation only; both picker lifetimes and all mutation callbacks remain Composer-owned. */
+function AttachmentSelectionControls({
+  state,
+  locked,
+  picking,
+  pickFailed,
+  onPickFiles,
+  onDiscardSelection,
+  onAbandonFiles,
+  onRemoveFile,
+}: AttachmentSelectionControlsProps) {
+  const { t } = useTranslation();
+  const notice = fileNotice(state);
+  const canDiscardFiles =
+    (state.selectedFiles.length > 0 ||
+      state.files.length > 0 ||
+      state.fileUpload.kind === "unknown" ||
+      state.fileSubmission.kind === "blocked") &&
+    state.submission.kind !== "sending" &&
+    state.submission.kind !== "unknown";
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        loading={picking === "files"}
+        disabled={
+          state.fileAvailability !== "ready" ||
+          locked ||
+          state.submission.kind === "sending" ||
+          picking !== null
+        }
+        onPress={onPickFiles}
+        accessibilityLabel={t("nativeDsh.composer.attachFiles")}
+        testID="dsh-prompt-attach-files"
+      >
+        {t("nativeDsh.composer.attachFiles")}
+      </Button>
+      {picking !== null && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={onDiscardSelection}
+          testID="dsh-prompt-discard-selection"
+        >
+          {t(
+            picking === "files"
+              ? "nativeDsh.composer.discardFileSelection"
+              : "nativeDsh.composer.discardSelection",
+          )}
+        </Button>
+      )}
+      {pickFailed !== null && (
+        <Text
+          style={styles.error}
+          accessibilityRole="alert"
+          testID={
+            pickFailed === "files" ? "dsh-prompt-file-pick-failed" : "dsh-prompt-attach-failed"
+          }
+        >
+          {t(
+            pickFailed === "files"
+              ? "nativeDsh.composer.filePickFailed"
+              : "nativeDsh.composer.attachFailed",
+          )}
+        </Text>
+      )}
+      {state.selectedFiles.length > 0 && (
+        <View style={styles.group} testID="dsh-prompt-files">
+          <Text style={styles.muted}>
+            {t("nativeDsh.composer.filesSelected", { count: state.selectedFiles.length })}
+          </Text>
+          {state.selectedFiles.map((file, index) => (
+            <View key={file.id} style={styles.group} testID="dsh-prompt-file">
+              <Text selectable style={styles.text}>
+                {t("nativeDsh.composer.fileDetail", { name: file.name, bytes: file.bytes })}
+              </Text>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={locked || picking !== null}
+                onPress={onRemoveFile[index]}
+                testID="dsh-prompt-file-remove"
+              >
+                {t("nativeDsh.composer.fileRemove")}
+              </Button>
+            </View>
+          ))}
+        </View>
+      )}
+      {notice !== null && (
+        <Text style={styles.muted} accessibilityLiveRegion="polite" testID="dsh-prompt-file-status">
+          {t(`nativeDsh.composer.${notice}`)}
+        </Text>
+      )}
+      {canDiscardFiles && (
+        <Button
+          size="sm"
+          variant="outline"
+          onPress={onAbandonFiles}
+          testID="dsh-prompt-files-discard"
+        >
+          {t("nativeDsh.composer.fileDiscard")}
+        </Button>
+      )}
+    </>
+  );
+}
+
 /* eslint-disable react/no-array-index-key -- ordered draft attachment slots have no stable per-image identity. */
 interface ComposerProps {
   model: DshPrompt;
   pickImages?: () => Promise<readonly DshPromptImage[]>;
+  pickFiles?: () => Promise<readonly DshPromptFileSource[]>;
 }
 
-export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps) {
+export function Composer({
+  model,
+  pickImages = pickFromLibrary,
+  pickFiles = pickPromptFiles,
+}: ComposerProps) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const editor = useRef<EditingTextInputHandle>(null);
-  const [picking, setPicking] = useState(false);
-  const [pickFailed, setPickFailed] = useState(false);
+  const [picking, setPicking] = useState<"images" | "files" | null>(null);
+  const [pickFailed, setPickFailed] = useState<"images" | "files" | null>(null);
   const activePick = useRef<symbol | null>(null);
   // Invalidate callbacks before a different model/view can receive a late picker completion.
   useLayoutEffect(() => {
     activePick.current = null;
-    setPicking(false);
-    setPickFailed(false);
+    setPicking(null);
+    setPickFailed(null);
     return () => {
       activePick.current = null;
     };
-  }, [model]);
+  }, [model, state.fileSelectionEpoch]);
   const discardSelection = useCallback(() => {
     activePick.current = null;
-    setPicking(false);
-    setPickFailed(false);
+    setPicking(null);
+    setPickFailed(null);
   }, []);
   const send = useCallback(async () => {
+    if (activePick.current !== null) return;
     await model.send();
   }, [model]);
   const attach = useCallback(async () => {
+    const before = model.getSnapshot();
+    if (
+      activePick.current !== null ||
+      before.draftLocked ||
+      before.submission.kind === "unknown" ||
+      before.availability !== "ready"
+    )
+      return;
     const selection = Symbol("image-selection");
     activePick.current = selection;
-    setPickFailed(false);
-    setPicking(true);
+    setPickFailed(null);
+    setPicking("images");
     try {
       const picked = await pickImages();
-      if (activePick.current === selection && picked.length > 0)
+      if (
+        activePick.current === selection &&
+        before.fileSelectionEpoch === model.getSnapshot().fileSelectionEpoch &&
+        picked.length > 0
+      )
         model.setImages([...model.getSnapshot().images, ...picked]);
     } catch {
-      if (activePick.current === selection) setPickFailed(true);
+      if (
+        activePick.current === selection &&
+        before.fileSelectionEpoch === model.getSnapshot().fileSelectionEpoch
+      )
+        setPickFailed("images");
     } finally {
       if (activePick.current === selection) {
         activePick.current = null;
-        setPicking(false);
+        setPicking(null);
       }
     }
   }, [model, pickImages]);
+  const attachFiles = useCallback(async () => {
+    const before = model.getSnapshot();
+    if (
+      activePick.current !== null ||
+      before.draftLocked ||
+      before.submission.kind === "unknown" ||
+      before.submission.kind === "sending" ||
+      before.fileAvailability !== "ready"
+    )
+      return;
+    const selection = Symbol("file-selection");
+    activePick.current = selection;
+    setPickFailed(null);
+    setPicking("files");
+    let picked: readonly DshPromptFileSource[] = [];
+    let transferred = false;
+    try {
+      picked = await pickFiles();
+      if (
+        activePick.current === selection &&
+        before.fileSelectionEpoch === model.getSnapshot().fileSelectionEpoch &&
+        picked.length > 0
+      ) {
+        transferred = model.selectFiles(picked, before.fileSelectionEpoch);
+        if (!transferred) setPickFailed("files");
+      }
+    } catch {
+      if (
+        activePick.current === selection &&
+        before.fileSelectionEpoch === model.getSnapshot().fileSelectionEpoch
+      )
+        setPickFailed("files");
+    } finally {
+      if (!transferred) disposePromptFileSources(picked);
+      if (activePick.current === selection) {
+        activePick.current = null;
+        setPicking(null);
+      }
+    }
+  }, [model, pickFiles]);
+  const abandonFiles = useCallback(() => {
+    model.abandonFiles();
+  }, [model]);
   const remove = useCallback(
     (index: number) => {
       model.setImages(model.getSnapshot().images.filter((_, current) => current !== index));
@@ -80,6 +290,13 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
     () => state.images.map((_, index) => () => remove(index)),
     [state.images, remove],
   );
+  const removeFileAt = useMemo(
+    () =>
+      state.selectedFiles.map((file) => () => {
+        model.removeFile(file.id);
+      }),
+    [model, state.selectedFiles],
+  );
   useEffect(() => {
     if (state.submission.kind === "accepted" && model.getSnapshot() === state) {
       editor.current?.replaceText(state.text);
@@ -87,6 +304,7 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
   }, [model, state]);
   if (state.availability === "subagent") return null;
   const retained = state.submission.kind === "unknown" ? state.submission.images : [];
+  const locked = state.draftLocked || state.submission.kind === "unknown";
   return (
     <View style={[styles.content, styles.composer]} testID="dsh-composer">
       <ScrollView
@@ -99,7 +317,7 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
             ref={editor}
             initialValue={state.text}
             onChangeText={model.setText}
-            editable={state.submission.kind !== "unknown"}
+            editable={!locked}
             multiline
             numberOfLines={6}
             size="md"
@@ -112,31 +330,24 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
         <Button
           size="sm"
           variant="outline"
-          loading={picking}
-          disabled={
-            state.availability !== "ready" || state.submission.kind === "unknown" || picking
-          }
+          loading={picking === "images"}
+          disabled={state.availability !== "ready" || locked || picking !== null}
           onPress={attach}
           accessibilityLabel={t("nativeDsh.composer.attach")}
           testID="dsh-prompt-attach"
         >
           {t("nativeDsh.composer.attach")}
         </Button>
-        {picking && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onPress={discardSelection}
-            testID="dsh-prompt-discard-selection"
-          >
-            {t("nativeDsh.composer.discardSelection")}
-          </Button>
-        )}
-        {pickFailed && (
-          <Text style={styles.error} accessibilityRole="alert" testID="dsh-prompt-attach-failed">
-            {t("nativeDsh.composer.attachFailed")}
-          </Text>
-        )}
+        <AttachmentSelectionControls
+          state={state}
+          locked={locked}
+          picking={picking}
+          pickFailed={pickFailed}
+          onPickFiles={attachFiles}
+          onDiscardSelection={discardSelection}
+          onAbandonFiles={abandonFiles}
+          onRemoveFile={removeFileAt}
+        />
 
         {state.images.length > 0 && (
           <View style={styles.group} testID="dsh-prompt-attachments">
@@ -155,7 +366,7 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
                 <Button
                   size="sm"
                   variant="ghost"
-                  disabled={state.submission.kind === "unknown"}
+                  disabled={locked}
                   onPress={removeAt[index]}
                   accessibilityLabel={t("nativeDsh.composer.attachmentRemove")}
                   testID="dsh-prompt-attachment-remove"
@@ -198,7 +409,7 @@ export function Composer({ model, pickImages = pickFromLibrary }: ComposerProps)
           </View>
         )}
       </ScrollView>
-      <Button disabled={!state.canSend || picking} onPress={send} testID="dsh-prompt-send">
+      <Button disabled={!state.canSend || picking !== null} onPress={send} testID="dsh-prompt-send">
         {state.submission.kind === "sending"
           ? t("nativeDsh.composer.sending")
           : t("nativeDsh.composer.send")}

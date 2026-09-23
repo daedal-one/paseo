@@ -15,6 +15,7 @@ function queueIds(session: SessionFace): readonly string[] {
 }
 import { createDshHostRuntime, type DshHostRuntimeOptions } from "./runtime";
 import type { ImageAttachmentRef } from "./images";
+import type { DshPromptFileSource } from "./files";
 const previewRef: ImageAttachmentRef = {
   attachmentId: brandString<ImageAttachmentRef["attachmentId"]>(`sha256:${"a".repeat(64)}`),
   mediaType: "image/png",
@@ -2383,4 +2384,622 @@ describe("native generic-file receipt ownership", () => {
       }
     },
   );
+});
+
+function selectedSource(name = "source.txt", data = "YQ==", bytes = 1) {
+  return {
+    name,
+    bytes,
+    read: vi.fn<DshPromptFileSource["read"]>(async () => data),
+    dispose: vi.fn(),
+  };
+}
+function selectSources(
+  prompt: Awaited<ReturnType<typeof fileRuntime>>["prompt"],
+  sources: readonly DshPromptFileSource[],
+) {
+  return prompt.selectFiles(sources, prompt.getSnapshot().fileSelectionEpoch);
+}
+
+describe("local file selection and whole-intent Send", () => {
+  it("does not let a new file selection or manual upload join an existing text prompt", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToPrompt(() => held.promise);
+    try {
+      f.prompt.setText("first text intent");
+      const pending = f.prompt.send();
+      await vi.waitFor(() => expect(f.host.prompts).toHaveLength(1));
+      const source = selectedSource();
+      expect(selectSources(f.prompt, [source])).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      f.prompt.setText("ordinary edit still allowed");
+      held.resolve({
+        ok: false,
+        error: { code: "gateway/internal", message: "uncertain", details: {} },
+      });
+      expect(await pending).toBe(false);
+      expect(selectSources(f.prompt, [source])).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      expect(source.read).not.toHaveBeenCalled();
+      expect(source.dispose).not.toHaveBeenCalled();
+      expect(f.host.uploads).toEqual([]);
+    } finally {
+      held.resolve({ ok: true, value: { accepted: true } });
+      await f.runtime.dispose();
+    }
+  });
+
+  it("fences a held preflight on generation loss, retaining sources only for a fresh explicit Send", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<string>();
+    const source = selectedSource();
+    source.read.mockReturnValueOnce(held.promise);
+    try {
+      selectSources(f.prompt, [source]);
+      const epoch = f.prompt.getSnapshot().fileSelectionEpoch;
+      const pending = f.prompt.send();
+      f.runtime.connection.reconnect();
+      expect(source.read.mock.calls[0]![0].aborted).toBe(true);
+      held.resolve("YQ==");
+      expect(await pending).toBe(false);
+      await vi.waitFor(() => expect(f.prompt.getSnapshot().fileAvailability).toBe("ready"));
+      expect(f.prompt.getSnapshot()).toMatchObject({
+        fileSubmission: { kind: "error", code: "generation-changed" },
+        canSend: true,
+      });
+      expect(f.prompt.selectFiles([selectedSource()], epoch)).toBe(false);
+      expect(f.host.uploads).toEqual([]);
+      expect(source.dispose).not.toHaveBeenCalled();
+      expect(await f.prompt.send()).toBe(true);
+      expect(source.read).toHaveBeenCalledTimes(2);
+      expect(f.host.uploads).toHaveLength(1);
+    } finally {
+      held.resolve("YQ==");
+      await f.runtime.dispose();
+    }
+  });
+
+  it("coalesces Send reentrantly inside a source read and ignores late reads after view replacement", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<string>();
+    const source = selectedSource();
+    let joined: Promise<boolean> | undefined;
+    source.read.mockImplementation(() => {
+      joined = f.prompt.send();
+      return held.promise;
+    });
+    try {
+      selectSources(f.prompt, [source]);
+      const pending = f.prompt.send();
+      expect(joined).toBe(pending);
+      const oldEpoch = f.prompt.getSnapshot().fileSelectionEpoch;
+      f.runtime.closeConversation();
+      const replacement = f.runtime.openConversation(f.host.ids[0], null).prompt;
+      await vi.waitFor(() => expect(replacement.getSnapshot().fileAvailability).toBe("ready"));
+      expect(replacement.selectFiles([selectedSource("late picker")], oldEpoch)).toBe(false);
+      held.resolve("YQ==");
+      expect(await pending).toBe(false);
+      expect(source.dispose).toHaveBeenCalledOnce();
+      expect(replacement.getSnapshot().selectedFiles).toEqual([]);
+      expect(f.host.uploads).toEqual([]);
+      expect(f.host.prompts).toEqual([]);
+    } finally {
+      held.resolve("YQ==");
+      await f.runtime.dispose();
+    }
+  });
+
+  it("selects metadata without reads or Host operations, validates whole batches and transfers cleanup only on success", async () => {
+    const f = await fileRuntime();
+    const first = selectedSource();
+    const second = selectedSource("second", "Yg==");
+    const invalid = selectedSource("too-big", "", 8 * 1024 * 1024 + 1);
+    try {
+      expect(selectSources(f.prompt, [first])).toBe(true);
+      const before = f.prompt.getSnapshot().selectedFiles;
+      expect(selectSources(f.prompt, [second, invalid])).toBe(false);
+      expect(f.prompt.getSnapshot().selectedFiles).toEqual(before);
+      expect(first.read).not.toHaveBeenCalled();
+      expect(second.read).not.toHaveBeenCalled();
+      expect(second.dispose).not.toHaveBeenCalled();
+      expect(invalid.dispose).not.toHaveBeenCalled();
+      expect(f.host.uploads).toEqual([]);
+      expect(f.host.prompts).toEqual([]);
+      expect(JSON.stringify(f.prompt.getSnapshot().selectedFiles)).not.toMatch(
+        /read|dispose|data|uri|receipt/,
+      );
+      expect(f.prompt.removeFile(before[0]!.id)).toBe(true);
+      expect(first.dispose).toHaveBeenCalledOnce();
+      expect(f.prompt.removeFile(before[0]!.id)).toBe(false);
+      expect(f.prompt.getSnapshot().selectedFiles).toEqual([]);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it("validates metadata limits before any encoding and fences stale picker epochs without rejecting ordinary typing", async () => {
+    const f = await fileRuntime();
+    const source = selectedSource();
+    try {
+      const epoch = f.prompt.getSnapshot().fileSelectionEpoch;
+      f.prompt.setText("typing while picker is open");
+      expect(f.prompt.selectFiles([source], epoch)).toBe(true);
+      expect(f.prompt.selectFiles([source], epoch)).toBe(false);
+      const invalids = [
+        selectedSource("é".repeat(128)),
+        selectedSource("fraction", "", 1.5),
+        selectedSource("negative", "", -1),
+      ];
+      for (const invalid of invalids) expect(selectSources(f.prompt, [invalid])).toBe(false);
+      const max = selectedSource("max", "", 8 * 1024 * 1024);
+      expect(selectSources(f.prompt, [max])).toBe(false);
+      expect(selectSources(f.prompt, [selectedSource(), selectedSource(), selectedSource()])).toBe(
+        true,
+      );
+      expect(selectSources(f.prompt, [selectedSource("fifth", "", 0)])).toBe(false);
+      const old = f.prompt.getSnapshot().fileSelectionEpoch;
+      f.runtime.connection.reconnect();
+      await vi.waitFor(() => expect(f.prompt.getSnapshot().fileAvailability).toBe("ready"));
+      expect(f.prompt.selectFiles([source], old)).toBe(false);
+      expect(source.read).not.toHaveBeenCalled();
+      expect(f.host.uploads).toEqual([]);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each([false, true])(
+    "preflights all sources before the first upload and sends ordered empty/mixed files once: mixed=%s",
+    async (mixed) => {
+      const f = await fileRuntime();
+      const one = selectedSource("one");
+      const empty = selectedSource("empty", "", 0);
+      const values = [fileUploadValue(1, "one"), fileUploadValue(0, "empty")];
+      let upload = 0;
+      f.host.replyToUpload(async () => {
+        expect(one.read).toHaveBeenCalledOnce();
+        expect(empty.read).toHaveBeenCalledOnce();
+        expect(one.dispose).toHaveBeenCalledOnce();
+        expect(empty.dispose).toHaveBeenCalledOnce();
+        return { ok: true, value: values[upload++] };
+      });
+      try {
+        expect(selectSources(f.prompt, [one, empty])).toBe(true);
+        const image = { mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+        if (mixed) {
+          f.prompt.setText("explain");
+          f.prompt.setImages([image]);
+        }
+        expect(await f.prompt.send()).toBe(true);
+        const files = values.map(({ receiptId }) => ({ type: "file", receiptId }));
+        expect(f.host.prompts[0]!.content).toEqual(
+          mixed
+            ? [{ type: "text", text: "explain" }, { type: "image", ...image }, ...files]
+            : files,
+        );
+        expect(f.host.uploads.map((entry) => entry.request)).toEqual([
+          { name: "one", data: "YQ==" },
+          { name: "empty", data: "" },
+        ]);
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          selectedFiles: [],
+          files: [],
+          text: "",
+          images: [],
+          draftLocked: false,
+          fileSubmission: { kind: "idle" },
+        });
+        expect(await f.prompt.send()).toBe(false);
+      } finally {
+        await f.runtime.dispose();
+      }
+      expect(one.dispose).toHaveBeenCalledOnce();
+      expect(empty.dispose).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["read", "canonical", "bytes"])(
+    "rejects a later %s preflight with zero uploads and preserves handles for explicit retry",
+    async (failure) => {
+      const f = await fileRuntime();
+      const first = selectedSource("first");
+      const second = selectedSource("second");
+      if (failure === "read") second.read.mockRejectedValueOnce(new Error("local source failed"));
+      else second.read.mockResolvedValueOnce(failure === "canonical" ? "YR==" : "YWI=");
+      try {
+        selectSources(f.prompt, [first, second]);
+        expect(await f.prompt.send()).toBe(false);
+        expect(f.host.uploads).toEqual([]);
+        expect(f.host.prompts).toEqual([]);
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          draftLocked: false,
+          canSend: true,
+          fileSubmission: {
+            kind: "error",
+            code: failure === "read" ? "read-failed" : "invalid-data",
+          },
+        });
+        expect(first.dispose).not.toHaveBeenCalled();
+        expect(second.dispose).not.toHaveBeenCalled();
+        expect(await f.prompt.send()).toBe(true);
+        expect(first.read).toHaveBeenCalledTimes(2);
+        expect(second.read).toHaveBeenCalledTimes(2);
+        expect(f.host.uploads).toHaveLength(2);
+        expect(f.host.prompts).toHaveLength(1);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("reserves one immutable intent before read/publication and serializes held reads then held uploads", async () => {
+    const f = await fileRuntime();
+    const read = fileDeferred<string>();
+    const upload = fileDeferred<unknown>();
+    const first = selectedSource("first");
+    first.read.mockReturnValue(read.promise);
+    const second = selectedSource("second");
+    f.host.replyToUpload(() => upload.promise);
+    const image = { mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+    let joined: Promise<boolean> | undefined;
+    try {
+      f.prompt.setText("captured");
+      f.prompt.setImages([image]);
+      selectSources(f.prompt, [first, second]);
+      const ids = f.prompt.getSnapshot().selectedFiles.map((file) => file.id);
+      const stop = f.prompt.subscribe(() => {
+        if (f.prompt.getSnapshot().fileSubmission.kind === "preparing") joined = f.prompt.send();
+      });
+      const pending = f.prompt.send();
+      stop();
+      expect(joined).toBe(pending);
+      expect(f.prompt.send()).toBe(pending);
+      expect(first.read).toHaveBeenCalledOnce();
+      expect(second.read).not.toHaveBeenCalled();
+      expect(f.prompt.getSnapshot().draftLocked).toBe(true);
+      f.prompt.setText("blocked");
+      f.prompt.setImages([]);
+      expect(selectSources(f.prompt, [selectedSource()])).toBe(false);
+      expect(f.prompt.removeFile(ids[0]!)).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      expect(f.host.uploads).toEqual([]);
+      read.resolve("YQ==");
+      await vi.waitFor(() => expect(f.host.uploads).toHaveLength(1));
+      expect(second.read).toHaveBeenCalledOnce();
+      f.prompt.setText("still blocked");
+      f.prompt.setImages([]);
+      expect(f.prompt.getSnapshot()).toMatchObject({
+        text: "captured",
+        images: [image],
+        draftLocked: true,
+      });
+      // Distinct valid receipt per upload; the second request starts only after first settles.
+      f.host.replyToUpload(async () => ({ ok: true, value: fileUploadValue() }));
+      upload.resolve({ ok: true, value: fileUploadValue() });
+      expect(await pending).toBe(true);
+      expect(f.host.uploads).toHaveLength(2);
+      expect(f.host.prompts).toHaveLength(1);
+      expect(f.host.prompts[0]!.content[0]).toEqual({ type: "text", text: "captured" });
+    } finally {
+      read.resolve("YQ==");
+      upload.resolve({ ok: true, value: fileUploadValue() });
+      await f.runtime.dispose();
+    }
+  });
+
+  it("honors reentrant abandonment after the last receipt without sending or erasing a newly selected draft", async () => {
+    const f = await fileRuntime();
+    let abandoned = false;
+    try {
+      selectSources(f.prompt, [selectedSource("old")]);
+      const stop = f.prompt.subscribe(() => {
+        const snapshot = f.prompt.getSnapshot();
+        if (
+          abandoned ||
+          snapshot.fileSubmission.kind !== "uploading" ||
+          snapshot.files.length !== 1 ||
+          snapshot.fileUpload.kind !== "idle"
+        )
+          return;
+        abandoned = true;
+        expect(f.prompt.abandonFiles()).toBe(true);
+        expect(selectSources(f.prompt, [selectedSource("new selection")])).toBe(true);
+      });
+      expect(await f.prompt.send()).toBe(false);
+      stop();
+      expect(abandoned).toBe(true);
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.host.prompts).toEqual([]);
+      expect(f.prompt.getSnapshot().selectedFiles[0]!.name).toBe("new selection");
+      expect(f.prompt.getSnapshot().canSend).toBe(true);
+      expect(await f.prompt.send()).toBe(true);
+      expect(f.host.uploads).toHaveLength(2);
+      expect(f.host.prompts).toHaveLength(1);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it("blocks lost second-upload intent with zero prompt and no reread/reupload on taps or reconnect", async () => {
+    const f = await fileRuntime();
+    const one = selectedSource("one");
+    const two = selectedSource("two");
+    let calls = 0;
+    f.host.replyToUpload(async () => {
+      if (++calls === 2) throw new Error("second saved, reply lost");
+      return { ok: true, value: fileUploadValue() };
+    });
+    try {
+      selectSources(f.prompt, [one, two]);
+      expect(await f.prompt.send()).toBe(false);
+      expect(f.prompt.getSnapshot()).toMatchObject({
+        draftLocked: true,
+        canSend: false,
+        fileSubmission: { kind: "blocked", code: "upload-unknown" },
+      });
+      expect(f.prompt.getSnapshot().selectedFiles.every((file) => file.status === "retired")).toBe(
+        true,
+      );
+      expect(await f.prompt.send()).toBe(false);
+      expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      f.runtime.connection.reconnect();
+      await vi.waitFor(() => expect(f.prompt.getSnapshot().availability).toBe("ready"));
+      expect(await f.prompt.send()).toBe(false);
+      expect(f.host.uploads).toHaveLength(2);
+      expect(f.host.prompts).toEqual([]);
+      expect(one.read).toHaveBeenCalledOnce();
+      expect(two.read).toHaveBeenCalledOnce();
+      expect(one.dispose).toHaveBeenCalledOnce();
+      expect(two.dispose).toHaveBeenCalledOnce();
+      expect(f.prompt.abandonFiles()).toBe(true);
+      const fresh = selectedSource("fresh");
+      selectSources(f.prompt, [fresh]);
+      expect(await f.prompt.send()).toBe(true);
+      expect(f.host.uploads).toHaveLength(3);
+      expect(f.host.prompts).toHaveLength(1);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each(["generation", "view"])(
+    "fences partial staging on %s loss and never sends a partial prompt",
+    async (loss) => {
+      const f = await fileRuntime();
+      const held = fileDeferred<unknown>();
+      let calls = 0;
+      f.host.replyToUpload(async () =>
+        ++calls === 1 ? { ok: true, value: fileUploadValue() } : held.promise,
+      );
+      try {
+        selectSources(f.prompt, [selectedSource("one"), selectedSource("two")]);
+        const pending = f.prompt.send();
+        await vi.waitFor(() => expect(f.host.uploads).toHaveLength(2));
+        if (loss === "generation") {
+          f.runtime.connection.reconnect();
+          expect(f.prompt.getSnapshot().fileSubmission).toEqual({
+            kind: "blocked",
+            code: "generation-changed",
+          });
+        } else f.runtime.closeConversation();
+        held.resolve({ ok: true, value: fileUploadValue() });
+        expect(await pending).toBe(false);
+        expect(f.host.prompts).toEqual([]);
+        expect(f.prompt.getSnapshot().files.every((file) => file.status === "retired")).toBe(true);
+        expect(await f.prompt.send()).toBe(false);
+      } finally {
+        held.resolve({ ok: true, value: fileUploadValue() });
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("abandons a held local read, joins its caller Promise, and fences late completion against a fresh intent", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<string>();
+    const old = selectedSource("old");
+    old.read.mockReturnValue(held.promise);
+    try {
+      selectSources(f.prompt, [old]);
+      const pending = f.prompt.send();
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+        return undefined;
+      });
+      expect(f.prompt.abandonFiles()).toBe(true);
+      expect(old.read.mock.calls[0]![0].aborted).toBe(true);
+      expect(old.dispose).toHaveBeenCalledOnce();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      const fresh = selectedSource("fresh");
+      selectSources(f.prompt, [fresh]);
+      expect(await f.prompt.send()).toBe(true);
+      held.resolve("YQ==");
+      expect(await pending).toBe(false);
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.host.uploads[0]!.request.name).toBe("fresh");
+      expect(f.host.prompts).toHaveLength(1);
+      expect(f.prompt.getSnapshot().fileSubmission.kind).toBe("idle");
+    } finally {
+      held.resolve("YQ==");
+      await f.runtime.dispose();
+    }
+  });
+
+  it("allows explicit upload abandonment without releasing the physical gate or publishing late receipts", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToUpload(() => held.promise);
+    try {
+      selectSources(f.prompt, [selectedSource("old")]);
+      const pending = f.prompt.send();
+      await vi.waitFor(() => expect(f.host.uploads).toHaveLength(1));
+      expect(f.prompt.abandonFiles()).toBe(true);
+      const next = selectedSource("next");
+      selectSources(f.prompt, [next]);
+      expect(await f.prompt.send()).toBe(false);
+      expect(f.prompt.getSnapshot().fileSubmission).toEqual({
+        kind: "error",
+        code: "staging-unavailable",
+      });
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.host.prompts).toEqual([]);
+      held.resolve({ ok: true, value: fileUploadValue() });
+      expect(await pending).toBe(false);
+      expect(f.prompt.getSnapshot().files).toEqual([]);
+      expect(f.prompt.abandonFiles()).toBe(true);
+      f.host.replyToUpload(async () => ({ ok: true, value: fileUploadValue() }));
+      selectSources(f.prompt, [selectedSource("new operation")]);
+      expect(await f.prompt.send()).toBe(true);
+      expect(f.host.uploads).toHaveLength(2);
+    } finally {
+      held.resolve({ ok: true, value: fileUploadValue() });
+      await f.runtime.dispose();
+    }
+  });
+
+  it.each(["rejected", "unknown"])(
+    "retires source handles and receipts after prompt %s; unknown only accepts exact admission",
+    async (outcome) => {
+      const f = await fileRuntime();
+      const source = selectedSource();
+      f.host.replyToPrompt(async () => {
+        if (outcome === "unknown") throw new Error("prompt reply lost");
+        return {
+          ok: false,
+          error: { code: "session/model-unavailable", message: "missing", details: {} },
+        };
+      });
+      try {
+        f.prompt.setText("captured");
+        selectSources(f.prompt, [source]);
+        expect(await f.prompt.send()).toBe(false);
+        expect(f.prompt.getSnapshot().fileSubmission).toEqual({
+          kind: "blocked",
+          code: outcome === "unknown" ? "prompt-unknown" : "prompt-rejected",
+        });
+        f.prompt.setText("blocked");
+        expect(f.prompt.getSnapshot().text).toBe("captured");
+        expect(await f.prompt.send()).toBe(false);
+        expect(source.dispose).toHaveBeenCalledOnce();
+        expect(source.read).toHaveBeenCalledOnce();
+        if (outcome === "rejected") expect(f.prompt.abandonFiles()).toBe(true);
+        else {
+          expect(f.prompt.abandonFiles()).toBe(false);
+          f.host.push(admittedPrompt("different"));
+          expect(f.prompt.getSnapshot().submission.kind).toBe("unknown");
+          f.host.push(admittedPrompt(f.host.prompts[0]!.requestId, 2));
+          await vi.waitFor(() => expect(f.prompt.getSnapshot().submission.kind).toBe("accepted"));
+          expect(f.prompt.getSnapshot()).toMatchObject({
+            selectedFiles: [],
+            files: [],
+            text: "",
+            draftLocked: false,
+          });
+        }
+        expect(f.host.uploads).toHaveLength(1);
+        expect(f.host.prompts).toHaveLength(1);
+      } finally {
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it.each([
+    { source: "selected", loss: "reconnect" },
+    { source: "selected", loss: "dispose" },
+    { source: "manual", loss: "reconnect" },
+    { source: "manual", loss: "dispose" },
+  ])(
+    "fences $source file authority when a sending observer triggers $loss before prompt invocation",
+    async ({ source, loss }) => {
+      const f = await fileRuntime();
+      const invoke = vi.spyOn(f.view.session, "prompt");
+      let replaced = false;
+      let stop = () => {};
+      try {
+        if (source === "selected") expect(selectSources(f.prompt, [selectedSource()])).toBe(true);
+        else expect(await f.prompt.stageFile({ data: "YQ==" })).toBe(true);
+        f.prompt.setText("must not dispatch after the observer invalidates files");
+        stop = f.prompt.subscribe(() => {
+          if (replaced || f.prompt.getSnapshot().submission.kind !== "sending") return;
+          replaced = true;
+          if (loss === "reconnect") f.runtime.connection.reconnect();
+          else f.runtime.closeConversation();
+        });
+        expect(await f.prompt.send()).toBe(false);
+        expect(replaced).toBe(true);
+        expect(invoke).not.toHaveBeenCalled();
+        expect(f.host.prompts).toEqual([]);
+        expect(f.prompt.getSnapshot()).toMatchObject({
+          submission: { kind: "idle" },
+          fileSubmission: { kind: "blocked", code: "generation-changed" },
+        });
+        expect(f.prompt.getSnapshot().files.every((file) => file.status === "retired")).toBe(true);
+        if (loss === "reconnect") {
+          await vi.waitFor(() => expect(f.prompt.getSnapshot().availability).toBe("ready"));
+          expect(await f.prompt.send()).toBe(false);
+          expect(f.prompt.abandonFiles()).toBe(true);
+        }
+        expect(invoke).not.toHaveBeenCalled();
+        expect(f.host.uploads).toHaveLength(1);
+      } finally {
+        stop();
+        invoke.mockRestore();
+        await f.runtime.dispose();
+      }
+    },
+  );
+
+  it("preserves prompt-unknown precedence through generation loss after dispatch and forbids abandonment", async () => {
+    const f = await fileRuntime();
+    const held = fileDeferred<unknown>();
+    f.host.replyToPrompt(() => held.promise);
+    try {
+      selectSources(f.prompt, [selectedSource()]);
+      const pending = f.prompt.send();
+      await vi.waitFor(() => expect(f.host.prompts).toHaveLength(1));
+      f.runtime.connection.reconnect();
+      expect(f.prompt.getSnapshot().fileSubmission.kind).toBe("sending");
+      expect(f.prompt.abandonFiles()).toBe(false);
+      held.resolve({ ok: true, value: { accepted: true } });
+      expect(await pending).toBe(false);
+      expect(f.prompt.getSnapshot().fileSubmission).toEqual({
+        kind: "blocked",
+        code: "prompt-unknown",
+      });
+      expect(f.prompt.abandonFiles()).toBe(false);
+      f.host.admitOnReconnect(f.host.prompts[0]!.requestId);
+      f.runtime.connection.reconnect();
+      await vi.waitFor(() => expect(f.prompt.getSnapshot().submission.kind).toBe("accepted"));
+      expect(f.host.uploads).toHaveLength(1);
+      expect(f.host.prompts).toHaveLength(1);
+    } finally {
+      held.resolve({ ok: true, value: { accepted: true } });
+      await f.runtime.dispose();
+    }
+  });
+
+  it("disposes accepted source handles once without allowing cleanup errors to alter admission", async () => {
+    const f = await fileRuntime();
+    const source = selectedSource();
+    source.dispose.mockImplementation(() => {
+      throw new Error("cleanup failed");
+    });
+    try {
+      selectSources(f.prompt, [source]);
+      expect(await f.prompt.send()).toBe(true);
+      expect(source.dispose).toHaveBeenCalledOnce();
+      const remaining = selectedSource("remaining");
+      selectSources(f.prompt, [remaining]);
+      f.runtime.closeConversation();
+      expect(remaining.dispose).toHaveBeenCalledOnce();
+      const epoch = f.prompt.getSnapshot().fileSelectionEpoch;
+      expect(f.prompt.selectFiles([selectedSource()], epoch)).toBe(false);
+    } finally {
+      await f.runtime.dispose();
+    }
+  });
 });

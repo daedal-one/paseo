@@ -9,7 +9,11 @@ import { createDshAbortController } from "../runtime/dsh-abort-controller";
 import {
   dshFileUploadAvailable,
   prepareDshPromptFile,
+  prepareDshPromptFileSources,
   snapshotDshPromptFile,
+  type DshFileSubmission,
+  type DshPromptFileSource,
+  type DshSelectedPromptFile,
   validateDshFileUploadValue,
   type DshFileReceiptId,
   type DshFileUploadOperation,
@@ -32,6 +36,10 @@ export interface DshPromptSnapshot {
   text: string;
   images: readonly DshPromptImage[];
   files: readonly DshPromptFile[];
+  selectedFiles: readonly DshSelectedPromptFile[];
+  fileSubmission: DshFileSubmission;
+  fileSelectionEpoch: number;
+  draftLocked: boolean;
   fileUpload: DshPromptFileUploadState;
   fileAvailability: DshPromptFileAvailability;
   availability: "ready" | "offline" | "unavailable" | "subagent";
@@ -50,6 +58,10 @@ export interface DshPromptImage {
 
 type PromptContent = Parameters<SessionFace["prompt"]>[0];
 type PromptContentPart = PromptContent[number];
+let selectionEpochSequence = 0;
+function nextSelectionEpoch(): number {
+  return ++selectionEpochSequence;
+}
 
 function sameImages(left: readonly DshPromptImage[], right: readonly DshPromptImage[]): boolean {
   if (left.length !== right.length) return false;
@@ -71,6 +83,8 @@ interface PromptAttempt {
   readonly hasFiles: boolean;
   readonly draftRevision: number;
   readonly admission: PromptAdmission;
+  readonly generation: ReturnType<ConnectionHandle["generation"]["getSnapshot"]>;
+  dispatched: boolean;
   accepted: boolean;
   unsubscribe(): void;
 }
@@ -78,6 +92,21 @@ interface PromptAttempt {
 interface FileSlot {
   readonly metadata: DshPromptFile;
   readonly receiptId?: DshFileReceiptId;
+}
+interface SelectedFile {
+  readonly metadata: DshSelectedPromptFile;
+  readonly source: DshPromptFileSource | null;
+}
+interface FileIntent {
+  readonly text: string;
+  readonly images: readonly DshPromptImage[];
+  readonly generation: ReturnType<ConnectionHandle["generation"]["getSnapshot"]>;
+  readonly controller: AbortController;
+  sources: readonly DshPromptFileSource[];
+  prepared: PreparedDshPromptFile[];
+  active: boolean;
+  dispatched: boolean;
+  promptStarted: boolean;
 }
 interface UploadAttempt {
   input: DshPromptFileInput | null;
@@ -110,6 +139,10 @@ export class DshPrompt {
     text: "",
     images: [],
     files: [],
+    selectedFiles: [],
+    fileSubmission: { kind: "idle" },
+    fileSelectionEpoch: 0,
+    draftLocked: false,
     fileUpload: { kind: "idle" },
     fileAvailability: "unavailable",
     availability: "unavailable",
@@ -125,6 +158,10 @@ export class DshPrompt {
   private attempt: PromptAttempt | null = null;
   private files: readonly FileSlot[] = [];
   private upload: UploadAttempt | null = null;
+  private selected: readonly SelectedFile[] = [];
+  private intent: FileIntent | null = null;
+  private selectionEpoch = nextSelectionEpoch();
+  private selectionSequence = 0;
   private generation: ReturnType<ConnectionHandle["generation"]["getSnapshot"]>;
 
   constructor(
@@ -165,6 +202,39 @@ export class DshPrompt {
     this.snapshot = { ...this.snapshot, fileUpload: { kind: "unknown", ...upload.metadata } };
   }
 
+  private retireSelection(): void {
+    const previous = this.selected;
+    this.selected = previous.map(({ metadata }) => ({
+      metadata: Object.freeze({ ...metadata, status: "retired" as const }),
+      source: null,
+    }));
+    for (const file of previous) file.source?.dispose?.();
+  }
+
+  private invalidateIntent(): void {
+    const intent = this.intent;
+    if (intent === null || !intent.active || intent.promptStarted) return;
+    intent.active = false;
+    intent.prepared = [];
+    intent.sources = [];
+    intent.controller.abort();
+    if (intent.dispatched) this.retireSelection();
+    const fileSubmission: DshFileSubmission = intent.dispatched
+      ? { kind: "blocked", code: "generation-changed" }
+      : { kind: "error", code: "generation-changed" };
+    this.snapshot = { ...this.snapshot, fileSubmission };
+  }
+
+  private currentIntent(intent: FileIntent): boolean {
+    return (
+      !this.closed &&
+      this.intent === intent &&
+      intent.active &&
+      this.connection.generation.getSnapshot() === intent.generation &&
+      this.snapshot.availability === "ready"
+    );
+  }
+
   private refresh = (): void => {
     if (this.closed) return;
     const generation = this.connection.generation.getSnapshot();
@@ -174,9 +244,12 @@ export class DshPrompt {
     else if (session.removed || session.openState !== "open") availability = "unavailable";
     else if (generation === undefined) availability = "offline";
     else availability = "ready";
-    const lost = generation !== this.generation || availability !== "ready";
+    const changed = generation !== this.generation;
+    if (changed) this.selectionEpoch = nextSelectionEpoch();
+    const lost = changed || availability !== "ready";
     if (lost) {
       this.retireFiles();
+      this.invalidateIntent();
       this.invalidateUpload();
     }
     this.generation = generation;
@@ -197,6 +270,10 @@ export class DshPrompt {
       ...next,
       images: Object.freeze(next.images),
       files: Object.freeze(this.files.map(({ metadata }) => metadata)),
+      selectedFiles: Object.freeze(this.selected.map(({ metadata }) => metadata)),
+      fileSelectionEpoch: this.selectionEpoch,
+      fileSubmission: Object.freeze(next.fileSubmission),
+      draftLocked: this.frozen(next),
       fileUpload: Object.freeze(next.fileUpload),
       submission: Object.freeze(next.submission),
       canSend:
@@ -204,19 +281,77 @@ export class DshPrompt {
         next.availability === "ready" &&
         next.fileUpload.kind === "idle" &&
         this.files.every((file) => file.receiptId !== undefined) &&
-        (next.text.trim() !== "" || next.images.length > 0 || this.files.length > 0) &&
+        this.selected.every((file) => file.source !== null) &&
+        (this.selected.length === 0 || next.fileAvailability === "ready") &&
+        next.fileSubmission.kind !== "blocked" &&
+        (next.text.trim() !== "" ||
+          next.images.length > 0 ||
+          this.files.length > 0 ||
+          this.selected.length > 0) &&
         next.submission.kind !== "sending" &&
         next.submission.kind !== "unknown",
     });
     for (const listener of this.listeners) listener();
   }
 
-  private frozen(): boolean {
+  private frozen(snapshot = this.snapshot): boolean {
     return (
       this.closed ||
-      this.snapshot.submission.kind === "unknown" ||
-      (this.attempt?.hasFiles === true && this.snapshot.submission.kind === "sending")
+      this.intent?.active === true ||
+      snapshot.fileSubmission.kind === "blocked" ||
+      snapshot.submission.kind === "unknown" ||
+      (this.attempt?.hasFiles === true && snapshot.submission.kind === "sending")
     );
+  }
+
+  /** Atomically append metadata/local handles only; a stale picker cannot mutate another epoch. */
+  selectFiles(sources: readonly DshPromptFileSource[], expectedEpoch: number): boolean {
+    if (
+      this.frozen() ||
+      this.attempt !== null ||
+      expectedEpoch !== this.selectionEpoch ||
+      this.pending !== null ||
+      this.files.length > 0 ||
+      this.selected.some((file) => file.source === null) ||
+      this.snapshot.fileUpload.kind !== "idle" ||
+      this.snapshot.fileAvailability !== "ready"
+    )
+      return false;
+    const prepared = prepareDshPromptFileSources(
+      sources,
+      this.selected.length,
+      this.selected.reduce((sum, file) => sum + file.metadata.bytes, 0),
+    );
+    if (prepared === undefined) return false;
+    if (prepared.length === 0) return true;
+    const added = prepared.map((source) => ({
+      metadata: Object.freeze({
+        id: `file-${this.selectionEpoch}-${++this.selectionSequence}`,
+        name: source.name,
+        bytes: source.bytes,
+        status: "selected" as const,
+      }),
+      source,
+    }));
+    this.selected = [...this.selected, ...added];
+    this.selectionEpoch = nextSelectionEpoch();
+    this.publish({ fileSubmission: { kind: "idle" } });
+    return true;
+  }
+
+  removeFile(id: string): boolean {
+    if (
+      this.frozen() ||
+      this.pending !== null ||
+      !this.selected.some((file) => file.metadata.id === id)
+    )
+      return false;
+    const removed = this.selected.filter((file) => file.metadata.id === id);
+    this.selected = this.selected.filter((file) => file.metadata.id !== id);
+    this.selectionEpoch = nextSelectionEpoch();
+    this.publish({ fileSubmission: { kind: "idle" } });
+    for (const file of removed) file.source?.dispose?.();
+    return true;
   }
 
   setText = (text: string): void => {
@@ -243,7 +378,8 @@ export class DshPrompt {
 
   /** Deliberate upload primitive for future Send orchestration, never selection or mount. */
   stageFile(input: DshPromptFileInput): Promise<boolean> {
-    if (this.frozen()) return Promise.resolve(false);
+    if (this.frozen() || this.attempt !== null || this.selected.length > 0)
+      return Promise.resolve(false);
     if (this.upload !== null) {
       const prior = this.upload.input;
       return prior !== null && prior.data === input?.data && prior.name === input?.name
@@ -264,6 +400,11 @@ export class DshPrompt {
       this.files.reduce((total, file) => total + file.metadata.bytes, 0),
     );
     if (prepared === undefined) return Promise.resolve(false);
+    return this.startFileUpload(prepared);
+  }
+
+  private startFileUpload(prepared: PreparedDshPromptFile, intent?: FileIntent): Promise<boolean> {
+    if (this.filePort === undefined) return Promise.resolve(false);
     let resolve!: (value: boolean) => void;
     const done = new Promise<boolean>((finish) => {
       resolve = finish;
@@ -277,9 +418,12 @@ export class DshPrompt {
     };
     // Reserve before the gate invokes the carrier, which can synchronously reenter or lose generation.
     this.upload = upload;
+    const previouslyDispatched = intent?.dispatched ?? false;
+    if (intent !== undefined) intent.dispatched = true;
     const operation = this.filePort.start(prepared.request);
     upload.operation = operation;
     if (operation === null) {
+      if (intent !== undefined) intent.dispatched = previouslyDispatched;
       this.upload = null;
       upload.input = null;
       resolve(false);
@@ -323,13 +467,33 @@ export class DshPrompt {
     return true;
   }
 
-  /** Retire local intent, not Host bytes. A dispatched unknown prompt cannot be abandoned. */
+  /** Retire local intent, not Host bytes. Prompt dispatch/uncertainty cannot be abandoned. */
   abandonFiles(): boolean {
-    if (this.frozen() || this.pending !== null) return false;
+    if (
+      this.closed ||
+      this.snapshot.submission.kind === "unknown" ||
+      this.snapshot.submission.kind === "sending" ||
+      this.intent?.promptStarted === true
+    )
+      return false;
+    const intent = this.intent;
+    if (intent !== null) {
+      intent.active = false;
+      intent.prepared = [];
+      intent.sources = [];
+      intent.controller.abort();
+      this.intent = null;
+      // The caller's old Promise still joins its physical read/upload; its completion cannot clear a new intent.
+      this.pending = null;
+    } else if (this.pending !== null) return false;
     this.invalidateUpload();
     this.upload = null;
     this.files = [];
-    this.publish({ fileUpload: { kind: "idle" } });
+    const removed = this.selected;
+    this.selected = [];
+    this.selectionEpoch = nextSelectionEpoch();
+    this.publish({ fileUpload: { kind: "idle" }, fileSubmission: { kind: "idle" } });
+    for (const file of removed) file.source?.dispose?.();
     return true;
   }
 
@@ -342,15 +506,118 @@ export class DshPrompt {
       resolve = finish;
     });
     this.pending = done;
+    this.selectionEpoch = nextSelectionEpoch();
+    let intent: FileIntent | null = null;
+    if (this.selected.length > 0) {
+      intent = {
+        text: this.snapshot.text,
+        images: this.snapshot.images,
+        generation: this.generation,
+        controller: createDshAbortController(),
+        sources: this.selected.flatMap((file) => (file.source === null ? [] : [file.source])),
+        prepared: [],
+        active: true,
+        dispatched: false,
+        promptStarted: false,
+      };
+      this.intent = intent;
+      this.publish({ fileSubmission: { kind: "preparing" } });
+    }
+    const running = intent === null ? this.dispatchPrompt() : this.runFileIntent(intent);
+    void running.then((accepted) => {
+      if (this.pending === done) {
+        if (this.intent === intent) this.intent = null;
+        this.controller = null;
+        this.pending = null;
+        this.publish({});
+      }
+      resolve(accepted);
+      return undefined;
+    });
+    return done;
+  }
+
+  private failIntent(intent: FileIntent, fileSubmission: DshFileSubmission): false {
+    intent.active = false;
+    intent.prepared = [];
+    intent.sources = [];
+    if (this.intent !== intent || this.closed) return false;
+    if (intent.dispatched) {
+      this.retireFiles();
+      this.retireSelection();
+    }
+    this.publish({ fileSubmission });
+    return false;
+  }
+
+  private async prepareIntent(intent: FileIntent): Promise<boolean> {
+    let total = 0;
+    for (const source of intent.sources) {
+      if (!this.currentIntent(intent)) return false;
+      let data: string;
+      try {
+        data = await source.read(intent.controller.signal);
+      } catch {
+        if (!this.currentIntent(intent)) return false;
+        return this.failIntent(intent, { kind: "error", code: "read-failed" });
+      }
+      if (!this.currentIntent(intent)) return false;
+      const prepared = prepareDshPromptFile(
+        { data, name: source.name },
+        intent.prepared.length,
+        total,
+      );
+      if (prepared === undefined || prepared.metadata.bytes !== source.bytes) {
+        return this.failIntent(intent, { kind: "error", code: "invalid-data" });
+      }
+      total += source.bytes;
+      intent.prepared.push(prepared);
+    }
+    intent.sources = [];
+    // Every file has passed validation. Release picker resources before mutation; never reread after staging.
+    this.retireSelection();
+    return this.currentIntent(intent);
+  }
+
+  private uploadNext(intent: FileIntent): Promise<boolean> {
+    const prepared = intent.prepared.shift();
+    return prepared === undefined ? Promise.resolve(false) : this.startFileUpload(prepared, intent);
+  }
+
+  private async runFileIntent(intent: FileIntent): Promise<boolean> {
+    if (!(await this.prepareIntent(intent))) return false;
+    while (intent.prepared.length > 0) {
+      if (!this.currentIntent(intent)) return false;
+      this.publish({ fileSubmission: { kind: "uploading" } });
+      if (!this.currentIntent(intent)) return false;
+      const uploaded = await this.uploadNext(intent);
+      if (!this.currentIntent(intent)) return false;
+      if (!uploaded) {
+        return this.failIntent(
+          intent,
+          intent.dispatched
+            ? { kind: "blocked", code: "upload-unknown" }
+            : { kind: "error", code: "staging-unavailable" },
+        );
+      }
+    }
+    if (!this.currentIntent(intent)) return false;
+    return this.dispatchPrompt(intent);
+  }
+
+  private dispatchPrompt(intent?: FileIntent): Promise<boolean> {
+    const generation = intent?.generation ?? this.connection.generation.getSnapshot();
     const requestId = this.createRequestId();
     const admission = new PromptAdmission(this.binding, requestId);
     const attempt: PromptAttempt = {
       requestId,
-      text: this.snapshot.text,
-      images: this.snapshot.images,
+      text: intent?.text ?? this.snapshot.text,
+      images: intent?.images ?? this.snapshot.images,
       hasFiles: this.files.length > 0,
       draftRevision: this.draftRevision,
       admission,
+      generation,
+      dispatched: false,
       accepted: false,
       unsubscribe: () => {},
     };
@@ -365,15 +632,39 @@ export class DshPrompt {
     this.retireFiles();
     const controller = createDshAbortController();
     this.controller = controller;
-    this.publish({ submission: { kind: "sending", text: attempt.text, images: attempt.images } });
-    void this.submit(attempt, content, controller.signal).then((accepted) => {
-      this.controller = null;
-      this.pending = null;
-      this.publish({});
-      resolve(accepted);
-      return undefined;
+    this.publish({
+      submission: { kind: "sending", text: attempt.text, images: attempt.images },
+      ...(intent === undefined ? {} : { fileSubmission: { kind: "sending" as const } }),
     });
-    return done;
+    return this.submit(attempt, content, controller.signal, intent);
+  }
+
+  private ownsFilePrompt(
+    attempt: PromptAttempt,
+    signal: AbortSignal,
+    intent?: FileIntent,
+  ): boolean {
+    return (
+      !this.closed &&
+      this.attempt === attempt &&
+      !signal.aborted &&
+      this.connection.generation.getSnapshot() === attempt.generation &&
+      this.snapshot.availability === "ready" &&
+      (intent === undefined || this.currentIntent(intent))
+    );
+  }
+
+  private refuseBeforePrompt(attempt: PromptAttempt, intent?: FileIntent): false {
+    if (this.closed || this.attempt !== attempt) return false;
+    if (intent !== undefined && this.intent === intent) intent.active = false;
+    this.retireFiles();
+    this.retireSelection();
+    this.releaseAttempt();
+    this.publish({
+      submission: { kind: "idle" },
+      fileSubmission: { kind: "blocked", code: "generation-changed" },
+    });
+    return false;
   }
 
   private accept(attempt: PromptAttempt): boolean {
@@ -381,10 +672,16 @@ export class DshPrompt {
     attempt.accepted = true;
     this.releaseAttempt();
     const unchanged = attempt.hasFiles || this.draftRevision === attempt.draftRevision;
-    if (attempt.hasFiles) this.files = [];
+    if (attempt.hasFiles) {
+      this.files = [];
+      this.retireSelection();
+      this.selected = [];
+      if (this.intent !== null) this.intent.active = false;
+    }
     this.publish({
       text: unchanged ? "" : this.snapshot.text,
       images: unchanged ? [] : this.snapshot.images,
+      fileSubmission: { kind: "idle" },
       submission: { kind: "accepted" },
     });
     return true;
@@ -403,7 +700,12 @@ export class DshPrompt {
 
   private markUnknown(attempt: PromptAttempt): boolean {
     if (this.closed || this.attempt !== attempt) return false;
-    this.publish({ submission: { kind: "unknown", text: attempt.text, images: attempt.images } });
+    this.publish({
+      submission: { kind: "unknown", text: attempt.text, images: attempt.images },
+      ...(this.selected.length === 0
+        ? {}
+        : { fileSubmission: { kind: "blocked" as const, code: "prompt-unknown" as const } }),
+    });
     // Publication can synchronously deliver the exact admission; never lose that race.
     return attempt.accepted || this.acceptObserved(attempt);
   }
@@ -412,10 +714,16 @@ export class DshPrompt {
     attempt: PromptAttempt,
     content: PromptContent,
     signal: AbortSignal,
+    intent?: FileIntent,
   ): Promise<boolean> {
+    // Sending publication is reentrant. Recheck file authority at the actual invocation boundary.
+    if (attempt.hasFiles && !this.ownsFilePrompt(attempt, signal, intent))
+      return this.refuseBeforePrompt(attempt, intent);
     let result: Awaited<ReturnType<SessionFace["prompt"]>>;
     try {
       if (this.closed) return false;
+      attempt.dispatched = true;
+      if (intent !== undefined) intent.promptStarted = true;
       result = await this.binding.session.prompt(content, "queue", signal, attempt.requestId);
     } catch {
       if (this.acceptObserved(attempt)) return true;
@@ -430,7 +738,13 @@ export class DshPrompt {
       case "session/model-unavailable":
       case "session/not-found":
         this.releaseAttempt();
-        this.publish({ submission: { kind: "rejected", code: result.error.code } });
+        if (this.intent !== null) this.intent.active = false;
+        this.publish({
+          submission: { kind: "rejected", code: result.error.code },
+          ...(this.selected.length === 0
+            ? {}
+            : { fileSubmission: { kind: "blocked" as const, code: "prompt-rejected" as const } }),
+        });
         return false;
       default:
         return this.markUnknown(attempt);
@@ -441,14 +755,35 @@ export class DshPrompt {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    this.selectionEpoch = nextSelectionEpoch();
+    if (this.intent !== null) {
+      this.intent.active = false;
+      this.intent.prepared = [];
+      this.intent.sources = [];
+      this.intent.controller.abort();
+    }
+    this.retireSelection();
     this.retireFiles();
     this.invalidateUpload();
+    const undispatchedFiles = this.attempt?.hasFiles === true && !this.attempt.dispatched;
     this.releaseAttempt();
     for (const unsubscribe of this.unsubscribe) unsubscribe();
     this.listeners.clear();
     this.snapshot = Object.freeze({
       ...this.snapshot,
+      ...(undispatchedFiles
+        ? {
+            submission: Object.freeze({ kind: "idle" as const }),
+            fileSubmission: Object.freeze({
+              kind: "blocked" as const,
+              code: "generation-changed" as const,
+            }),
+          }
+        : {}),
       files: Object.freeze(this.files.map(({ metadata }) => metadata)),
+      selectedFiles: Object.freeze(this.selected.map(({ metadata }) => metadata)),
+      fileSelectionEpoch: this.selectionEpoch,
+      draftLocked: true,
       availability: "unavailable",
       fileAvailability: "unavailable",
       canSend: false,

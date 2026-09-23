@@ -32,6 +32,68 @@ export interface DshPromptFileInput {
   readonly name?: string;
 }
 
+/** Local picker handle only. Reading/encoding is deferred until an explicit Send. */
+export interface DshPromptFileSource {
+  readonly name: string;
+  readonly bytes: number;
+  read(signal: AbortSignal): Promise<string>;
+  /** Release only resources owned by this handle; implementations defer cleanup until active reads settle. */
+  dispose?(): void;
+}
+
+export interface DshSelectedPromptFile {
+  readonly id: string;
+  readonly name: string;
+  readonly bytes: number;
+  readonly status: "selected" | "retired";
+}
+
+export type DshFileSubmission =
+  | { readonly kind: "idle" | "preparing" | "uploading" | "sending" }
+  | {
+      readonly kind: "error";
+      readonly code: "read-failed" | "invalid-data" | "generation-changed" | "staging-unavailable";
+    }
+  | {
+      readonly kind: "blocked";
+      readonly code: "upload-unknown" | "generation-changed" | "prompt-rejected" | "prompt-unknown";
+    };
+
+export function prepareDshPromptFileSources(
+  sources: readonly DshPromptFileSource[],
+  currentCount: number,
+  currentBytes: number,
+): readonly DshPromptFileSource[] | undefined {
+  if (!Array.isArray(sources) || currentCount + sources.length > DSH_PROMPT_FILE_LIMITS.maxFiles)
+    return undefined;
+  const prepared: DshPromptFileSource[] = [];
+  let total = currentBytes;
+  for (const source of sources) {
+    if (typeof source !== "object" || source === null) return undefined;
+    const { name, bytes, read, dispose } = source;
+    if (typeof name !== "string" || !boundedInputName(name) || typeof read !== "function")
+      return undefined;
+    if (dispose !== undefined && typeof dispose !== "function") return undefined;
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > DSH_PROMPT_FILE_LIMITS.maxFileBytes)
+      return undefined;
+    total += bytes;
+    if (total > DSH_PROMPT_FILE_LIMITS.maxTotalBytes) return undefined;
+    let disposed = false;
+    const release = () => {
+      if (disposed) return;
+      disposed = true;
+      // Cleanup is best effort and never changes mutation admission or retry authority.
+      try {
+        void Promise.resolve(dispose?.call(source)).catch(() => undefined);
+      } catch {
+        /* The resource owner retains its cleanup diagnostics. */
+      }
+    };
+    prepared.push(Object.freeze({ name, bytes, read: read.bind(source), dispose: release }));
+  }
+  return prepared;
+}
+
 export interface DshPromptFile {
   readonly attachmentId: FileAttachment["attachmentId"];
   readonly name: string;

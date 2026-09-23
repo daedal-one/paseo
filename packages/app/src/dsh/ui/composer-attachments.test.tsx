@@ -6,6 +6,16 @@ import { i18n } from "@/i18n/i18next";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { DshPrompt, type DshPromptImage } from "../prompt";
 import { Composer } from "./composer";
+import { brandString } from "@deepseek-ai/dsh-brand";
+import { selectRemoteCapabilities, type HostCapabilities } from "@deepseek-ai/dsh-client";
+import {
+  validateDshFileUploadValue,
+  type DshPromptFilePort,
+  type DshPromptFileSource,
+  type DshFileUploadOperation,
+} from "../files";
+
+vi.mock("expo-document-picker", () => ({ getDocumentAsync: vi.fn() }));
 
 vi.mock("@/components/adaptive-modal-sheet", async () => {
   const ReactModule = await import("react");
@@ -52,6 +62,7 @@ const JPEG: DshPromptImage = { mediaType: "image/jpeg", data: "/9j/4AAQ" };
 /** The real prompt owner over a Session and event source that never confirm anything by themselves. */
 function promptOwner(
   reply: () => Promise<unknown> = async () => ({ ok: true, value: { accepted: true } }),
+  uploadPort?: DshPromptFilePort,
 ) {
   const sent: { content: unknown }[] = [];
   const sessionSnapshot = {
@@ -72,16 +83,89 @@ function promptOwner(
     subscribe: () => () => {},
     getSnapshot: () => ({ revision: 1, change: { kind: "settle-assistant" }, entries: [] }),
   };
+  const listeners = new Set<() => void>();
+  let generation = { id: 1, host: { home: "/private/test" } };
   const connection = {
-    generation: { subscribe: () => () => {}, getSnapshot: () => "generation-1" },
+    generation: {
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      getSnapshot: () => generation,
+    },
   };
   let next = 0;
   const prompt = new DshPrompt(
     { session: session as never, eventSource: eventSource as never },
     connection as never,
     () => `request-${++next}` as never,
+    uploadPort,
   );
-  return { prompt, sent };
+  return {
+    prompt,
+    sent,
+    advanceGeneration() {
+      generation = { ...generation, id: generation.id + 1 };
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+function deferredValue<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: Error) => void = () => {};
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+function localFile(name = "first.bin") {
+  return { name, bytes: 1, read: vi.fn(async (_signal: AbortSignal) => "YQ=="), dispose: vi.fn() };
+}
+function filePort(reply?: () => DshFileUploadOperation["result"]) {
+  const uploads: unknown[] = [];
+  const port: DshPromptFilePort = {
+    capabilities: () => ({
+      version: 3,
+      identity: {
+        version: 1,
+        hostId: brandString<HostCapabilities["identity"]["hostId"]>(
+          "26e99520-f2d3-4874-84b5-07c5ef24775d",
+        ),
+        activationId: brandString<HostCapabilities["identity"]["activationId"]>(
+          "f5292bdb-ebda-41ba-b473-6c587a3c1d02",
+        ),
+      },
+      capabilities: selectRemoteCapabilities(["fileUploads/upload"]).map((capability) =>
+        Object.assign({}, capability, { availability: "available" as const }),
+      ),
+    }),
+    start(request) {
+      uploads.push(request);
+      const controller = new AbortController();
+      const value = validateDshFileUploadValue(
+        {
+          receiptId: `7ab06782-f7f6-4ad4-b6c2-${String(uploads.length).padStart(12, "0")}`,
+          file: {
+            attachmentId: `sha256:${"a".repeat(64)}`,
+            name: request.name ?? "file",
+            bytes: 1,
+          },
+        },
+        1,
+      );
+      if (value === undefined) throw new Error("Invalid fixture receipt");
+      return {
+        signal: controller.signal,
+        abort: () => controller.abort(),
+        result: reply ? reply() : Promise.resolve({ ok: true, value }),
+      };
+    },
+  };
+  return { port, uploads };
 }
 
 let container: HTMLDivElement;
@@ -100,8 +184,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function render(prompt: DshPrompt, pickImages: () => Promise<readonly DshPromptImage[]>) {
-  act(() => root.render(<Composer model={prompt} pickImages={pickImages} />));
+function render(
+  prompt: DshPrompt,
+  pickImages: () => Promise<readonly DshPromptImage[]>,
+  pickFiles: () => Promise<readonly DshPromptFileSource[]> = async () => [],
+) {
+  act(() => root.render(<Composer model={prompt} pickImages={pickImages} pickFiles={pickFiles} />));
 }
 function testID(id: string): HTMLElement {
   const found = container.querySelector<HTMLElement>(`[data-testid=${id}]`);
@@ -213,7 +301,8 @@ describe("native DSH composer attachments", () => {
     await act(async () => {
       await prompt.send();
     });
-    click("dsh-prompt-discard-selection");
+    // The new owner epoch invalidates this picker when the other admission starts.
+    expect(all("dsh-prompt-discard-selection")).toHaveLength(0);
     await act(async () => {
       pick.resolve([PNG]);
       await pick.promise;
@@ -349,5 +438,278 @@ describe("native DSH composer attachments", () => {
     await flush();
     expect(prompt.getSnapshot().images).toEqual([PNG]);
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("native DSH composer local file selection", () => {
+  it("selects only metadata, removes locally and disposes without reading or uploading", async () => {
+    const transport = filePort();
+    const owner = promptOwner(undefined, transport.port);
+    const source = localFile();
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [source],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    expect(all("dsh-prompt-file")).toHaveLength(1);
+    expect(testID("dsh-prompt-file").textContent).toContain("first.bin · 1 bytes");
+    expect(source.read).not.toHaveBeenCalled();
+    expect(transport.uploads).toEqual([]);
+    expect(owner.sent).toEqual([]);
+    expect(disabled("dsh-prompt-send")).toBe(false);
+    click("dsh-prompt-file-remove");
+    expect(all("dsh-prompt-file")).toHaveLength(0);
+    expect(source.dispose).toHaveBeenCalledTimes(1);
+    expect(disabled("dsh-prompt-send")).toBe(true);
+  });
+
+  it.each(["discard", "model", "generation"])(
+    "disposes a late file picker after %s replacement",
+    async (replacement) => {
+      const transport = filePort();
+      const owner = promptOwner(undefined, transport.port);
+      const next = promptOwner(undefined, transport.port);
+      const pick = deferredValue<readonly DshPromptFileSource[]>();
+      const source = localFile();
+      render(
+        owner.prompt,
+        async () => [],
+        () => pick.promise,
+      );
+      click("dsh-prompt-attach-files");
+      expect(disabled("dsh-prompt-send")).toBe(true);
+      if (replacement === "discard") click("dsh-prompt-discard-selection");
+      if (replacement === "model") render(next.prompt, async () => []);
+      if (replacement === "generation") act(() => owner.advanceGeneration());
+      await act(async () => {
+        pick.resolve([source]);
+        await pick.promise;
+      });
+      expect(owner.prompt.getSnapshot().selectedFiles).toEqual([]);
+      expect(next.prompt.getSnapshot().selectedFiles).toEqual([]);
+      expect(source.dispose).toHaveBeenCalledTimes(1);
+      expect(source.read).not.toHaveBeenCalled();
+      expect(transport.uploads).toEqual([]);
+      expect(all("dsh-prompt-discard-selection")).toHaveLength(0);
+    },
+  );
+
+  it("keeps the prior selection through cancellation and invalid whole batches", async () => {
+    const transport = filePort();
+    const owner = promptOwner(undefined, transport.port);
+    const old = localFile("old.bin");
+    const good = localFile("new.bin");
+    const bad = { ...localFile("bad.bin"), bytes: -1 };
+    const picker = vi
+      .fn<() => Promise<readonly DshPromptFileSource[]>>()
+      .mockResolvedValueOnce([old])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([good, bad]);
+    render(owner.prompt, async () => [], picker);
+    click("dsh-prompt-attach-files");
+    await flush();
+    click("dsh-prompt-attach-files");
+    await flush();
+    expect(owner.prompt.getSnapshot().selectedFiles.map((file) => file.name)).toEqual(["old.bin"]);
+    expect(all("dsh-prompt-file-pick-failed")).toHaveLength(0);
+    click("dsh-prompt-attach-files");
+    await flush();
+    expect(owner.prompt.getSnapshot().selectedFiles.map((file) => file.name)).toEqual(["old.bin"]);
+    expect(all("dsh-prompt-file-pick-failed")).toHaveLength(1);
+    expect(good.dispose).toHaveBeenCalledTimes(1);
+    expect(bad.dispose).toHaveBeenCalledTimes(1);
+    expect(old.dispose).not.toHaveBeenCalled();
+    expect(old.read).not.toHaveBeenCalled();
+    expect(transport.uploads).toEqual([]);
+  });
+
+  it("freezes every editor/remover during preflight and ignores a double Send", async () => {
+    const transport = filePort();
+    const owner = promptOwner(undefined, transport.port);
+    const read = deferredValue<string>();
+    const source = localFile();
+    source.read.mockReturnValue(read.promise);
+    owner.prompt.setText("Frozen mixed draft");
+    owner.prompt.setImages([PNG]);
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [source],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    click("dsh-prompt-send");
+    expect(testID("dsh-prompt-file-status").textContent).toContain("Reading selected files");
+    for (const id of [
+      "dsh-prompt-text",
+      "dsh-prompt-file-remove",
+      "dsh-prompt-attachment-remove",
+      "dsh-prompt-attach-files",
+      "dsh-prompt-attach",
+      "dsh-prompt-send",
+    ])
+      expect(disabled(id)).toBe(true);
+    click("dsh-prompt-send");
+    expect(transport.uploads).toEqual([]);
+    expect(owner.sent).toEqual([]);
+    await act(async () => {
+      read.resolve("YQ==");
+      await owner.prompt.send();
+    });
+    expect(source.read).toHaveBeenCalledTimes(1);
+    expect(transport.uploads).toHaveLength(1);
+    expect(owner.sent).toHaveLength(1);
+    expect(owner.prompt.getSnapshot().selectedFiles).toEqual([]);
+    expect(source.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows pre-upload read failure and only retries on another explicit Send", async () => {
+    const transport = filePort();
+    const owner = promptOwner(undefined, transport.port);
+    const source = localFile();
+    source.read.mockRejectedValueOnce(new Error("Read failed"));
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [source],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    await act(async () => {
+      click("dsh-prompt-send");
+      await owner.prompt.send();
+    });
+    expect(testID("dsh-prompt-file-status").textContent).toContain("Nothing was uploaded");
+    expect(disabled("dsh-prompt-send")).toBe(false);
+    expect(source.read).toHaveBeenCalledTimes(1);
+    expect(source.dispose).not.toHaveBeenCalled();
+    expect(transport.uploads).toEqual([]);
+    expect(owner.sent).toEqual([]);
+    await act(async () => {
+      click("dsh-prompt-send");
+      await owner.prompt.send();
+    });
+    expect(source.read).toHaveBeenCalledTimes(2);
+    expect(transport.uploads).toHaveLength(1);
+    expect(owner.sent).toHaveLength(1);
+  });
+
+  it("shows upload uncertainty across reconnect, blocks Send and offers explicit abandonment", async () => {
+    const transport = filePort(async () => {
+      throw new Error("Upload reply lost");
+    });
+    const owner = promptOwner(undefined, transport.port);
+    const source = localFile();
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [source],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    await act(async () => {
+      click("dsh-prompt-send");
+      await owner.prompt.send();
+    });
+    expect(testID("dsh-prompt-file-status").textContent).toContain("upload is unconfirmed");
+    expect(disabled("dsh-prompt-send")).toBe(true);
+    expect(disabled("dsh-prompt-text")).toBe(true);
+    act(() => owner.advanceGeneration());
+    expect(testID("dsh-prompt-file-status").textContent).toContain("upload is unconfirmed");
+    expect(transport.uploads).toHaveLength(1);
+    expect(owner.sent).toEqual([]);
+    click("dsh-prompt-files-discard");
+    expect(all("dsh-prompt-file")).toHaveLength(0);
+    expect(owner.prompt.getSnapshot().fileUpload.kind).toBe("idle");
+    expect(transport.uploads).toHaveLength(1);
+    expect(owner.sent).toEqual([]);
+  });
+
+  it("describes a dispatched Host refusal separately from an unsent interrupted file intent", async () => {
+    const transport = filePort();
+    const owner = promptOwner(
+      async () => ({
+        ok: false,
+        error: { code: "session/model-unavailable", message: "Model unavailable", details: {} },
+      }),
+      transport.port,
+    );
+    owner.prompt.setText("Retain this refused draft");
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [localFile()],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    await act(async () => {
+      click("dsh-prompt-send");
+      await owner.prompt.send();
+    });
+    expect(owner.sent).toHaveLength(1);
+    expect(transport.uploads).toHaveLength(1);
+    const notice = testID("dsh-prompt-file-status").textContent;
+    expect(notice).toContain("The Host refused this message");
+    expect(notice).toContain("uploaded file references are retired");
+    expect(notice).toContain("select them again before another Send");
+    expect(notice).not.toContain("No message was sent");
+    expect(disabled("dsh-prompt-send")).toBe(true);
+    expect(disabled("dsh-prompt-files-discard")).toBe(false);
+    click("dsh-prompt-files-discard");
+    expect(owner.prompt.getSnapshot().selectedFiles).toEqual([]);
+    expect(owner.sent).toHaveLength(1);
+    expect(transport.uploads).toHaveLength(1);
+  });
+
+  it("keeps unknown file prompts locked without a discard or retry action", async () => {
+    const transport = filePort();
+    const owner = promptOwner(async () => {
+      throw new Error("Prompt reply lost");
+    }, transport.port);
+    render(
+      owner.prompt,
+      async () => [],
+      async () => [localFile()],
+    );
+    click("dsh-prompt-attach-files");
+    await flush();
+    await act(async () => {
+      click("dsh-prompt-send");
+      await owner.prompt.send();
+    });
+    expect(testID("dsh-prompt-file-status").textContent).toContain("file message is unconfirmed");
+    expect(all("dsh-prompt-files-discard")).toHaveLength(0);
+    expect(disabled("dsh-prompt-send")).toBe(true);
+    expect(disabled("dsh-prompt-file-remove")).toBe(true);
+    expect(owner.sent).toHaveLength(1);
+    expect(transport.uploads).toHaveLength(1);
+  });
+
+  it("keeps text/image controls available without the optional file operation", () => {
+    const owner = promptOwner();
+    owner.prompt.setText("Ordinary text");
+    render(owner.prompt, async () => []);
+    expect(disabled("dsh-prompt-attach-files")).toBe(true);
+    expect(disabled("dsh-prompt-attach")).toBe(false);
+    expect(disabled("dsh-prompt-send")).toBe(false);
+    expect(testID("dsh-prompt-file-status").textContent).toContain("unavailable");
+  });
+
+  it("disables the new file picker during an ordinary text send without freezing text/image editing", async () => {
+    const transport = filePort();
+    const reply = deferredValue<unknown>();
+    const owner = promptOwner(() => reply.promise, transport.port);
+    owner.prompt.setText("Ordinary text");
+    render(owner.prompt, async () => []);
+    click("dsh-prompt-send");
+    expect(disabled("dsh-prompt-attach-files")).toBe(true);
+    expect(disabled("dsh-prompt-text")).toBe(false);
+    expect(disabled("dsh-prompt-attach")).toBe(false);
+    await act(async () => {
+      reply.resolve({ ok: true, value: { accepted: true } });
+      await owner.prompt.send();
+    });
   });
 });

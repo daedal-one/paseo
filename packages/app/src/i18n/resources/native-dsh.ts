@@ -338,6 +338,32 @@ export const nativeDsh = {
     unknown:
       "Waiting to confirm whether the host received your message. Reconnect to check. It will not be resent, and your draft stays here until the host confirms acceptance.",
     attach: "Add images",
+    attachFiles: "Add files",
+    discardFileSelection: "Discard file selection",
+    filesSelected: "Files to send: {{count}}",
+    fileDetail: "{{name}} · {{bytes}} bytes",
+    fileRemove: "Remove file",
+    filePickFailed:
+      "No files were added. Choose up to 4 files with known sizes, at most 8 MiB in total, and valid file names.",
+    fileUnavailable: "File attachments are unavailable on this Host.",
+    fileOffline: "Reconnect to add or send files.",
+    filePreparing: "Reading selected files… Nothing has been uploaded yet.",
+    fileUploading: "Uploading files… Your complete message is held until all files are ready.",
+    fileReadFailed:
+      "Could not read the selected files. Nothing was uploaded. Review the selection and press Send to try again.",
+    filePreparationStopped:
+      "File preparation stopped before uploading. Review the selection and connection before sending.",
+    fileBlocked:
+      "The file send was interrupted. No message was sent. Discard these files before making a new selection; uploaded bytes may remain on the Host.",
+    fileUploadUnknown:
+      "A file upload is unconfirmed. No message was sent, and it will not be retried. Discard these files before making a new selection; uploaded bytes may remain on the Host.",
+    fileRetired:
+      "These files cannot be sent in this connection. Discard them and make a new selection.",
+    fileDiscard: "Discard files",
+    filePromptRejected:
+      "The Host refused this message. Its uploaded file references are retired. Discard the files and select them again before another Send; uploaded bytes may remain on the Host.",
+    filePromptUnknown:
+      "This file message is unconfirmed. Its files cannot be discarded or sent again while the Host outcome is unknown.",
     discardSelection: "Discard image selection",
     attachFailed:
       "Could not read the selected images as supported attachments. Nothing was attached.",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { APIRequestContext, Page, Request, Route } from "@playwright/test";
+import type { APIRequestContext, Page, Request, Route, WebSocketRoute } from "@playwright/test";
 import { z } from "zod";
 import { expect, metroTest as test } from "../support/fixtures";
 import {
@@ -153,6 +153,27 @@ async function expectGenericFileMetadata(page: Page, refs: z.infer<typeof generi
     await expect(blocks.nth(index)).toContainText(`${ref.name} · ${ref.bytes} bytes`);
   await expect(page.getByText("PONG", { exact: true }).first()).toBeVisible();
   await expectReachableComposer(page);
+}
+
+async function selectGenericFiles(page: Page, files: PickerFile[]) {
+  const choosing = page.waitForEvent("filechooser");
+  await page.getByTestId("dsh-prompt-attach-files").click();
+  const chooser = await choosing;
+  expect(chooser.isMultiple()).toBe(true);
+  await chooser.setFiles(files);
+  await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(files.length);
+  for (const [index, file] of files.entries())
+    await expect(page.getByTestId("dsh-prompt-file").nth(index)).toContainText(
+      `${file.name} · ${file.buffer.length} bytes`,
+    );
+}
+
+function releaseGate() {
+  let release: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
 }
 
 function imageMessages(rows: unknown[]) {
@@ -2269,6 +2290,395 @@ test.describe("mounted native DSH generic file owner", () => {
           await freshContext.close();
           await host.close();
         }
+      }
+    });
+  }
+});
+
+/** Real mux proxy: prevent replacement readiness until the mounted Conversation's Reconnect is clicked. */
+async function interceptComposerReconnect(page: Page) {
+  const channels = new Set<{
+    socket: WebSocketRoute;
+    server: WebSocketRoute;
+    pending: (string | Buffer)[];
+  }>();
+  let holding = false;
+  let opened = 0;
+  let deliveredClientId: string | undefined;
+  const ready = z.object({
+    type: z.literal("item"),
+    value: z.object({ type: z.literal("ready"), clientId: z.string() }),
+  });
+  const forward = (socket: WebSocketRoute, message: string | Buffer) => {
+    const frame = ready.safeParse(
+      JSON.parse(typeof message === "string" ? message : message.toString("utf8")),
+    );
+    if (frame.success) deliveredClientId = frame.data.value.clientId;
+    socket.send(message);
+  };
+  await page.routeWebSocket("**/api/remote.mux", (socket) => {
+    const server = socket.connectToServer();
+    const channel = { socket, server, pending: [] as (string | Buffer)[] };
+    channels.add(channel);
+    opened += 1;
+    server.onMessage((message) => {
+      if (!channels.has(channel)) return;
+      if (holding) channel.pending.push(message);
+      else forward(socket, message);
+    });
+    // Installing onClose replaces default forwarding, so explicitly close the other real side.
+    socket.onClose(async (code, reason) => {
+      if (!channels.delete(channel)) return;
+      channel.pending.length = 0;
+      await server.close({ code, reason });
+    });
+    server.onClose(async (code, reason) => {
+      if (!channels.delete(channel)) return;
+      channel.pending.length = 0;
+      await socket.close({ code, reason });
+    });
+  });
+  return {
+    opened: () => opened,
+    deliveredClientId: () => deliveredClientId,
+    async disconnectAndHold() {
+      holding = true;
+      expect(channels.size).toBeGreaterThan(0);
+      // Replacements may arrive while close awaits; disconnect only the captured channels.
+      const channelsAtDisconnect = [...channels];
+      for (const channel of channelsAtDisconnect) {
+        channels.delete(channel);
+        channel.pending.length = 0;
+        const close = { code: 4001, reason: "Composer reconnect fixture" };
+        await channel.socket.close(close);
+        await channel.server.close(close);
+      }
+    },
+    release() {
+      holding = false;
+      // Aborted pre-click attempts were removed; their ready frames must never reach the page.
+      for (const channel of channels)
+        for (const message of channel.pending.splice(0)) forward(channel.socket, message);
+    },
+  };
+}
+
+/** Actual production chooser/Composer only: no injected owner or product debug hook. */
+test.describe("mounted native DSH generic file picker", () => {
+  for (const scenario of [
+    { width: 390, lost: false },
+    { width: 1280, lost: true },
+  ]) {
+    test(`sends picked files${scenario.lost ? " after abandoning a lost second upload" : " without text"} at ${scenario.width}px`, async ({
+      page,
+      context,
+      browser,
+    }, testInfo) => {
+      test.setTimeout(180_000);
+      const host = await launchMountedDshHost();
+      const freshContext = await browser.newContext({
+        viewport: { width: scenario.width, height: 844 },
+      });
+      const first = releaseGate();
+      const mutations: Request[] = [];
+      const errors: string[] = [];
+      const uploads: {
+        request: z.infer<typeof genericFileUploadSchema>;
+        receipt: z.infer<typeof genericFileReceiptSchema>;
+      }[] = [];
+      const files: PickerFile[] = [
+        {
+          name: "ui-first.bin",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from([0, 1, 255, 128, 10, 13, 65]),
+        },
+        {
+          name: "ui-second.dat",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from("second UI file\n", "utf8"),
+        },
+      ];
+      const expectedRefs = files.map((file) => ({
+        attachmentId: `sha256:${createHash("sha256").update(file.buffer).digest("hex")}`,
+        name: file.name,
+        bytes: file.buffer.length,
+      }));
+      try {
+        await page.setViewportSize({ width: scenario.width, height: 844 });
+        await attachDshSession(context, host.config);
+        await attachDshSession(freshContext, host.config);
+        observeWorkspaceMutations(page, mutations);
+        const clientIds = observeClientIds(page);
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.route("**/api/fileUploads/upload", async (route) => {
+          const request = genericFileUploadSchema.parse(route.request().postDataJSON());
+          const response = await route.fetch();
+          expect(response.status()).toBe(200);
+          const reply = genericFileReplySchema.parse(await response.json());
+          expect(reply.rpcId).toBe(request.rpcId);
+          uploads.push({ request, receipt: reply.result.value });
+          if (uploads.length === 1) await first.promise;
+          if (scenario.lost && uploads.length === 2) await route.abort("failed");
+          else await route.fulfill({ response });
+        });
+        const reconnect = scenario.lost ? await interceptComposerReconnect(page) : undefined;
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await createHostSession(page, host.workspaceDir);
+        const sessionId = await openOnlySession(page, host.companionUrl);
+        if (scenario.lost) {
+          await page.getByLabel("Message").fill(host.prompt);
+          await selectImages(page, [
+            {
+              name: "ui-image.png",
+              mimeType: "image/png",
+              buffer: await readFile(mountedDshImageFixturePaths().light),
+            },
+          ]);
+        }
+        await selectGenericFiles(page, files);
+        expect(uploads).toEqual([]);
+        expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+          "/api/session/create",
+        ]);
+        expect(await host.fileObjectIds()).toEqual([]);
+        await page.getByTestId("dsh-prompt-send").click();
+        await expect.poll(() => uploads.length).toBe(1);
+        await expect(page.getByTestId("dsh-prompt-file-status")).toContainText("Uploading files");
+        await expect(page.getByLabel("Message")).not.toBeEditable();
+        await expect(page.getByTestId("dsh-prompt-attach")).toBeDisabled();
+        await expect(page.getByTestId("dsh-prompt-attach-files")).toBeDisabled();
+        await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+        for (const remove of await page.getByTestId("dsh-prompt-file-remove").all())
+          await expect(remove).toBeDisabled();
+        if (scenario.lost)
+          await expect(page.getByTestId("dsh-prompt-attachment-remove")).toBeDisabled();
+        // A second DOM activation of the disabled control cannot start another intent.
+        await page.getByTestId("dsh-prompt-send").dispatchEvent("click");
+        expect(uploads).toHaveLength(1);
+        expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+          "/api/session/create",
+          "/api/fileUploads/upload",
+        ]);
+        first.release();
+        if (scenario.lost) {
+          await expect(page.getByTestId("dsh-prompt-file-status")).toContainText(
+            "upload is unconfirmed",
+          );
+          expect(uploads).toHaveLength(2);
+          await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+          await expect(page.getByLabel("Message")).not.toBeEditable();
+          if (reconnect === undefined) throw new Error("Missing Composer reconnect fixture");
+          const beforeReconnect = z.string().min(1).parse(clientIds.at(-1));
+          await reconnect.disconnectAndHold();
+          const conversation = page.getByTestId("dsh-conversation");
+          const reconnectButton = conversation.getByRole("button", {
+            name: "Reconnect",
+            exact: true,
+          });
+          await expect(
+            conversation.getByText("Disconnected. Showing the last received conversation.", {
+              exact: true,
+            }),
+          ).toBeVisible();
+          await expect(reconnectButton).toBeVisible();
+          await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(2);
+          await expect(page.getByTestId("dsh-prompt-file-status")).toContainText(
+            "upload is unconfirmed",
+          );
+          expect(reconnect.deliveredClientId()).toBe(beforeReconnect);
+          const beforeManualReconnect = reconnect.opened();
+          await reconnectButton.click();
+          await expect.poll(() => reconnect.opened()).toBeGreaterThan(beforeManualReconnect);
+          // All server ready frames are still held until after the explicit visible gesture.
+          await expect(reconnectButton).toBeVisible();
+          expect(reconnect.deliveredClientId()).toBe(beforeReconnect);
+          expect(uploads).toHaveLength(2);
+          reconnect.release();
+          await expect.poll(() => reconnect.deliveredClientId()).not.toBe(beforeReconnect);
+          await expect.poll(() => clientIds.at(-1)).not.toBe(beforeReconnect);
+          await expect(reconnectButton).toHaveCount(0);
+          expect(reconnect.deliveredClientId()).toBe(clientIds.at(-1));
+          await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(2);
+          await expect(page.getByTestId("dsh-prompt-file-status")).toContainText(
+            "upload is unconfirmed",
+          );
+          await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+          const unprompted = await host.readSessionLog();
+          expect(genericFileMessages(unprompted.rows)).toEqual([]);
+          expect(completedTurnCount(unprompted.rows)).toBe(0);
+          expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+            "/api/session/create",
+            "/api/fileUploads/upload",
+            "/api/fileUploads/upload",
+          ]);
+          await page.screenshot({
+            path: testInfo.outputPath(`generic-file-picker-${scenario.width}-unknown.png`),
+          });
+          await page.getByTestId("dsh-prompt-files-discard").click();
+          await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+          await expect(page.getByLabel("Message")).toHaveValue(host.prompt);
+          await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(1);
+          // Explicitly select again: these will be new uploads, never reuse of old authority.
+          await selectGenericFiles(page, files);
+          expect(uploads).toHaveLength(2);
+          await page.getByTestId("dsh-prompt-send").click();
+        }
+        await expectGenericFileMetadata(page, expectedRefs);
+        await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+        const expectedUploads = scenario.lost ? 4 : 2;
+        expect(uploads).toHaveLength(expectedUploads);
+        expect(new Set(uploads.map((upload) => upload.receipt.receiptId)).size).toBe(
+          expectedUploads,
+        );
+        for (const [index, upload] of uploads.entries()) {
+          const file = files[index % 2]!;
+          expect(upload.request.payload.args.agentId).toBe(sessionId);
+          expect(upload.request.payload.args.request).toEqual({
+            data: file.buffer.toString("base64"),
+            name: file.name,
+          });
+          expect(upload.receipt.file).toEqual(expectedRefs[index % 2]);
+        }
+        const promptRequests = mutations.filter(
+          (request) => new URL(request.url()).pathname === "/api/session/prompt",
+        );
+        expect(promptRequests).toHaveLength(1);
+        const prompt = genericFilePromptSchema.parse(promptRequests[0]!.postDataJSON()).payload.args
+          .request;
+        expect(prompt.sessionId).toBe(sessionId);
+        expect(prompt.content.filter((part) => part.type === "file")).toEqual(
+          uploads
+            .slice(-2)
+            .map((upload) => ({ type: "file", receiptId: upload.receipt.receiptId })),
+        );
+        expect(prompt.content.map((part) => part.type)).toEqual(
+          scenario.lost ? ["text", "image", "file", "file"] : ["file", "file"],
+        );
+        for (const upload of uploads.slice(0, -2))
+          expect(JSON.stringify(prompt)).not.toContain(upload.receipt.receiptId);
+        await expect
+          .poll(async () => completedTurnCount((await host.readSessionLog()).rows))
+          .toBe(1);
+        const log = await host.readSessionLog();
+        const messages = genericFileMessages(log.rows);
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.data.source.rpcId).toBe(prompt.requestId);
+        expect(messages[0]!.data.content.filter((part) => part.type === "file")).toEqual(
+          expectedRefs.map((attachment) => ({ type: "file", attachment })),
+        );
+        expect(messages[0]!.data.content.map((part) => part.type)).toEqual(
+          scenario.lost ? ["text", "image", "file", "file"] : ["file", "file"],
+        );
+        expect(messages[0]!.data.content.filter((part) => part.type === "text")).toEqual(
+          scenario.lost ? [{ type: "text", text: host.prompt }] : [],
+        );
+        const ends = log.rows
+          .filter((row) => turnEndIdentity.safeParse(row).success)
+          .map((row) => turnEndSchema.parse(row));
+        expect(ends).toHaveLength(1);
+        expect(ends[0]!.seq).toBeGreaterThan(messages[0]!.seq);
+        expect(await host.fileObjectIds()).toEqual(
+          expectedRefs.map((ref) => ref.attachmentId).sort(),
+        );
+        for (const [index, ref] of expectedRefs.entries()) {
+          const bytes = await host.readFileObject(ref.attachmentId);
+          expect(bytes).toEqual(files[index]!.buffer);
+          expect(`sha256:${createHash("sha256").update(bytes).digest("hex")}`).toBe(
+            ref.attachmentId,
+          );
+        }
+        const images = messages[0]!.data.content.filter((part) => part.type === "image");
+        expect(images.map((part) => part.attachment.name)).toEqual(
+          scenario.lost ? ["ui-image.png"] : [],
+        );
+        expect(await host.imageObjectIds()).toEqual(
+          images.map((part) => part.attachment.attachmentId).sort(),
+        );
+        for (const image of images) {
+          const stored = await host.readImageObject(image.attachment.attachmentId);
+          expect(`sha256:${createHash("sha256").update(stored).digest("hex")}`).toBe(
+            image.attachment.attachmentId,
+          );
+        }
+        await page.screenshot({
+          path: testInfo.outputPath(`generic-file-picker-${scenario.width}-live.png`),
+        });
+        const beforeReload = [...clientIds];
+        await page.reload();
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+        await expectGenericFileMetadata(page, expectedRefs);
+        const reloadedClientId = z.string().min(1).parse(clientIds.at(-1));
+        expect(beforeReload).not.toContain(reloadedClientId);
+        if (!scenario.lost)
+          await page.screenshot({
+            path: testInfo.outputPath(`generic-file-picker-${scenario.width}-reloaded.png`),
+          });
+        const fresh = await freshContext.newPage();
+        const freshClientIds = observeClientIds(fresh);
+        observeWorkspaceMutations(fresh, mutations);
+        fresh.on("pageerror", (error) => errors.push(error.message));
+        expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+        await expectGenericFileMetadata(fresh, expectedRefs);
+        const freshClientId = z.string().min(1).parse(freshClientIds.at(-1));
+        expect(clientIds).not.toContain(freshClientId);
+        const paths = mutations.map((request) => new URL(request.url()).pathname);
+        expect(paths).toEqual([
+          "/api/session/create",
+          ...Array<string>(expectedUploads).fill("/api/fileUploads/upload"),
+          "/api/session/prompt",
+        ]);
+        const finalLog = await host.readSessionLog();
+        expect(genericFileMessages(finalLog.rows)).toEqual(messages);
+        expect(completedTurnCount(finalLog.rows)).toBe(1);
+        expect(await host.fileObjectIds()).toEqual(
+          expectedRefs.map((ref) => ref.attachmentId).sort(),
+        );
+        await fresh.screenshot({
+          path: testInfo.outputPath(`generic-file-picker-${scenario.width}-fresh.png`),
+        });
+        const artifact = testInfo.outputPath(`generic-file-picker-${scenario.width}.json`);
+        await writeFile(
+          artifact,
+          JSON.stringify({
+            width: scenario.width,
+            lostSecondUpload: scenario.lost,
+            sessionId,
+            requestId: prompt.requestId,
+            clientIds,
+            reloadedClientId,
+            freshClientIds,
+            freshClientId,
+            uploads,
+            prompt,
+            messages,
+            ends,
+            fileObjects: expectedRefs,
+            mutations: paths,
+            counts: {
+              create: 1,
+              uploads: uploads.length,
+              prompts: promptRequests.length,
+              humanMessages: messages.length,
+              completedTurns: ends.length,
+              genericObjects: expectedRefs.length,
+              images: scenario.lost ? 1 : 0,
+              cancels: paths.filter((value) => value === "/api/session/cancel").length,
+            },
+            boundary:
+              "Actual production DocumentPicker/Composer gestures; no injected owner. Replay-only private Host. Wide case drops second accepted upload reply and explicitly abandons/reselects new uploads. Not native-device, physical cache-copy budget, lost-prompt browser recovery, Host restart or receipt survival qualification.",
+          }),
+        );
+        await testInfo.attach("generic-file-picker", {
+          path: artifact,
+          contentType: "application/json",
+        });
+        expect(errors).toEqual([]);
+      } finally {
+        first.release();
+        await freshContext.close();
+        await host.close();
       }
     });
   }
