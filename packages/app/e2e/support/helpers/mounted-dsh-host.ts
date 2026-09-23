@@ -9,6 +9,31 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 const repository = process.env.DSH_REPOSITORY ?? "/home/carlo/devel/deepseek-harness-daedal-dsh";
 const testFixture = "session/text-turn/session.v1.jsonl";
 const fixturePrompt = "Reply with exactly the word: PONG. Do not use any tools.";
+export const APPROVAL_MARKER_NAME = "approval-marker.txt";
+export const APPROVAL_MARKER_CONTENT = "approved marker\n";
+export const APPROVAL_MARKER_REASON = "Approve one invocation writing private approval-marker.txt";
+
+function markerApprovalPolicy(cwd: string): string {
+  return [
+    "export const name = 'mounted-approval-policy';",
+    "export const inject = ['tools'];",
+    "export function apply(ctx) {",
+    "  ctx.on('tools/pre-execute', async (exec, next) => {",
+    "    const downstream = await next();",
+    "    if (downstream.kind !== 'allow') return downstream;",
+    "    const args = exec.arguments;",
+    "    const exactArgs = args !== null && typeof args === 'object' && !Array.isArray(args)",
+    `      && Object.keys(args).length === 2 && args.file_path === ${JSON.stringify(APPROVAL_MARKER_NAME)}`,
+    `      && args.content === ${JSON.stringify(APPROVAL_MARKER_CONTENT)};`,
+    `    if (exec.name === 'write' && exec.agent?.session.header.cwd === ${JSON.stringify(cwd)} && exactArgs) {`,
+    `      return { kind: 'ask', reason: ${JSON.stringify(APPROVAL_MARKER_REASON)} };`,
+    "    }",
+    "    return downstream;",
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+}
 
 /**
  * The browser edition derives its DSH host from the page origin and stores no enrollment, so a
@@ -39,34 +64,44 @@ interface MountedDshHostOptions {
   holdTurn?: boolean;
   /** Serialized provider replay entries, written only inside this test Host's private home. */
   replayOverride?: string;
+  requireMarkerApproval?: boolean;
 }
 
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
   const fixture = path.join(repository, "snapshots", options.fixture ?? testFixture);
+  const cwd = path.join(home, "workspace");
+  const marker = path.join(cwd, APPROVAL_MARKER_NAME);
   const override = path.join(home, "replay.override.json");
   const replayOverride =
     options.replayOverride ?? (options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined);
   if (replayOverride !== undefined) await writeFile(override, replayOverride);
+  const approvalPolicy = path.join(home, "mounted-approval-policy.mjs");
+  if (options.requireMarkerApproval) await writeFile(approvalPolicy, markerApprovalPolicy(cwd));
   const overlay = path.join(home, "companion-mounted.yml");
-  await writeFile(
-    overlay,
-    [
-      "- id: session-title-llm",
-      "  disabled: true",
-      "- id: session-telemetry-otel",
-      "  disabled: true",
+  const overlayRows = [
+    "- id: session-title-llm",
+    "  disabled: true",
+    "- id: session-telemetry-otel",
+    "  disabled: true",
+    "- insert:",
+    "    - id: daedal-browser-preview",
+    "      name: '@deepseek-ai/dsh-host-frontend-static'",
+    "      config:",
+    `        distIndex: ${dist}`,
+    "        mountPath: /daedal",
+    "        indexPaths: [/dsh-hosts]",
+  ];
+  if (options.requireMarkerApproval) {
+    overlayRows.push(
       "- insert:",
-      "    - id: daedal-browser-preview",
-      "      name: '@deepseek-ai/dsh-host-frontend-static'",
-      "      config:",
-      `        distIndex: ${dist}`,
-      "        mountPath: /daedal",
-      "        indexPaths: [/dsh-hosts]",
-      "",
-    ].join("\n"),
-  );
+      "    - id: mounted-approval-policy",
+      `      name: ${approvalPolicy}`,
+    );
+  }
+  overlayRows.push("");
+  await writeFile(overlay, overlayRows.join("\n"));
   if (process.env.DAEDAL_E2E_DEBUG === "1") {
     console.log("[mounted-dsh-host] spawn cwd", repository, "overlay");
     console.log(await readFile(overlay, "utf8"));
@@ -159,10 +194,8 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
     const cookie = login.headers.getSetCookie()[0].split(";", 1)[0];
     const cookieFile = path.join(home, "companion-auth.json");
     await writeFile(cookieFile, JSON.stringify({ origin, cookie }), { mode: 0o600 });
-    const cwd = path.join(home, "workspace");
     await mkdir(cwd, { recursive: true });
-    // The Host admits an existing directory; an initialised repository also satisfies the
-    // automatic Git workspace opt-in used by the creation form.
+    // Keep setup within the owned process cleanup boundary; creation opts into this Git workspace.
     await new Promise<void>((resolve) =>
       execFile("git", ["init", "--quiet"], { cwd }, () => resolve()),
     );
@@ -205,6 +238,9 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
           .map((line) => JSON.parse(line));
         const header = z.object({ type: z.literal("session"), id: z.string() }).parse(rows[0]);
         return { sessionId: header.id, rows: rows.slice(1) };
+      },
+      async readMarker() {
+        return existsSync(marker) ? readFile(marker, "utf8") : null;
       },
       close: closeProcess,
     };

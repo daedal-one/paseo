@@ -144,6 +144,22 @@ The winning browser reloads and observes a different remote-event client identit
 
 The app production runtime and pinned Client/backend source are unchanged. The production Web export, full workspace types/lint, formatting and spec lint pass. The initial run failed because it expected a cold deferred result to be expanded; the test now uses the existing explicit full-result gesture. Evidence and retained failure/success Forge receipts are recorded in `evidence/frontend/native-question-races-20260923/verification.json` in the handoff workspace. Phase 4 and all platform/publication gates remain open.
 
+## Concurrent approval qualification increment
+
+Qualify the native Allow once and Reject controls with two independent clients on one isolated real Host. Hold both responses before delivery, exercise each decision as the winner, and deliver the opposing captured packet late. Use a harmless operation confined to the private test workspace and require actual Host approval through a test-only policy. Check both the durable tool result and the operation's execution marker; local form settlement and HTTP success are not winner acknowledgements.
+
+A separately identified second invocation of the same operation must request approval again; reject it and verify that the marker is unchanged. Reload and fresh-reader checks must not replay either resolved request or broaden the permission choice. Production policies, runtime code, portable artifacts, live services and phase/platform/publication gates remain unchanged. Keep transport loss, timeout/cancellation and other waterfall overlap qualification separate unless explicitly executed here.
+
+### Concurrent approval qualification
+
+Four production-browser cases pass at 390px and 1280px, with Allow once and Reject each winning a controlled two-client race. The private fixture adds only an exact-path/arguments/cwd pre-execute ask policy and preserves downstream denials and runtime guards. The actual write tool, approval service, remote event routing and Session persistence run unchanged. This qualifies native choice translation and ToolRuntime behavior, not the shipped shell-classification policy.
+
+Every case checks two separately identified identical write calls, one result per call, two unique paired approval audits and their exact decisions. Actual stored sequence numbers establish turn/start, call, asked, decided, result and completed turn/end order. The allowed winner creates the exact marker bytes; the rejected winner leaves it absent. A late opposing packet is ignored, the second invocation requires a new request and its explicit rejection leaves the marker unchanged. Marker contents and result counts are not a physical execution counter. Permission preset, sandbox mode and approval policy events remain equal to the initial baseline.
+
+Winner reload observes a new remote-event client identity. It and a fresh reader explicitly load both deferred results and verify their exact contents and success/failure labels, with no pending approval or response replay. Each case records three browser-origin responses and one controlled late-wire delivery, separately. Screenshots and extracted real audit/result evidence are retained in handoff `evidence/frontend/native-approval-races-20260923/verification.json`.
+
+The production Web export, full workspace types/lint, formatting and spec lint pass. Initial fixture insertion and type-style mistakes were corrected; an immediate disk assertion was replaced by bounded observation of the actual persisted events because live waterfall delivery precedes the Host's write-behind flush. No fixed delay or synthesized sequence was added. Approval reply loss, automatic reconnect timing, timeout/cancellation, other waterfall overlaps, Host restart and physical devices remain separate gates. Phase 4 is not complete; no source publication, deployment or TestFlight upload occurred.
+
 ## Implementation surfaces
 
 - [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)

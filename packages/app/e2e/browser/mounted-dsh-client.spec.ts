@@ -1,7 +1,12 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { Page, Route } from "@playwright/test";
 import { z } from "zod";
 import { expect, metroTest as test } from "../support/fixtures";
 import {
+  APPROVAL_MARKER_CONTENT,
+  APPROVAL_MARKER_NAME,
+  APPROVAL_MARKER_REASON,
   attachDshSession,
   createHostSession,
   launchMountedDshHost,
@@ -199,6 +204,312 @@ async function answerBatch(page: Page, choice: string, detail: string): Promise<
   await expect(page.getByTestId("dsh-question-submit")).toBeEnabled();
 }
 
+const APPROVAL_CALL_IDS = ["approval-first", "approval-second"] as const;
+const APPROVAL_FIRST_CALL = APPROVAL_CALL_IDS[0];
+const APPROVAL_SECOND_CALL = APPROVAL_CALL_IDS[1];
+const approvalCallIdSchema = z.enum(APPROVAL_CALL_IDS);
+const APPROVAL_WRITE_ARGS = {
+  file_path: APPROVAL_MARKER_NAME,
+  content: APPROVAL_MARKER_CONTENT,
+};
+
+function approvalToolReplay(callId: (typeof APPROVAL_CALL_IDS)[number]) {
+  const args = JSON.stringify(APPROVAL_WRITE_ARGS);
+  const call = { type: "tool-call", id: callId, name: "write", arguments: args };
+  return {
+    kind: "chunks",
+    chunks: [
+      { type: "block-start", index: 0, blockType: "tool-call" },
+      { type: "tool-call-delta", index: 0, id: callId, name: "write", argumentsDelta: args },
+      { type: "block-end", index: 0, block: call },
+      { type: "finish", reason: { kind: "tool-calls" } },
+    ],
+  };
+}
+
+function approvalReplay(): string {
+  return JSON.stringify([
+    approvalToolReplay(APPROVAL_FIRST_CALL),
+    approvalToolReplay(APPROVAL_SECOND_CALL),
+    {
+      kind: "chunks",
+      chunks: [
+        { type: "block-start", index: 0, blockType: "text" },
+        { type: "text-delta", index: 0, text: "APPROVAL_DONE" },
+        { type: "block-end", index: 0, block: { type: "text", text: "APPROVAL_DONE" } },
+        { type: "finish", reason: { kind: "stop" } },
+      ],
+    },
+  ]);
+}
+
+const approvalAnswerSchema = z.object({
+  payload: z.object({
+    args: z.object({
+      clientId: z.string(),
+      eventId: z.string(),
+      outcome: z.object({
+        kind: z.literal("result"),
+        value: z.enum(["allowed-once", "rejected"]),
+      }),
+    }),
+  }),
+});
+const approvalToolCallIdentity = z.object({
+  type: z.literal("tool/call"),
+  data: z.object({ callId: approvalCallIdSchema }),
+});
+const approvalToolCallSchema = z.object({
+  type: z.literal("tool/call"),
+  data: z.object({
+    callId: approvalCallIdSchema,
+    name: z.literal("write"),
+    arguments: z.string(),
+  }),
+});
+const approvalToolResultIdentity = z.object({
+  type: z.literal("tool/result"),
+  data: z.object({ message: z.object({ source: z.object({ callId: approvalCallIdSchema }) }) }),
+});
+const approvalToolResultSchema = z.object({
+  type: z.literal("tool/result"),
+  data: z.object({
+    message: z.object({
+      source: z.object({ kind: z.literal("tool"), callId: approvalCallIdSchema }),
+      content: z.array(
+        z.object({
+          type: z.literal("tool-result"),
+          toolCallId: approvalCallIdSchema,
+          isError: z.boolean(),
+          content: z.array(z.object({ type: z.literal("text"), text: z.string() })),
+        }),
+      ),
+    }),
+  }),
+});
+const approvalRequestFrameSchema = z.object({
+  type: z.literal("item"),
+  value: z.object({
+    type: z.literal("waterfall"),
+    event: z.literal("approval/request"),
+    eventId: z.string(),
+    agentId: z.string(),
+    request: z.object({
+      toolName: z.literal("write"),
+      callId: approvalCallIdSchema,
+      reason: z.literal(APPROVAL_MARKER_REASON),
+    }),
+  }),
+});
+
+interface ApprovalResult {
+  callId: (typeof APPROVAL_CALL_IDS)[number];
+  isError: boolean;
+  text: string;
+}
+interface ObservedApproval {
+  eventId: string;
+  callId: (typeof APPROVAL_CALL_IDS)[number];
+}
+
+function approvalToolCalls(rows: unknown[]): (typeof APPROVAL_CALL_IDS)[number][] {
+  const candidates = rows.filter((row) => approvalToolCallIdentity.safeParse(row).success);
+  return candidates.map((row) => {
+    const call = approvalToolCallSchema.parse(row);
+    expect(JSON.parse(call.data.arguments)).toEqual(APPROVAL_WRITE_ARGS);
+    return call.data.callId;
+  });
+}
+
+function approvalToolResults(rows: unknown[]): ApprovalResult[] {
+  const candidates = rows.filter((row) => approvalToolResultIdentity.safeParse(row).success);
+  return candidates.map((row) => {
+    const result = approvalToolResultSchema.parse(row);
+    expect(result.data.message.content).toHaveLength(1);
+    const block = result.data.message.content[0]!;
+    expect(block.toolCallId).toBe(result.data.message.source.callId);
+    return {
+      callId: block.toolCallId,
+      isError: block.isError,
+      text: block.content.map((part) => part.text).join(""),
+    };
+  });
+}
+
+interface ApprovalExpectation {
+  outcome: "allowed-once" | "rejected";
+  workspaceDir: string;
+}
+
+function expectApprovalResult(result: ApprovalResult, expected: ApprovalExpectation): void {
+  const texts = {
+    "allowed-once": `<path>${path.join(expected.workspaceDir, APPROVAL_MARKER_NAME)}</path>\n<type>file</type>\n<content>\nCreated file\n</content>`,
+    rejected: 'Error: the user rejected tool "write"',
+  };
+  expect(result.isError).toBe(expected.outcome === "rejected");
+  expect(result.text).toBe(texts[expected.outcome]);
+}
+
+const approvalFrameIdentity = z.object({
+  type: z.literal("item"),
+  value: z.object({ type: z.literal("waterfall"), event: z.literal("approval/request") }),
+});
+const authorityEvent = z.object({
+  type: z.enum(["sandbox/mode", "approval/policy", "permission/preset"]),
+});
+const approvalAuditIdentity = z.object({ type: z.enum(["approval/asked", "approval/decided"]) });
+const approvalAuditSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("approval/asked"),
+    seq: z.number(),
+    data: z.object({
+      id: z.string(),
+      callId: approvalCallIdSchema,
+      toolName: z.literal("write"),
+      reason: z.literal(APPROVAL_MARKER_REASON),
+    }),
+  }),
+  z.object({
+    type: z.literal("approval/decided"),
+    seq: z.number(),
+    data: z.object({
+      id: z.string(),
+      outcome: z.enum(["allowed-once", "rejected"]),
+    }),
+  }),
+]);
+
+function approvalAudit(rows: unknown[]) {
+  return rows
+    .filter((row) => approvalAuditIdentity.safeParse(row).success)
+    .map((row) => approvalAuditSchema.parse(row));
+}
+
+const turnEndIdentity = z.object({ type: z.literal("turn/end") });
+function completedTurnCount(rows: unknown[]): number {
+  return rows.filter((row) => turnEndIdentity.safeParse(row).success).length;
+}
+const turnStartIdentity = z.object({ type: z.literal("turn/start") });
+const turnStartSchema = turnStartIdentity.extend({
+  seq: z.number(),
+  data: z.object({ turn: z.number() }),
+});
+const turnEndSchema = turnEndIdentity.extend({
+  seq: z.number(),
+  data: z.object({ turn: z.number(), reason: z.object({ kind: z.literal("completed") }) }),
+});
+const sequencedApprovalCall = approvalToolCallSchema.extend({ seq: z.number() });
+const sequencedApprovalResult = approvalToolResultSchema.extend({ seq: z.number() });
+
+function pendingApprovalLogState(rows: unknown[]) {
+  const audit = approvalAudit(rows);
+  return {
+    calls: approvalToolCalls(rows),
+    results: approvalToolResults(rows).map((result) => result.callId),
+    asks: audit.filter((row) => row.type === "approval/asked").length,
+    decisions: audit.filter((row) => row.type === "approval/decided").length,
+  };
+}
+
+function assertApprovalDecisions(rows: unknown[], firstOutcome: "allowed-once" | "rejected") {
+  const starts = rows
+    .filter((row) => turnStartIdentity.safeParse(row).success)
+    .map((row) => turnStartSchema.parse(row));
+  const ends = rows
+    .filter((row) => turnEndIdentity.safeParse(row).success)
+    .map((row) => turnEndSchema.parse(row));
+  expect(starts).toHaveLength(1);
+  expect(ends).toHaveLength(1);
+  expect(ends[0]!.data.turn).toBe(starts[0]!.data.turn);
+  const calls = rows
+    .filter((row) => approvalToolCallIdentity.safeParse(row).success)
+    .map((row) => sequencedApprovalCall.parse(row));
+  const results = rows
+    .filter((row) => approvalToolResultIdentity.safeParse(row).success)
+    .map((row) => sequencedApprovalResult.parse(row));
+  const audit = approvalAudit(rows);
+  const asks = audit.filter((row) => row.type === "approval/asked");
+  const decisions = audit.filter((row) => row.type === "approval/decided");
+  expect(asks.map((row) => row.data.callId)).toEqual(APPROVAL_CALL_IDS);
+  expect(decisions).toHaveLength(2);
+  expect(new Set(asks.map((row) => row.data.id)).size).toBe(2);
+  const outcomes = asks.map((ask) => {
+    const matches = decisions.filter((decision) => decision.data.id === ask.data.id);
+    expect(matches).toHaveLength(1);
+    const call = calls.find((row) => row.data.callId === ask.data.callId)!;
+    const result = results.find((row) => row.data.message.source.callId === ask.data.callId)!;
+    expect(call.seq).toBeGreaterThan(starts[0]!.seq);
+    expect(ask.seq).toBeGreaterThan(call.seq);
+    expect(matches[0]!.seq).toBeGreaterThan(ask.seq);
+    expect(result.seq).toBeGreaterThan(matches[0]!.seq);
+    expect(ends[0]!.seq).toBeGreaterThan(result.seq);
+    return matches[0]!.data.outcome;
+  });
+  expect(outcomes).toEqual([firstOutcome, "rejected"]);
+  return audit;
+}
+
+function observeApprovalRequests(page: Page) {
+  const requests: ObservedApproval[] = [];
+  const errors: string[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", ({ payload }) => {
+      const text = typeof payload === "string" ? payload : payload.toString("utf8");
+      const frame: unknown = JSON.parse(text);
+      if (!approvalFrameIdentity.safeParse(frame).success) return;
+      const approval = approvalRequestFrameSchema.safeParse(frame);
+      if (!approval.success) {
+        errors.push(approval.error.message);
+        return;
+      }
+      requests.push({
+        eventId: approval.data.value.eventId,
+        callId: approval.data.value.request.callId,
+      });
+    });
+  });
+  return { requests, errors };
+}
+
+async function approvalDelivery(
+  observed: ReturnType<typeof observeApprovalRequests>,
+  callId: (typeof APPROVAL_CALL_IDS)[number],
+): Promise<ObservedApproval> {
+  await expect
+    .poll(() => observed.requests.filter((request) => request.callId === callId).length, {
+      timeout: 60_000,
+    })
+    .toBe(1);
+  return observed.requests.find((request) => request.callId === callId)!;
+}
+
+async function expectPendingApprovalCard(page: Page): Promise<void> {
+  const card = page.getByTestId("dsh-interaction");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(card).toContainText("write");
+  await expect(card).toContainText(APPROVAL_MARKER_REASON);
+  await expect(card.getByRole("button")).toHaveCount(2);
+  await expect(card.getByTestId("dsh-approval-allow")).toHaveText("Allow once");
+  await expect(card.getByTestId("dsh-approval-reject")).toHaveText("Reject");
+}
+
+async function openApprovalResults(page: Page, expected: ApprovalResult[]): Promise<void> {
+  const results = page.getByTestId("dsh-tool-result");
+  await expect(results).toHaveCount(2);
+  const loads = results.getByRole("button", { name: "Load full result", exact: true });
+  for (let remaining = 2; remaining > 0; remaining -= 1) {
+    await expect(loads).toHaveCount(remaining);
+    await loads.first().click();
+  }
+  await expect(loads).toHaveCount(0);
+  for (const [index, result] of expected.entries()) {
+    await expect(results.nth(index)).toContainText(result.text);
+    await expect(results.nth(index)).toContainText(
+      result.isError ? "Tool failed" : "Tool finished",
+    );
+  }
+}
+
 for (const width of WIDTHS) {
   for (const reply of ["delivered", "lost"] as const) {
     test(`concurrent question batch keeps one durable winner with ${reply} reply at ${width}px`, async ({
@@ -321,6 +632,240 @@ for (const width of WIDTHS) {
     });
   }
 }
+
+test.describe("mounted native DSH concurrent approvals", () => {
+  test.describe.configure({ timeout: 300_000 });
+  for (const width of WIDTHS) {
+    for (const firstOutcome of ["allowed-once", "rejected"] as const) {
+      test(`keeps one ${firstOutcome} approval winner at ${width}px`, async ({
+        browser,
+        context,
+        page,
+      }, testInfo) => {
+        const winnerClientIds = observeClientIds(page);
+        const winnerApprovals = observeApprovalRequests(page);
+        const host = await launchMountedDshHost({
+          replayOverride: approvalReplay(),
+          requireMarkerApproval: true,
+        });
+        const otherContext = await browser.newContext({ viewport: { width, height: 844 } });
+        const attempts: string[] = [];
+        const errors: string[] = [];
+        try {
+          expect(await host.readMarker()).toBeNull();
+          await attachDshSession(context, host.config);
+          await attachDshSession(otherContext, host.config);
+          await page.setViewportSize({ width, height: 844 });
+          observeAnswers(page, attempts, errors);
+          await page.goto(host.companionUrl);
+          await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+          await createHostSession(page, host.workspaceDir);
+          await page.getByTestId("dsh-create-open").click();
+          const other = await otherContext.newPage();
+          const otherApprovals = observeApprovalRequests(other);
+          observeAnswers(other, attempts, errors);
+          const sessionId = await openOnlySession(other, host.companionUrl);
+          await other.getByLabel("Message").fill("Retained unsent composer draft");
+          const initialLog = await host.readSessionLog();
+          const initialAuthority = initialLog.rows.filter(
+            (row) => authorityEvent.safeParse(row).success,
+          );
+          const winnerGate = await holdAnswer(page);
+          const loserGate = await holdAnswer(other);
+          await page.getByLabel("Message").fill(host.prompt);
+          await page.getByTestId("dsh-prompt-send").click();
+          await Promise.all([expectPendingApprovalCard(page), expectPendingApprovalCard(other)]);
+          const firstWinnerApproval = await approvalDelivery(winnerApprovals, APPROVAL_FIRST_CALL);
+          const firstLoserApproval = await approvalDelivery(otherApprovals, APPROVAL_FIRST_CALL);
+          expect(firstWinnerApproval.eventId).toBe(firstLoserApproval.eventId);
+          await page.screenshot({
+            path: testInfo.outputPath(`approval-${width}-${firstOutcome}-pending.png`),
+          });
+          const loserOutcome = firstOutcome === "allowed-once" ? "rejected" : "allowed-once";
+          await Promise.all([
+            page
+              .getByTestId(
+                firstOutcome === "allowed-once" ? "dsh-approval-allow" : "dsh-approval-reject",
+              )
+              .click(),
+            other
+              .getByTestId(
+                loserOutcome === "allowed-once" ? "dsh-approval-allow" : "dsh-approval-reject",
+              )
+              .click(),
+          ]);
+          const winnerRoute = await winnerGate.request;
+          const loserRoute = await loserGate.request;
+          const winner = approvalAnswerSchema.parse(winnerRoute.request().postDataJSON()).payload
+            .args;
+          const loser = approvalAnswerSchema.parse(loserRoute.request().postDataJSON()).payload
+            .args;
+          expect(winner.eventId).toBe(loser.eventId);
+          expect(winner.eventId).toBe(firstWinnerApproval.eventId);
+          expect(winner.clientId).not.toBe(loser.clientId);
+          expect(winner.outcome.value).toBe(firstOutcome);
+          expect(loser.outcome.value).toBe(loserOutcome);
+          expect(winnerClientIds).toContain(winner.clientId);
+
+          const response = await winnerRoute.fetch();
+          expect(response.status()).toBe(200);
+          expect(await response.json()).toMatchObject({ result: { ok: true } });
+          await winnerRoute.fulfill({ response });
+          await Promise.all([expectPendingApprovalCard(page), expectPendingApprovalCard(other)]);
+          const secondWinnerApproval = await approvalDelivery(
+            winnerApprovals,
+            APPROVAL_SECOND_CALL,
+          );
+          const secondLoserApproval = await approvalDelivery(otherApprovals, APPROVAL_SECOND_CALL);
+          expect(secondWinnerApproval.eventId).toBe(secondLoserApproval.eventId);
+          expect(secondWinnerApproval.eventId).not.toBe(firstWinnerApproval.eventId);
+
+          // Waterfall visibility precedes the JSONL writer's bounded batch flush.
+          await expect
+            .poll(async () => {
+              const log = await host.readSessionLog();
+              return pendingApprovalLogState(log.rows);
+            })
+            .toEqual({
+              calls: [...APPROVAL_CALL_IDS],
+              results: [APPROVAL_FIRST_CALL],
+              asks: 2,
+              decisions: 1,
+            });
+          const firstLog = await host.readSessionLog();
+          expect(firstLog.sessionId).toBe(sessionId);
+          expect(approvalToolCalls(firstLog.rows)).toEqual([
+            APPROVAL_FIRST_CALL,
+            APPROVAL_SECOND_CALL,
+          ]);
+          const firstResults = approvalToolResults(firstLog.rows);
+          expect(firstResults).toHaveLength(1);
+          expect(firstResults[0]?.callId).toBe(APPROVAL_FIRST_CALL);
+          expectApprovalResult(firstResults[0]!, {
+            outcome: firstOutcome,
+            workspaceDir: host.workspaceDir,
+          });
+          const firstMarker = await host.readMarker();
+          expect(firstMarker).toBe(
+            firstOutcome === "allowed-once" ? APPROVAL_MARKER_CONTENT : null,
+          );
+
+          const late = await otherContext.request.post(loserRoute.request().url(), {
+            data: loserRoute.request().postData(),
+            headers: { "content-type": "application/json", origin: host.config.url },
+          });
+          expect(late.status()).toBe(200);
+          expect(await late.json()).toMatchObject({ result: { ok: true } });
+          await loserRoute.abort("failed");
+          const afterLateLog = await host.readSessionLog();
+          expect(afterLateLog.sessionId).toBe(sessionId);
+          expect(approvalToolResults(afterLateLog.rows)).toEqual(firstResults);
+          expect(approvalAudit(afterLateLog.rows)).toEqual(approvalAudit(firstLog.rows));
+          expect(await host.readMarker()).toBe(firstMarker);
+          await Promise.all([expectPendingApprovalCard(page), expectPendingApprovalCard(other)]);
+          await Promise.all([
+            page.unroute("**/api/$events/result"),
+            other.unroute("**/api/$events/result"),
+          ]);
+
+          await page.getByTestId("dsh-approval-reject").click();
+          await expect(page.getByText("APPROVAL_DONE", { exact: true }).first()).toBeVisible({
+            timeout: 60_000,
+          });
+          await expect(other.getByText("APPROVAL_DONE", { exact: true }).first()).toBeVisible({
+            timeout: 60_000,
+          });
+          await expect
+            .poll(async () => {
+              const log = await host.readSessionLog();
+              return completedTurnCount(log.rows);
+            })
+            .toBe(1);
+          const finalLog = await host.readSessionLog();
+          expect(finalLog.sessionId).toBe(sessionId);
+          expect(approvalToolCalls(finalLog.rows)).toEqual([
+            APPROVAL_FIRST_CALL,
+            APPROVAL_SECOND_CALL,
+          ]);
+          const audit = assertApprovalDecisions(finalLog.rows, firstOutcome);
+          expect(finalLog.rows.filter((row) => authorityEvent.safeParse(row).success)).toEqual(
+            initialAuthority,
+          );
+          const finalResults = approvalToolResults(finalLog.rows);
+          expect(finalResults).toHaveLength(2);
+          expect(finalResults.map((result) => result.callId)).toEqual(APPROVAL_CALL_IDS);
+          expectApprovalResult(finalResults[0]!, {
+            outcome: firstOutcome,
+            workspaceDir: host.workspaceDir,
+          });
+          expectApprovalResult(finalResults[1]!, {
+            outcome: "rejected",
+            workspaceDir: host.workspaceDir,
+          });
+          const finalMarker = await host.readMarker();
+          expect(finalMarker).toBe(firstMarker);
+          await expect(page.getByTestId("dsh-interaction")).toHaveCount(0);
+          await expect(other.getByTestId("dsh-interaction")).toHaveCount(0);
+          await expect(other.getByLabel("Message")).toHaveValue("Retained unsent composer draft");
+          expect(attempts).toHaveLength(3);
+          expect(winnerApprovals.errors).toEqual([]);
+          expect(otherApprovals.errors).toEqual([]);
+
+          expect(await openOnlySession(page, host.companionUrl)).toBe(sessionId);
+          await expect.poll(() => winnerClientIds.at(-1)).not.toBe(winner.clientId);
+          await openApprovalResults(page, finalResults);
+          await expect(page.getByTestId("dsh-interaction")).toHaveCount(0);
+          await other.close();
+          const fresh = await otherContext.newPage();
+          const freshApprovals = observeApprovalRequests(fresh);
+          observeAnswers(fresh, attempts, errors);
+          expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+          await openApprovalResults(fresh, finalResults);
+          await expect(fresh.getByTestId("dsh-interaction")).toHaveCount(0);
+          expect(freshApprovals.requests).toEqual([]);
+          expect(freshApprovals.errors).toEqual([]);
+          const reloadedLog = await host.readSessionLog();
+          expect(reloadedLog.sessionId).toBe(sessionId);
+          expect(approvalToolResults(reloadedLog.rows)).toEqual(finalResults);
+          expect(assertApprovalDecisions(reloadedLog.rows, firstOutcome)).toEqual(audit);
+          expect(reloadedLog.rows.filter((row) => authorityEvent.safeParse(row).success)).toEqual(
+            initialAuthority,
+          );
+          expect(attempts).toHaveLength(3);
+          expect(await host.readMarker()).toBe(finalMarker);
+          await fresh.screenshot({
+            path: testInfo.outputPath(`approval-${width}-${firstOutcome}-settled.png`),
+          });
+          const evidencePath = testInfo.outputPath(
+            `durable-approval-${width}-${firstOutcome}.json`,
+          );
+          await writeFile(
+            evidencePath,
+            JSON.stringify({
+              sessionId,
+              firstOutcome,
+              results: finalResults,
+              audit,
+              authority: initialAuthority,
+              marker: finalMarker,
+              browserAnswerAttempts: attempts.length,
+              controlledLateDeliveries: 1,
+              winnerClientIds,
+            }),
+          );
+          await testInfo.attach("durable-approval-results.json", {
+            path: evidencePath,
+            contentType: "application/json",
+          });
+          expect(errors).toEqual([]);
+        } finally {
+          await otherContext.close();
+          await host.close();
+        }
+      });
+    }
+  }
+});
 
 test.describe("mounted native DSH queue readers", () => {
   test.describe.configure({ timeout: 300_000 });
