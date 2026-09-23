@@ -38,6 +38,14 @@ test.describe("development Electron native DSH host screen", () => {
     });
     try {
       const page = await app.firstWindow();
+      // The desktop device store refuses Linux's plaintext backend, so a device grant cannot be
+      // persisted on a host without a keyring; the enrollment path is unavailable here.
+      const storage = await app.evaluate(({ safeStorage }) => ({
+        available: safeStorage.isEncryptionAvailable(),
+        backend: safeStorage.getSelectedStorageBackend(),
+      }));
+      expect(storage.available).toBe(false);
+      expect(storage.backend).toBe("basic_text");
       // The desktop main process loaded the Host's own mounted companion route.
       const loaded = await app.evaluate(async ({ BrowserWindow }, url) => {
         const [win] = BrowserWindow.getAllWindows();
