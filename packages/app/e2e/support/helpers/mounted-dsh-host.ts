@@ -7,6 +7,7 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 const repository = process.env.DSH_REPOSITORY ?? "/home/carlo/devel/deepseek-harness-daedal-dsh";
 const testFixture = "session/text-turn/session.v1.jsonl";
+const fixturePrompt = "Reply with exactly the word: PONG. Do not use any tools.";
 
 /**
  * The browser edition derives its DSH host from the page origin and stores no enrollment, so a
@@ -168,6 +169,8 @@ export async function launchMountedDshHost() {
       companionUrl: `${origin}/daedal/dsh-hosts`,
       /** Scratch working directory this Host owns, usable as a Session target. */
       workspaceDir: cwd,
+      /** The recorded prompt the replay fixture answers, for driving one completed turn. */
+      prompt: fixturePrompt,
       /** Captured Host output, for diagnosing a Host that exits during a run. */
       outputTail: () => output.replace(/token=\S+/g, "token=[redacted]").slice(-3000),
       close: closeProcess,
@@ -187,14 +190,6 @@ export async function launchMountedDshHost() {
  *
  * The form needs a directory and then a profile: read the Host roster explicitly, wait for the
  * profile control to leave its disabled placeholder state, then take the Host default.
- */
-/**
- * Observed state after this helper, for whoever continues the fork gesture: opening the
- * conversation header's fork control and submitting a retained attempt disconnects the browser
- * client mid-dispatch. The owner then fails closed, showing an unconfirmed attempt with its exact
- * requested child and anchor and "will not be sent again" — the correct no-replay behavior, but
- * not a confirmed fork. The Host process itself stays alive and logs nothing. Diagnose the
- * disconnect before asserting dsh-fork-outcome-confirmed here.
  */
 export async function createHostSession(page: Page, cwd: string): Promise<void> {
   await page.getByTestId("dsh-create-session").click();
