@@ -4,6 +4,8 @@ import path from "node:path";
 import type {
   APIRequestContext,
   BrowserContext,
+  Browser,
+  TestInfo,
   Page,
   Request,
   Route,
@@ -3053,4 +3055,621 @@ test.describe("mounted native DSH file prompt recovery", () => {
         });
     });
   }
+});
+
+type RestartHost = Awaited<ReturnType<typeof launchMountedDshHost>>;
+type RestartProof = Awaited<ReturnType<RestartHost["restart"]>>;
+interface RestartObjectProof {
+  attachmentId: string;
+  bytes: number;
+  sha256: string;
+  base64: string;
+}
+interface RestartUpload {
+  status: number;
+  request: z.infer<typeof genericFileUploadSchema>;
+  receipt: z.infer<typeof genericFileReceiptSchema>;
+}
+interface RestartReply {
+  status: number;
+  request: z.infer<typeof recoveryPromptRequestSchema>;
+  reply: z.infer<typeof recoveryPromptReplySchema>;
+}
+
+async function rawRestartFiles(host: RestartHost): Promise<RestartObjectProof[]> {
+  const ids = await host.fileObjectIds();
+  return Promise.all(
+    ids.map(async (attachmentId) => {
+      const value = await host.readFileObject(attachmentId);
+      return {
+        attachmentId,
+        bytes: value.length,
+        sha256: `sha256:${createHash("sha256").update(value).digest("hex")}`,
+        base64: value.toString("base64"),
+      };
+    }),
+  );
+}
+
+function expectRestartMutations(mutations: Request[], uploads: number, prompts: number) {
+  expect(recoveryMutationPaths(mutations)).toEqual([
+    "/api/session/create",
+    ...Array<string>(uploads).fill("/api/fileUploads/upload"),
+    ...Array<string>(prompts).fill("/api/session/prompt"),
+  ]);
+}
+
+async function expectUnconfirmedRestartUpload(page: Page, text: string) {
+  await expect(page.getByTestId("dsh-prompt-file-status")).toContainText("upload is unconfirmed");
+  await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(2);
+  await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(1);
+  await expect(page.getByLabel("Message")).toHaveValue(text);
+  await expect(page.getByLabel("Message")).not.toBeEditable();
+  for (const id of [
+    "dsh-prompt-send",
+    "dsh-prompt-attach",
+    "dsh-prompt-attach-files",
+    "dsh-prompt-file-remove",
+    "dsh-prompt-attachment-remove",
+  ])
+    for (const control of await page.getByTestId(id).all()) await expect(control).toBeDisabled();
+}
+
+function expectControlledHostRestart(proof: RestartProof) {
+  expect(proof.originalCookieAccepted).toBe(true);
+  expect(proof.beforeIdentity.hostId).toBe(proof.afterIdentity.hostId);
+  expect(proof.beforeIdentity.activationId).not.toBe(proof.afterIdentity.activationId);
+  expect(proof.stopped.forced).toBe(false);
+  expect(proof.stopped.errors).toEqual([]);
+  expect(proof.stopped.signals).toEqual([
+    expect.objectContaining({ signal: "SIGTERM", sent: true }),
+  ]);
+  expect(proof.stopped.exit).toMatchObject({ code: 0, signal: null });
+  expect(proof.replacement.pid).not.toBe(proof.stopped.pid);
+  expect(proof.replacement.startedAt).toBeGreaterThan(z.number().parse(proof.stopped.closedAt));
+  expect(z.number().parse(proof.stopped.closedAt)).toBeGreaterThanOrEqual(
+    z.number().parse(proof.stopped.exit?.at),
+  );
+  expect(proof.replacement.spawnedAt).toBeGreaterThanOrEqual(proof.replacement.startedAt);
+}
+
+async function reconnectRestartedHost(
+  page: Page,
+  gate: MountedDshAdmissionGate,
+  proof: RestartProof,
+) {
+  const previous = z.string().parse(gate.deliveredClientIds().at(-1));
+  expect(gate.deliveredIdentities().at(-1)?.identity).toEqual(proof.beforeIdentity);
+  const conversation = page.getByTestId("dsh-conversation");
+  const reconnect = conversation.getByRole("button", { name: "Reconnect", exact: true });
+  await expect(
+    conversation.getByText("Disconnected. Showing the last received conversation.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(reconnect).toBeVisible();
+  const opened = gate.opened();
+  await reconnect.click();
+  await expect.poll(() => gate.opened()).toBeGreaterThan(opened);
+  expect(gate.deliveredClientIds().at(-1)).toBe(previous);
+  gate.releaseReady();
+  await expect.poll(() => gate.deliveredClientIds().at(-1)).not.toBe(previous);
+  await expect(reconnect).toHaveCount(0);
+  expect(gate.deliveredIdentities().at(-1)?.identity).toEqual(proof.afterIdentity);
+}
+
+function expectNoPromptAdmission(rows: unknown[], probeRequestId?: string) {
+  expect(genericFileMessages(rows)).toEqual([]);
+  expect(completedTurnCount(rows)).toBe(0);
+  const turn = z.object({ type: z.enum(["turn/start", "turn/end"]) });
+  expect(rows.filter((row) => turn.safeParse(row).success)).toEqual([]);
+  if (probeRequestId !== undefined) expect(JSON.stringify(rows)).not.toContain(probeRequestId);
+}
+
+async function probeRestartedReceipt(
+  host: RestartHost,
+  gate: MountedDshAdmissionGate,
+  sessionId: string,
+  receipt: RestartUpload["receipt"],
+  proof: RestartProof,
+) {
+  const before = await host.readSessionLog();
+  const filesBefore = await rawRestartFiles(host);
+  expectNoPromptAdmission(before.rows);
+  await expect.poll(() => gate.observedQueue(sessionId)).toEqual([]);
+  const queueBefore = gate.queueEvidence(sessionId);
+  expect(queueBefore?.identity).toEqual(proof.afterIdentity);
+  expect(queueBefore?.items).toEqual([]);
+  const observedAfterIdentity = await host.readIdentity();
+  expect(observedAfterIdentity).toEqual(proof.afterIdentity);
+  const probe = await host.probeUnusedReceipt(sessionId, receipt.receiptId, observedAfterIdentity);
+  expect(probe.result).toMatchObject({
+    ok: false,
+    error: { code: "session/attachment-invalid", details: { reason: "FILE_NOT_STAGED" } },
+  });
+  const after = await host.readSessionLog();
+  expect(after.sessionId).toBe(sessionId);
+  const prefix = after.rows.slice(0, before.rows.length);
+  expect(prefix).toEqual(before.rows);
+  const delta = after.rows.slice(before.rows.length);
+  const classifiedDelta = delta.map((row) => {
+    const event = z.object({ type: z.string() }).parse(row);
+    expect(event.type, `Unexpected cold-resume record: ${JSON.stringify(row)}`).toBe(
+      "session/end-seed",
+    );
+    return { classification: "cold-resume seed completion", row };
+  });
+  expectNoPromptAdmission(after.rows, probe.request.requestId);
+  await expect.poll(() => gate.observedQueue(sessionId)).toEqual([]);
+  const queueAfter = gate.queueEvidence(sessionId);
+  expect(queueAfter?.identity).toEqual(proof.afterIdentity);
+  expect(queueAfter?.items).toEqual([]);
+  const filesAfter = await rawRestartFiles(host);
+  expect(filesAfter).toEqual(filesBefore);
+  return {
+    probe,
+    observedAfterIdentity,
+    beforeRows: before.rows,
+    prefix,
+    afterRows: after.rows,
+    delta,
+    classifiedDelta,
+    filesBefore,
+    filesAfter,
+    queueBefore,
+    queueAfter,
+  };
+}
+
+async function verifyRestartFiles(
+  host: RestartHost,
+  page: Page,
+  files: PickerFile[],
+  uploads: RestartUpload[],
+  replies: RestartReply[],
+  mixed: boolean,
+) {
+  const refs = files.map((file) => ({
+    attachmentId: `sha256:${createHash("sha256").update(file.buffer).digest("hex")}`,
+    name: file.name,
+    bytes: file.buffer.length,
+  }));
+  await expectGenericFileMetadata(page, refs);
+  await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+  await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(0);
+  await expect(page.getByLabel("Message")).toHaveValue("");
+  await expect(page.getByLabel("Message")).toBeEditable();
+  await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+  await expect.poll(async () => completedTurnCount((await host.readSessionLog()).rows)).toBe(1);
+  await expect(page.getByTestId("dsh-block-text").filter({ hasText: /^PONG$/u })).toHaveCount(1);
+  const durable = await host.readSessionLog();
+  const messages = genericFileMessages(durable.rows);
+  const ends = durable.rows
+    .filter((row) => turnEndIdentity.safeParse(row).success)
+    .map((row) => turnEndSchema.parse(row));
+  expect(messages).toHaveLength(1);
+  expect(ends).toHaveLength(1);
+  expect(ends[0]!.seq).toBeGreaterThan(messages[0]!.seq);
+  expect(replies).toHaveLength(1);
+  expect(replies[0]!.status).toBe(200);
+  expect(new Set(uploads.map((upload) => upload.receipt.receiptId)).size).toBe(uploads.length);
+  for (const [index, upload] of uploads.entries()) {
+    const file = files[index % 2]!;
+    expect(upload.status).toBe(200);
+    expect(upload.request.payload.args.agentId).toBe(durable.sessionId);
+    expect(upload.request.payload.args.request).toEqual({
+      data: file.buffer.toString("base64"),
+      name: file.name,
+    });
+    expect(upload.receipt.file).toEqual(refs[index % 2]);
+  }
+  const prompt = replies[0]!.request.payload.args.request;
+  const expectedOrder = mixed ? ["text", "image", "file", "file"] : ["file", "file"];
+  expect(prompt.requestId).toBe(messages[0]!.data.source.rpcId);
+  expect(prompt.sessionId).toBe(durable.sessionId);
+  expect(prompt.content.map((part) => part.type)).toEqual(expectedOrder);
+  expect(messages[0]!.data.content.map((part) => part.type)).toEqual(expectedOrder);
+  expect(prompt.content.filter((part) => part.type === "file")).toEqual(
+    uploads.slice(-2).map((upload) => ({ type: "file", receiptId: upload.receipt.receiptId })),
+  );
+  expect(messages[0]!.data.content.filter((part) => part.type === "file")).toEqual(
+    refs.map((attachment) => ({ type: "file", attachment })),
+  );
+  const rawFiles = await rawRestartFiles(host);
+  expect(rawFiles).toEqual(
+    files
+      .map((file, index) => ({
+        attachmentId: refs[index]!.attachmentId,
+        bytes: file.buffer.length,
+        sha256: refs[index]!.attachmentId,
+        base64: file.buffer.toString("base64"),
+      }))
+      .sort((left, right) => left.attachmentId.localeCompare(right.attachmentId)),
+  );
+  const images = await host.imageObjectIds();
+  expect(images).toHaveLength(mixed ? 1 : 0);
+  if (mixed) {
+    const imageBytes = await readFile(mountedDshImageFixturePaths().light);
+    expect(await host.readImageObject(images[0]!)).toEqual(imageBytes);
+    expect(prompt.content.filter((part) => part.type === "image")).toEqual([
+      {
+        type: "image",
+        name: "restart-image.png",
+        mediaType: "image/png",
+        data: imageBytes.toString("base64"),
+      },
+    ]);
+    expect(messages[0]!.data.content.filter((part) => part.type === "image")).toEqual([
+      expect.objectContaining({ attachment: expect.objectContaining({ attachmentId: images[0] }) }),
+    ]);
+    expect(messages[0]!.data.content.filter((part) => part.type === "text")).toEqual([
+      { type: "text", text: host.prompt },
+    ]);
+  }
+  return { sessionId: durable.sessionId, refs, rawFiles, messages, images, ends };
+}
+
+async function runFileHostRestart(
+  page: Page,
+  context: BrowserContext,
+  browser: Browser,
+  testInfo: TestInfo,
+  width: 390 | 1280,
+) {
+  test.setTimeout(180_000);
+  const host = await launchMountedDshHost();
+  let gate: MountedDshAdmissionGate | undefined;
+  let freshGate: MountedDshAdmissionGate | undefined;
+  let freshContext: BrowserContext | undefined;
+  const executionErrors: unknown[] = [];
+  const errors: string[] = [];
+  const mutations: Request[] = [];
+  const uploads: RestartUpload[] = [];
+  const replies: RestartReply[] = [];
+  let lostReplies = 0;
+  const mixed = width === 1280;
+  const text = mixed ? host.prompt : "";
+  const files: PickerFile[] = [
+    {
+      name: "restart-first.bin",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from([0, 128, 255, 10, 13, 66]),
+    },
+    {
+      name: "restart-second.dat",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from("private Host restart\n", "utf8"),
+    },
+  ];
+  const refs = files.map((file) => ({
+    attachmentId: `sha256:${createHash("sha256").update(file.buffer).digest("hex")}`,
+    name: file.name,
+    bytes: file.buffer.length,
+  }));
+  try {
+    await page.setViewportSize({ width, height: 844 });
+    await attachDshSession(context, host.config);
+    gate = await MountedDshAdmissionGate.install(page);
+    const admission = gate;
+    observeWorkspaceMutations(page, mutations);
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/api/fileUploads/upload", async (route) => {
+      const request = genericFileUploadSchema.parse(route.request().postDataJSON());
+      const response = await route.fetch({ maxRetries: 0 });
+      expect(response.status()).toBe(200);
+      const reply = genericFileReplySchema.parse(await response.json());
+      expect(reply.rpcId).toBe(request.rpcId);
+      uploads.push({ status: response.status(), request, receipt: reply.result.value });
+      if (mixed && uploads.length === 2) {
+        await route.abort("failed");
+        lostReplies += 1;
+      } else await route.fulfill({ response });
+    });
+    await page.route("**/api/session/prompt", async (route) => {
+      const request = recoveryPromptRequestSchema.parse(route.request().postDataJSON());
+      if (!mixed)
+        admission.arm(
+          request.payload.args.request.sessionId,
+          request.payload.args.request.requestId,
+        );
+      const response = await route.fetch({ maxRetries: 0 });
+      expect(response.status()).toBe(200);
+      const reply = recoveryPromptReplySchema.parse(await response.json());
+      expect(reply.rpcId).toBe(request.rpcId);
+      replies.push({ status: response.status(), request, reply });
+      if (!mixed) {
+        await route.abort("failed");
+        lostReplies += 1;
+      } else await route.fulfill({ response });
+    });
+    await page.goto(host.companionUrl);
+    await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+    await createHostSession(page, host.workspaceDir);
+    const sessionId = await openOnlySession(page, host.companionUrl);
+    if (mixed) {
+      await page.getByLabel("Message").fill(text);
+      await selectImages(page, [
+        {
+          name: "restart-image.png",
+          mimeType: "image/png",
+          buffer: await readFile(mountedDshImageFixturePaths().light),
+        },
+      ]);
+    }
+    await selectGenericFiles(page, files);
+    expectRestartMutations(mutations, 0, 0);
+    await page.getByTestId("dsh-prompt-send").click();
+    await expect.poll(() => lostReplies).toBe(1);
+    await expect.poll(() => uploads).toHaveLength(2);
+    const expectedPrompts = mixed ? 0 : 1;
+    await expect.poll(() => replies).toHaveLength(expectedPrompts);
+    expect(uploads.map((upload) => upload.status)).toEqual([200, 200]);
+    expectRestartMutations(mutations, 2, expectedPrompts);
+    const initialReceiptIds = uploads.map((upload) => upload.receipt.receiptId);
+    expect(new Set(initialReceiptIds).size).toBe(2);
+    if (mixed) await expectUnconfirmedRestartUpload(page, text);
+    else {
+      await expectFrozenFilePrompt(page, text, 0);
+      await expect.poll(async () => completedTurnCount((await host.readSessionLog()).rows)).toBe(1);
+      await expect
+        .poll(() => heldRecoveryMessages(admission))
+        .toEqual(genericFileMessages((await host.readSessionLog()).rows));
+    }
+    const beforeRestart = await host.readSessionLog();
+    const rawFilesBeforeRestart = await rawRestartFiles(host);
+    const objectsBeforeRestart = await host.fileObjectIds();
+    expect(objectsBeforeRestart).toHaveLength(2);
+    expect(rawFilesBeforeRestart).toEqual(
+      files
+        .map((file, index) => ({
+          attachmentId: refs[index]!.attachmentId,
+          bytes: file.buffer.length,
+          sha256: refs[index]!.attachmentId,
+          base64: file.buffer.toString("base64"),
+        }))
+        .sort((left, right) => left.attachmentId.localeCompare(right.attachmentId)),
+    );
+    const beforeMessages = genericFileMessages(beforeRestart.rows);
+    const beforeEnds = beforeRestart.rows
+      .filter((row) => turnEndIdentity.safeParse(row).success)
+      .map((row) => turnEndSchema.parse(row));
+    const unknownBeforeRestart = admission.snapshot();
+    if (mixed) expectNoPromptAdmission(beforeRestart.rows);
+    else {
+      expect(beforeMessages).toHaveLength(1);
+      expect(beforeEnds).toHaveLength(1);
+      expect(beforeMessages[0]!.data.source.rpcId).toBe(
+        replies[0]!.request.payload.args.request.requestId,
+      );
+      expect(beforeMessages[0]!.data.content.map((part) => part.type)).toEqual(["file", "file"]);
+      expect(beforeMessages[0]!.data.content.filter((part) => part.type === "file")).toEqual(
+        refs.map((attachment) => ({ type: "file", attachment })),
+      );
+      expect(beforeEnds[0]!.seq).toBeGreaterThan(beforeMessages[0]!.seq);
+      recoveryBarrier(admission, mutations, 0);
+    }
+    const originalClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+    const closures = admission.serverClosures().length;
+    admission.holdForRestart();
+    const restart = await host.restart();
+    expectControlledHostRestart(restart);
+    await expect.poll(() => admission.serverClosures().length).toBeGreaterThan(closures);
+    expect(await host.fileObjectIds()).toEqual(objectsBeforeRestart);
+    const rawFilesAfterRestart = await rawRestartFiles(host);
+    expect(rawFilesAfterRestart).toEqual(rawFilesBeforeRestart);
+    const afterRestart = await host.readSessionLog();
+    expect(afterRestart.sessionId).toBe(sessionId);
+    expect(afterRestart.rows).toEqual(beforeRestart.rows);
+    const observedAfterIdentity = await host.readIdentity();
+    expect(observedAfterIdentity).toEqual(restart.afterIdentity);
+    await reconnectRestartedHost(page, admission, restart);
+    const restartedClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+    expect(restartedClientId).not.toBe(originalClientId);
+    expectRestartMutations(mutations, 2, expectedPrompts);
+    const freshReadyUnknown = admission.snapshot();
+    await page.screenshot({ path: testInfo.outputPath(`host-restart-${width}-ready-unknown.png`) });
+    let releasedEmptyControl: ReturnType<MountedDshAdmissionGate["snapshot"]> | undefined;
+    let exactHistory: ReturnType<MountedDshAdmissionGate["heldHistory"]> | undefined;
+    let negativeProbe: Awaited<ReturnType<typeof probeRestartedReceipt>> | undefined;
+    let reconciliation: unknown;
+    if (mixed) {
+      await expectUnconfirmedRestartUpload(page, text);
+      await expect.poll(() => admission.snapshot().heldPackets).toBeGreaterThan(0);
+      expect(heldRecoveryMessages(admission)).toEqual([]);
+      expect(freshReadyUnknown.matchingUsers).toEqual([]);
+      expect(freshReadyUnknown.matchingQueueItems).toBe(0);
+      expect(freshReadyUnknown.controlDuringHold).toBe(0);
+      admission.releaseAll();
+      await expect.poll(() => admission.observedQueue(sessionId)).toEqual([]);
+      releasedEmptyControl = admission.snapshot();
+      await expectUnconfirmedRestartUpload(page, text);
+      negativeProbe = await probeRestartedReceipt(
+        host,
+        admission,
+        sessionId,
+        uploads[0]!.receipt,
+        restart,
+      );
+      expectRestartMutations(mutations, 2, 0);
+      await expectUnconfirmedRestartUpload(page, text);
+      await page.getByTestId("dsh-prompt-files-discard").click();
+      await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+      await expect(page.getByLabel("Message")).toHaveValue(text);
+      await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(1);
+      await selectGenericFiles(page, files);
+      expectRestartMutations(mutations, 2, 0);
+      await page.getByTestId("dsh-prompt-send").click();
+      await expect.poll(() => uploads).toHaveLength(4);
+      await expect.poll(() => replies).toHaveLength(1);
+      const freshReceiptIds = uploads.slice(2).map((upload) => upload.receipt.receiptId);
+      expect(new Set(freshReceiptIds).size).toBe(2);
+      for (const receiptId of freshReceiptIds) expect(initialReceiptIds).not.toContain(receiptId);
+    } else {
+      await expectFrozenFilePrompt(page, text, 0);
+      await expect.poll(() => admission.snapshot().heldEmptyControlBaselines).toBeGreaterThan(0);
+      await expect.poll(() => heldRecoveryHttpCount(admission)).toBeGreaterThan(0);
+      await expect
+        .poll(() => heldRecoveryMessages(admission))
+        .toEqual(genericFileMessages(beforeRestart.rows));
+      recoveryBarrier(admission, mutations, 0);
+      exactHistory = admission.heldHistory();
+      expect(genericFileMessages(exactHistory.flatMap((packet) => packet.users))).toEqual(
+        beforeMessages,
+      );
+      admission.releaseExactHistory();
+      await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+      reconciliation = recoveryBarrier(admission, mutations, 1);
+      admission.releaseAll();
+    }
+    const completed = await verifyRestartFiles(host, page, files, uploads, replies, mixed);
+    expect(completed.refs).toEqual(refs);
+    expect(completed.rawFiles).toEqual(rawFilesBeforeRestart);
+    expectRestartMutations(mutations, mixed ? 4 : 2, 1);
+    if (negativeProbe !== undefined) {
+      expect(replies[0]!.request.payload.args.request.requestId).not.toBe(
+        negativeProbe.probe.request.requestId,
+      );
+      for (const receiptId of uploads.slice(2).map((upload) => upload.receipt.receiptId))
+        expect(initialReceiptIds).not.toContain(receiptId);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`host-restart-${width}-reconciled.png`) });
+    const liveClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+    await page.reload();
+    await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+    await expectGenericFileMetadata(page, completed.refs);
+    await expect.poll(() => admission.deliveredClientIds().at(-1)).not.toBe(liveClientId);
+    const reloadedClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+    freshContext = await browser.newContext({ viewport: { width, height: 844 } });
+    await attachDshSession(freshContext, host.config);
+    const reader = await freshContext.newPage();
+    freshGate = await MountedDshAdmissionGate.install(reader);
+    observeWorkspaceMutations(reader, mutations);
+    reader.on("pageerror", (error) => errors.push(error.message));
+    await reader.goto(host.companionUrl);
+    expect(await openOnlySession(reader, host.companionUrl)).toBe(sessionId);
+    await expectGenericFileMetadata(reader, completed.refs);
+    expect(freshGate.deliveredIdentities().at(-1)?.identity).toEqual(restart.afterIdentity);
+    const freshClientId = z.string().min(1).parse(freshGate.deliveredClientIds().at(-1));
+    const allClientIds = [originalClientId, restartedClientId, reloadedClientId, freshClientId];
+    expect(new Set(allClientIds).size).toBe(allClientIds.length);
+    expectRestartMutations(mutations, mixed ? 4 : 2, 1);
+    const finalLog = await host.readSessionLog();
+    expect(genericFileMessages(finalLog.rows)).toEqual(completed.messages);
+    expect(completedTurnCount(finalLog.rows)).toBe(1);
+    if (!mixed) {
+      expect(genericFileMessages(finalLog.rows)).toEqual(beforeMessages);
+      expect(
+        finalLog.rows
+          .filter((row) => turnEndIdentity.safeParse(row).success)
+          .map((row) => turnEndSchema.parse(row)),
+      ).toEqual(beforeEnds);
+    }
+    expect(await host.fileObjectIds()).toEqual(objectsBeforeRestart);
+    expect(await rawRestartFiles(host)).toEqual(rawFilesBeforeRestart);
+    expect(errors).toEqual([]);
+    const artifact = testInfo.outputPath(`host-restart-${width}.json`);
+    await writeFile(
+      artifact,
+      JSON.stringify({
+        width,
+        sessionId,
+        lostReplyKind: mixed ? "second-upload" : "accepted-prompt",
+        lostReplies,
+        publicIdentities: {
+          before: restart.beforeIdentity,
+          after: restart.afterIdentity,
+          observedAfterRestart: observedAfterIdentity,
+          originalCookieAccepted: restart.originalCookieAccepted,
+        },
+        processProof: {
+          stopped: restart.stopped,
+          replacement: restart.replacement,
+          allOwnedProcesses: host.processEvidence(),
+        },
+        browserClients: {
+          originalClientId,
+          restartedClientId,
+          reloadedClientId,
+          freshClientId,
+          allClientIds,
+        },
+        barriers: {
+          unknownBeforeRestart,
+          freshReadyUnknown,
+          releasedEmptyControl,
+          exactHistory,
+          reconciliation,
+          finalGate: admission.snapshot(),
+          freshReader: freshGate.snapshot(),
+        },
+        mutations: recoveryMutationPaths(mutations),
+        uploads,
+        replies,
+        rawFileProof: {
+          beforeRestart: rawFilesBeforeRestart,
+          afterRestart: rawFilesAfterRestart,
+          final: completed.rawFiles,
+        },
+        durable: {
+          beforeRestart,
+          afterRestart,
+          beforeMessages,
+          beforeEnds,
+          completed,
+          finalLog,
+        },
+        negativeProbe,
+        counts: {
+          create: 1,
+          browserUploads: uploads.length,
+          browserPrompts: replies.length,
+          browserCancels: 0,
+          humanMessages: 1,
+          completedTurns: 1,
+          intentionalNegativeProbes: negativeProbe === undefined ? 0 : 1,
+        },
+        boundary:
+          "Controlled SIGTERM exit and same-home/same-origin relaunch of one private real Host. Existing browser owner and original cookie retained. Negative probe, when present, uses a confirmed never-prompted receipt with one new request ID, not mutation replay. Not crash/power-loss, cold in-flight draft restoration, production Host restart or physical-native qualification.",
+      }),
+    );
+    await testInfo.attach("file-host-restart", { path: artifact, contentType: "application/json" });
+  } catch (error) {
+    executionErrors.push(error);
+  } finally {
+    for (const cleanup of [
+      () => gate?.dispose(),
+      () => freshGate?.dispose(),
+      () => page.close(),
+      () => freshContext?.close(),
+      () => host.close(),
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        executionErrors.push(error);
+      }
+    }
+  }
+  if (executionErrors.length !== 0)
+    throw new AggregateError(executionErrors, "File Host restart failed", {
+      cause: executionErrors[0],
+    });
+}
+
+test.describe("mounted native DSH file host restart", () => {
+  test("reconciles a persisted lost file prompt at 390px", async ({
+    page,
+    context,
+    browser,
+  }, testInfo) => {
+    await runFileHostRestart(page, context, browser, testInfo, 390);
+  });
+  test("rejects old receipt authority before explicit new selection at 1280px", async ({
+    page,
+    context,
+    browser,
+  }, testInfo) => {
+    await runFileHostRestart(page, context, browser, testInfo, 1280);
+  });
 });

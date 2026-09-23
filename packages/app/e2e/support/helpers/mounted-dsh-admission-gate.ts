@@ -12,11 +12,23 @@ const openSchema = z.object({
   streamId: z.string(),
   endpoint: z.string(),
 });
-const readySchema = z.object({ type: z.literal("ready"), clientId: z.string().min(1) });
+const readySchema = z.object({
+  type: z.literal("ready"),
+  clientId: z.string().min(1),
+  host: z.object({
+    identity: z.object({
+      version: z.literal(1),
+      hostId: z.string().min(1),
+      activationId: z.string().min(1),
+    }),
+  }),
+});
 const baselineSchema = z.object({
   type: z.literal("baseline"),
   value: z.object({
     queues: z.record(z.string(), z.array(z.object({ rpcId: z.string().optional() }))),
+    jobs: z.record(z.string(), z.array(z.unknown())),
+    projections: z.record(z.string(), z.unknown()),
   }),
 });
 const queueSchema = z.object({
@@ -49,6 +61,7 @@ interface Delivery {
   type: string;
   users: { seq: number; type: string; data: unknown }[];
   matchingQueueItems: number;
+  control: ReturnType<typeof controlQueueState>;
 }
 interface HttpRead {
   path: string;
@@ -81,6 +94,16 @@ function users(packet: Packet) {
 function matches(data: unknown, requestId: string): boolean {
   return userSchema.parse(data).source.rpcId === requestId;
 }
+function controlQueueState(packet: Packet) {
+  if (packet.endpoint !== "session/control") return undefined;
+  const baseline = baselineSchema.safeParse(packet.frame.value);
+  if (baseline.success) return { kind: "baseline" as const, queues: baseline.data.value.queues };
+  const queue = queueSchema.safeParse(packet.frame.value);
+  if (queue.success)
+    return { kind: "queue" as const, sessionId: queue.data.sessionId, items: queue.data.items };
+  return undefined;
+}
+
 function readinessPath(path: string): boolean {
   return path === "/api/connection/identity" || path === "/api/$capabilities";
 }
@@ -92,6 +115,16 @@ export class MountedDshAdmissionGate {
   private nextChannel = 0;
   private readonly channels = new Set<Channel>();
   private readonly ids: string[] = [];
+  private readonly identities: {
+    clientId: string;
+    identity: z.infer<typeof readySchema>["host"]["identity"];
+    channel: number;
+  }[] = [];
+  private readonly channelClosures: {
+    channel: number;
+    code: number | undefined;
+    reason: string | undefined;
+  }[] = [];
   private readonly deliveries: Delivery[] = [];
   private readonly http: HttpRead[] = [];
   private readonly httpTasks = new Set<Promise<void>>();
@@ -188,6 +221,7 @@ export class MountedDshAdmissionGate {
     });
     server.onClose((code, reason) => {
       if (!this.drop(channel)) return;
+      this.channelClosures.push({ channel: channel.id, code, reason });
       this.trackClose(socket.close({ code, reason }));
     });
   };
@@ -214,7 +248,10 @@ export class MountedDshAdmissionGate {
   private emptyControl(packet: Packet): boolean {
     if (packet.endpoint !== "session/control" || this.target === undefined) return false;
     const baseline = baselineSchema.safeParse(packet.frame.value);
-    return baseline.success && baseline.data.value.queues[this.target.sessionId]?.length === 0;
+    // A complete baseline omits cold Sessions; the SDK replaces their queue with [].
+    return (
+      baseline.success && (baseline.data.value.queues[this.target.sessionId] ?? []).length === 0
+    );
   }
 
   private allowed(channel: Channel, packet: Packet): boolean {
@@ -238,7 +275,14 @@ export class MountedDshAdmissionGate {
 
   private forward(channel: Channel, packet: Packet): void {
     const ready = readySchema.safeParse(packet.frame.value);
-    if (packet.endpoint === "$events" && ready.success) this.ids.push(ready.data.clientId);
+    if (packet.endpoint === "$events" && ready.success) {
+      this.ids.push(ready.data.clientId);
+      this.identities.push({
+        clientId: ready.data.clientId,
+        identity: ready.data.host.identity,
+        channel: channel.id,
+      });
+    }
     this.deliveries.push({
       channel: channel.id,
       endpoint: packet.endpoint,
@@ -246,6 +290,7 @@ export class MountedDshAdmissionGate {
       type: packet.frame.type,
       users: users(packet),
       matchingQueueItems: this.matchingQueue(packet),
+      control: controlQueueState(packet),
     });
     channel.socket.send(packet.raw);
   }
@@ -266,6 +311,48 @@ export class MountedDshAdmissionGate {
   }
   deliveredClientIds(): readonly string[] {
     return [...this.ids];
+  }
+
+  /** Hold evidence without closing a socket: the real Host process must cause the disconnect. */
+  holdForRestart(): void {
+    this.phase = "reconnect-held";
+  }
+
+  deliveredIdentities() {
+    return [...this.identities];
+  }
+  serverClosures() {
+    return [...this.channelClosures];
+  }
+
+  observedQueue(sessionId: string) {
+    return this.queueEvidence(sessionId)?.items;
+  }
+
+  /** Only the latest delivered ready channel can establish a fresh complete control baseline. */
+  queueEvidence(sessionId: string) {
+    const ready = this.identities.at(-1);
+    if (ready === undefined) return undefined;
+    let items: { rpcId?: string }[] | undefined;
+    let baselineDelivery: number | undefined;
+    let updates = 0;
+    for (const [index, delivery] of this.deliveries.entries()) {
+      if (delivery.channel !== ready.channel) continue;
+      const control = delivery.control;
+      if (control?.kind === "baseline") {
+        items = control.queues[sessionId] ?? [];
+        baselineDelivery = index;
+        updates = 0;
+      }
+      if (control?.kind === "queue" && control.sessionId === sessionId) {
+        if (items === undefined)
+          throw new Error("Control update preceded its current-channel baseline");
+        items = control.items;
+        updates += 1;
+      }
+    }
+    if (baselineDelivery === undefined || items === undefined) return undefined;
+    return { channel: ready.channel, identity: ready.identity, baselineDelivery, updates, items };
   }
 
   async disconnectAndHold(): Promise<void> {
@@ -330,6 +417,8 @@ export class MountedDshAdmissionGate {
     return {
       phase: this.phase,
       forwardedClientIds: [...this.ids],
+      forwardedIdentities: [...this.identities],
+      serverClosures: [...this.channelClosures],
       physicalChannels: this.nextChannel,
       matchingUsers,
       matchingQueueItems: this.deliveries.reduce(

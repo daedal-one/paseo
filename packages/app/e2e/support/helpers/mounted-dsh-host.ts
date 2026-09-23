@@ -1,4 +1,12 @@
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import {
+  createConnectionRpc,
+  readHostIdentity,
+  selectRemoteCapabilities,
+} from "@deepseek-ai/dsh-client";
+import type { ConnectionIdentity, RpcId } from "@deepseek-ai/dsh-client";
+import { brandString } from "@deepseek-ai/dsh-brand";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { z } from "zod";
@@ -134,145 +142,300 @@ interface MountedDshHostOptions {
   workspaceProvenance?: boolean;
 }
 
+function hostFailure(message: string, cause: unknown, failures: unknown[]): AggregateError {
+  return new AggregateError(failures, message, { cause });
+}
+
+function deferredHostValue<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+async function hostEventWithin(event: Promise<unknown>, milliseconds: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      event.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/** One direct, non-detached Node child. A signal request is never treated as an exit. */
+class MountedHostProcess {
+  private readonly child: ReturnType<typeof spawn>;
+  private readonly startup = deferredHostValue<string>();
+  private readonly exitEvent = deferredHostValue<void>();
+  private readonly closeEvent = deferredHostValue<void>();
+  private readonly startedAt = performance.now();
+  private spawnedAt: number | undefined;
+  private exit: { code: number | null; signal: NodeJS.Signals | null; at: number } | undefined;
+  private closedAt: number | undefined;
+  private forced = false;
+  private readonly errors: string[] = [];
+  private readonly signals: { signal: NodeJS.Signals; sent: boolean; at: number }[] = [];
+  private output = "";
+  private readonly partial = { stdout: "", stderr: "" };
+  private readonly discarding = { stdout: false, stderr: false };
+
+  constructor(args: string[], env: NodeJS.ProcessEnv) {
+    this.child = spawn(process.execPath, args, {
+      cwd: repository,
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+    });
+    this.child.once("spawn", () => {
+      this.spawnedAt = performance.now();
+    });
+    this.child.on("error", (error) => {
+      this.errors.push(error.message.replace(/token=\S+/gu, "token=[redacted]"));
+      this.startup.reject(error);
+    });
+    this.child.once("exit", (code, signal) => {
+      this.exit = { code, signal, at: performance.now() };
+      this.exitEvent.resolve();
+      this.startup.reject(new Error(`Mounted Host exited before startup: ${this.outputTail()}`));
+    });
+    this.child.once("close", () => {
+      this.closedAt = performance.now();
+      this.closeEvent.resolve();
+    });
+    this.child.stdout?.on("data", (chunk: Buffer) => this.receive("stdout", chunk));
+    this.child.stderr?.on("data", (chunk: Buffer) => this.receive("stderr", chunk));
+  }
+
+  private receive(stream: "stdout" | "stderr", chunk: Buffer): void {
+    const lines = (this.partial[stream] + chunk.toString("utf8")).split(/\r?\n/u);
+    this.partial[stream] = lines.pop() ?? "";
+    for (const line of lines) {
+      if (this.discarding[stream]) {
+        this.discarding[stream] = false;
+        continue;
+      }
+      this.receiveLine(line);
+    }
+    if (this.partial[stream].length > 16_384) {
+      this.partial[stream] = "";
+      this.discarding[stream] = true;
+      this.output = `${this.output}\n[oversized Host output omitted]`.slice(-16_384);
+    }
+  }
+
+  private receiveLine(line: string): void {
+    if (line.length > 16_384) {
+      this.output = `${this.output}\n[oversized Host output omitted]`.slice(-16_384);
+      return;
+    }
+    const match = line.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_.~-]+/u);
+    if (match !== null) this.startup.resolve(match[0]);
+    this.output = `${this.output}\n${line.replace(/token=\S+/gu, "token=[redacted]")}`.slice(
+      -16_384,
+    );
+  }
+
+  async ready(): Promise<string> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.startup.promise,
+        new Promise<string>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Mounted Host startup timed out: ${this.outputTail()}`)),
+            60_000,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  private signal(signal: NodeJS.Signals): void {
+    if (this.exit !== undefined) return;
+    const sent = this.child.kill(signal);
+    this.signals.push({ signal, sent, at: performance.now() });
+  }
+
+  async stop(): Promise<void> {
+    if (this.child.pid !== undefined && this.exit === undefined) {
+      this.signal("SIGTERM");
+      if (!(await hostEventWithin(this.exitEvent.promise, 10_000))) {
+        this.forced = true;
+        this.signal("SIGKILL");
+        if (!(await hostEventWithin(this.exitEvent.promise, 5_000)))
+          throw new Error(
+            "Owned Host exit not observed; retain its home and refuse another writer",
+          );
+      }
+    }
+    if (!(await hostEventWithin(this.closeEvent.promise, 5_000)))
+      throw new Error("Owned Host stdio close not observed; retain its home");
+    if (this.spawnedAt !== undefined && this.exit === undefined)
+      throw new Error("Spawned Host has no observed exit; retain its home");
+  }
+
+  outputTail(): string {
+    return this.output.slice(-3000);
+  }
+  evidence() {
+    return {
+      pid: this.child.pid,
+      startedAt: this.startedAt,
+      spawnedAt: this.spawnedAt,
+      exit: this.exit,
+      closedAt: this.closedAt,
+      forced: this.forced,
+      signals: [...this.signals],
+      errors: [...this.errors],
+    };
+  }
+}
+
+/** SDK-owned envelopes and generated compatibility, authenticated by the original private cookie. */
+function mountedHostRpc(origin: string, cookie: string) {
+  return createConnectionRpc({
+    baseUrl: origin,
+    randomId: () => brandString<RpcId>(randomUUID()),
+    fetch(input, init) {
+      const headers = new Headers(init.headers);
+      headers.set("cookie", cookie);
+      return fetch(input, { ...init, headers });
+    },
+  });
+}
+
+async function protectedHostIdentity(origin: string, cookie: string): Promise<ConnectionIdentity> {
+  const result = await readHostIdentity(
+    mountedHostRpc(origin, cookie),
+    AbortSignal.timeout(10_000),
+  );
+  if (!result.ok) throw new Error(`Original-cookie identity read failed: ${result.error.code}`);
+  return result.value;
+}
+
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
-  const fixture = path.join(
-    repository,
-    "snapshots",
-    options.fixture ??
-      (options.workspaceProvenance ? "sdk/workspace-provenance/session.v3.jsonl" : testFixture),
-  );
-  const cwd = path.join(home, "workspace");
-  const marker = path.join(cwd, APPROVAL_MARKER_NAME);
-  const override = path.join(home, "replay.override.json");
-  const heldReplay = options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined;
-  const replayOverride =
-    options.replayOverride ?? (options.workspaceProvenance ? workspaceNamingReplay() : heldReplay);
-  if (replayOverride !== undefined) await writeFile(override, replayOverride);
-  const approvalPolicy = path.join(home, "mounted-approval-policy.mjs");
-  if (options.requireMarkerApproval) await writeFile(approvalPolicy, markerApprovalPolicy(cwd));
-  const workspacePlugin = path.join(home, "mounted-workspace-provenance.mjs");
-  const workspaceNamingResult = path.join(home, "workspace-naming-result.json");
-  if (options.workspaceProvenance)
-    await writeFile(workspacePlugin, workspaceProvenancePlugin(workspaceNamingResult));
-  const overlay = path.join(home, "companion-mounted.yml");
-  const overlayRows = [
-    "- id: session-title-llm",
-    "  disabled: true",
-    "- id: session-telemetry-otel",
-    "  disabled: true",
-    "- insert:",
-    "    - id: daedal-browser-preview",
-    "      name: '@deepseek-ai/dsh-host-frontend-static'",
-    "      config:",
-    `        distIndex: ${dist}`,
-    "        mountPath: /daedal",
-    "        indexPaths: [/dsh-hosts]",
-  ];
-  if (options.requireMarkerApproval) {
-    overlayRows.push(
-      "- insert:",
-      "    - id: mounted-approval-policy",
-      `      name: ${approvalPolicy}`,
-    );
-  }
-  if (options.workspaceProvenance) {
-    overlayRows.push(
-      "- insert:",
-      "    - id: mounted-workspace-provenance",
-      `      name: ${workspacePlugin}`,
-    );
-  }
-  overlayRows.push("");
-  await writeFile(overlay, overlayRows.join("\n"));
-  if (process.env.DAEDAL_E2E_DEBUG === "1") {
-    console.log("[mounted-dsh-host] spawn cwd", repository, "overlay");
-    console.log(await readFile(overlay, "utf8"));
-  }
-  const child = spawn(
-    process.execPath,
-    [
-      "apps/cli/lib/bin.js",
-      "--profile",
-      "web",
-      "--patch",
-      "apps/cli/config/examples/paseo/cordis.yml",
-      "--patch",
-      overlay,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "0",
-      "--no-open",
-    ],
-    {
-      cwd: repository,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        DSH_HOME: home,
-        DSH_SNAPSHOT: "replay",
-        DSH_SNAPSHOT_FILE: fixture,
-        ...(replayOverride === undefined ? {} : { DSH_SNAPSHOT_OVERRIDE: override }),
-        DSH_SNAPSHOT_SESSIONS_ROOT: path.join(home, "sessions"),
-        DSH_PERMISSION_MODE: "workspace-write",
-      },
-    },
-  );
-  let output = "";
-  let stopped = false;
-  const exited = new Promise<void>((resolve) =>
-    child.once("exit", () => {
-      stopped = true;
-      resolve();
-    }),
-  );
-  const closeProcess = async () => {
-    if (!stopped) {
-      child.kill("SIGTERM");
-      const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
-      try {
-        await exited;
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-    await rm(home, { recursive: true, force: true });
+  let currentProcess: MountedHostProcess | undefined;
+  let restarting = false;
+  let closing = false;
+  let closeTask: Promise<void> | undefined;
+  const activeProcess = (): MountedHostProcess => {
+    if (currentProcess === undefined) throw new Error("Private Host process has not started");
+    return currentProcess;
+  };
+  const closeProcess = (): Promise<void> => {
+    if (closeTask !== undefined) return closeTask;
+    if (restarting)
+      return Promise.reject(new Error("Cannot remove private home during an owned restart"));
+    // Terminal ownership is claimed before stop's first await; restart cannot race home removal.
+    closing = true;
+    closeTask = (async () => {
+      await currentProcess?.stop();
+      await rm(home, { recursive: true, force: true });
+    })();
+    return closeTask;
   };
   try {
-    const loginUrl = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Mounted DSH host did not start")), 60_000);
-      const receive = (chunk: Buffer) => {
-        output += chunk.toString();
-        const match = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_.~-]+/);
-        if (match) {
-          clearTimeout(timeout);
-          resolve(match[0]);
-        }
-      };
-      child.stdout?.on("data", receive);
-      child.stderr?.on("data", receive);
-      child.once("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-      child.once("exit", () => {
-        clearTimeout(timeout);
-        reject(
-          new Error(
-            `Mounted DSH host exited: ${output.replace(/token=\S+/g, "token=[redacted]").slice(-2000)}`,
-          ),
-        );
-      });
-    });
-    if (process.env.DAEDAL_E2E_DEBUG === "1") {
-      console.log(
-        "[mounted-dsh-host]",
-        output.replace(/token=\S+/g, "token=[redacted]").slice(-4000),
+    const fixture = path.join(
+      repository,
+      "snapshots",
+      options.fixture ??
+        (options.workspaceProvenance ? "sdk/workspace-provenance/session.v3.jsonl" : testFixture),
+    );
+    const cwd = path.join(home, "workspace");
+    const marker = path.join(cwd, APPROVAL_MARKER_NAME);
+    const override = path.join(home, "replay.override.json");
+    const heldReplay = options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined;
+    const replayOverride =
+      options.replayOverride ??
+      (options.workspaceProvenance ? workspaceNamingReplay() : heldReplay);
+    if (replayOverride !== undefined) await writeFile(override, replayOverride);
+    const approvalPolicy = path.join(home, "mounted-approval-policy.mjs");
+    if (options.requireMarkerApproval) await writeFile(approvalPolicy, markerApprovalPolicy(cwd));
+    const workspacePlugin = path.join(home, "mounted-workspace-provenance.mjs");
+    const workspaceNamingResult = path.join(home, "workspace-naming-result.json");
+    if (options.workspaceProvenance)
+      await writeFile(workspacePlugin, workspaceProvenancePlugin(workspaceNamingResult));
+    const overlay = path.join(home, "companion-mounted.yml");
+    const overlayRows = [
+      "- id: session-title-llm",
+      "  disabled: true",
+      "- id: session-telemetry-otel",
+      "  disabled: true",
+      "- insert:",
+      "    - id: daedal-browser-preview",
+      "      name: '@deepseek-ai/dsh-host-frontend-static'",
+      "      config:",
+      `        distIndex: ${dist}`,
+      "        mountPath: /daedal",
+      "        indexPaths: [/dsh-hosts]",
+    ];
+    if (options.requireMarkerApproval) {
+      overlayRows.push(
+        "- insert:",
+        "    - id: mounted-approval-policy",
+        `      name: ${approvalPolicy}`,
       );
     }
-    const login = await fetch(loginUrl, { redirect: "manual" });
+    if (options.workspaceProvenance) {
+      overlayRows.push(
+        "- insert:",
+        "    - id: mounted-workspace-provenance",
+        `      name: ${workspacePlugin}`,
+      );
+    }
+    overlayRows.push("");
+    await writeFile(overlay, overlayRows.join("\n"));
+    if (process.env.DAEDAL_E2E_DEBUG === "1") {
+      console.log("[mounted-dsh-host] spawn cwd", repository, "overlay");
+      console.log(await readFile(overlay, "utf8"));
+    }
+    const environment = {
+      ...process.env,
+      DSH_HOME: home,
+      DSH_SNAPSHOT: "replay",
+      DSH_SNAPSHOT_FILE: fixture,
+      ...(replayOverride === undefined ? {} : { DSH_SNAPSHOT_OVERRIDE: override }),
+      DSH_SNAPSHOT_SESSIONS_ROOT: path.join(home, "sessions"),
+      DSH_PERMISSION_MODE: "workspace-write",
+    };
+    const startProcess = (port: number) =>
+      new MountedHostProcess(
+        [
+          "apps/cli/lib/bin.js",
+          "--profile",
+          "web",
+          "--patch",
+          "apps/cli/config/examples/paseo/cordis.yml",
+          "--patch",
+          overlay,
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(port),
+          "--no-open",
+        ],
+        environment,
+      );
+    currentProcess = startProcess(0);
+    const processes = [currentProcess];
+    const loginUrl = await currentProcess.ready();
+    if (process.env.DAEDAL_E2E_DEBUG === "1")
+      console.log("[mounted-dsh-host]", currentProcess.outputTail());
+    const login = await fetch(loginUrl, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
     if (login.status !== 303) throw new Error("Mounted DSH test login failed");
     const origin = new URL(loginUrl).origin;
     const cookie = login.headers.getSetCookie()[0].split(";", 1)[0];
@@ -280,19 +443,24 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
     await writeFile(cookieFile, JSON.stringify({ origin, cookie }), { mode: 0o600 });
     await mkdir(cwd, { recursive: true });
     // Keep setup within the owned process cleanup boundary; creation opts into this Git workspace.
-    await new Promise<void>((resolve) =>
-      execFile("git", ["init", "--quiet"], { cwd }, () => resolve()),
-    );
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        "git",
+        ["init", "--quiet"],
+        { cwd, timeout: 10_000, killSignal: "SIGKILL" },
+        (error) => {
+          if (error !== null) reject(error);
+          else resolve();
+        },
+      );
+    });
     if (process.env.DAEDAL_E2E_DEBUG === "1") {
       const probe = await fetch(`${origin}/daedal/dsh-hosts`, {
         headers: { cookie },
         redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
       });
-      console.log(
-        "[mounted-dsh-host] mount probe",
-        probe.status,
-        probe.headers.get("set-cookie")?.slice(0, 40),
-      );
+      console.log("[mounted-dsh-host] mount probe", probe.status, probe.headers.has("set-cookie"));
     }
     return {
       config: { url: origin, cookieFile },
@@ -305,7 +473,92 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       /** The fixture file this Host replays. */
       fixture,
       /** Captured Host output, for diagnosing a Host that exits during a run. */
-      outputTail: () => output.replace(/token=\S+/g, "token=[redacted]").slice(-3000),
+      outputTail: () => activeProcess().outputTail(),
+      processEvidence: () => processes.map((processOwner) => processOwner.evidence()),
+      readIdentity: () => protectedHostIdentity(origin, cookie),
+      /** Preserve the home, authority and original cookie; never overlap process writers. */
+      async restart() {
+        if (closing || restarting)
+          throw new Error("Host is closing or another restart already owns it");
+        restarting = true;
+        try {
+          const beforeIdentity = await protectedHostIdentity(origin, cookie);
+          const before = activeProcess();
+          if (before.evidence().exit !== undefined)
+            throw new Error("Host exited before the deliberate restart");
+          await before.stop();
+          const stopped = before.evidence();
+          const requestedTermination = stopped.signals.some(
+            (attempt) => attempt.signal === "SIGTERM" && attempt.sent,
+          );
+          if (
+            !requestedTermination ||
+            stopped.forced ||
+            stopped.errors.length !== 0 ||
+            stopped.exit?.code !== 0 ||
+            stopped.exit.signal !== null ||
+            stopped.closedAt === undefined
+          )
+            throw new Error(
+              `Controlled SIGTERM restart was not established: ${JSON.stringify(stopped)}`,
+            );
+          currentProcess = startProcess(Number(new URL(origin).port));
+          processes.push(currentProcess);
+          const nextLoginUrl = await currentProcess.ready();
+          if (new URL(nextLoginUrl).origin !== origin)
+            throw new Error("Restart changed the private Host authority");
+          // Do not exchange the new launch token. This successful read proves the old cookie works.
+          const afterIdentity = await protectedHostIdentity(origin, cookie);
+          if (
+            afterIdentity.hostId !== beforeIdentity.hostId ||
+            afterIdentity.activationId === beforeIdentity.activationId
+          )
+            throw new Error("Restart did not preserve Host identity with a new activation");
+          return {
+            origin,
+            beforeIdentity,
+            afterIdentity,
+            originalCookieAccepted: true,
+            stopped,
+            replacement: currentProcess.evidence(),
+          };
+        } catch (error) {
+          const failures: unknown[] = [error];
+          try {
+            await activeProcess().stop();
+          } catch (cleanupError) {
+            failures.push(cleanupError);
+          }
+          throw hostFailure("Private Host restart failed", error, failures);
+        } finally {
+          restarting = false;
+        }
+      },
+      /** Intentional isolated contract probe, not a retry or a Composer mutation. */
+      async probeUnusedReceipt(sessionId: string, receiptId: string, identity: ConnectionIdentity) {
+        const selected = selectRemoteCapabilities(["session/prompt"])[0];
+        if (selected === undefined) throw new Error("Generated Session prompt descriptor missing");
+        const request = {
+          sessionId,
+          requestId: randomUUID(),
+          mode: "queue" as const,
+          content: [{ type: "file" as const, receiptId }],
+        };
+        const result = await mountedHostRpc(origin, cookie).call(
+          "/api",
+          selected.endpoint,
+          {
+            args: { request },
+            compatibility: {
+              wireFingerprint: selected.wireFingerprint,
+              semanticRevision: selected.semanticRevision,
+              identity,
+            },
+          },
+          AbortSignal.timeout(10_000),
+        );
+        return { endpoint: selected.endpoint, request, result, identity };
+      },
       /** Read the only test Session's durable log, never the live Host's Session store. */
       async readSessionLog() {
         const root = path.join(home, "sessions");
@@ -378,8 +631,13 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       close: closeProcess,
     };
   } catch (error) {
-    await closeProcess();
-    throw error;
+    const failures: unknown[] = [error];
+    try {
+      await closeProcess();
+    } catch (cleanupError) {
+      failures.push(cleanupError);
+    }
+    throw hostFailure("Mounted Host setup failed", error, failures);
   }
 }
 
