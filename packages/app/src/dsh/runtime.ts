@@ -12,6 +12,7 @@ import { DshFork } from "./fork";
 import { DshForkJournal } from "./fork-journal";
 import { DshSearch } from "./search";
 import { DshHistory } from "./history";
+import { DshImages, DshImageReads } from "./images";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -39,6 +40,7 @@ export interface DshConversation {
   readonly conversation: dsh.ConversationBinding;
   readonly prompt: DshPrompt;
   readonly history: DshHistory;
+  readonly images: DshImages;
 }
 
 export interface DshHostRuntime {
@@ -166,6 +168,8 @@ export async function createDshHostRuntime(
       inspectRequestPrompt: dsh.inspectRequestPrompt,
       inspectSystemPrompt: dsh.inspectSystemPrompt,
     });
+    const imageReads = new DshImageReads(context.remote.session);
+    context.effect(() => () => imageReads.close());
     let current: { view: DshConversation; binding: dsh.ConversationBindingModel } | null = null;
     let closed = false;
     const retiringHistory = new Set<Promise<void>>();
@@ -175,6 +179,7 @@ export async function createDshHostRuntime(
         .dispose()
         .finally(() => retiringHistory.delete(retiring));
       retiringHistory.add(retiring);
+      current.view.images.dispose();
       current.view.prompt.dispose();
       current.binding.dispose();
       current = null;
@@ -212,6 +217,12 @@ export async function createDshHostRuntime(
             connection,
             () => context.remote.$host.capabilities,
           ),
+          images: new DshImages(
+            id,
+            imageReads,
+            connection,
+            () => context.remote.$host.capabilities,
+          ),
           prompt: new DshPrompt(source, connection, () =>
             brandString<dsh.SessionRequestId>(options.randomId()),
           ),
@@ -226,6 +237,7 @@ export async function createDshHostRuntime(
       },
       async dispose() {
         closed = true;
+        imageReads.close();
         releaseConversation();
         await Promise.all([
           ownedFork.dispose(),

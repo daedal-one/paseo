@@ -115,6 +115,10 @@ describe("desktop window and grant ownership", () => {
       "/api/session/list?redirect=true",
       "/api/session/historyDetail/other",
       "/api/session/page?host=other",
+      "/api/session/attachment?host=other",
+      "/api/session/attachment/other",
+      "/api/session/uploadFileBinary",
+      "/api/fileUploads/upload",
       "/api/session/create/other",
       "/api/session/fork",
       "/api/session/forkTo/other",
@@ -142,6 +146,7 @@ describe("desktop window and grant ownership", () => {
       "/api/connection/discovery",
       "/api/session/page",
       "/api/session/historyDetail",
+      "/api/session/attachment",
       "/api/session/create",
       "/api/agentPresets/list",
       "/api/workspace/create",
@@ -159,7 +164,7 @@ describe("desktop window and grant ownership", () => {
         headers: {},
       });
     }
-    expect(transport.fetch).toHaveBeenCalledTimes(10);
+    expect(transport.fetch).toHaveBeenCalledTimes(11);
   });
   it("cancels an owner waiting for protected storage without creating a transport", async () => {
     const { access, store } = fixture();

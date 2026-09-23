@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import type { DshDirectory } from "../directory";
 import type { DshConversation, DshHostRuntime } from "../runtime";
 import type { DshHistory } from "../history";
+import type { DshImages } from "../images";
+import { ImagePreview } from "./image-preview";
 import { HistoryList } from "./history-list";
 import { ForkControl } from "./fork-sheet";
 import { styles } from "./styles";
@@ -58,9 +60,11 @@ function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
 export function ChatContent({
   node,
   history,
+  images,
 }: {
   node: dsh.ChatConversationViewNode;
   history: DshHistory;
+  images?: DshImages;
 }) {
   const { t } = useTranslation();
   if (nodeIs(node, "user") || nodeIs(node, "steering") || nodeIs(node, "context")) {
@@ -68,7 +72,7 @@ export function ChatContent({
     return (
       <>
         <Text style={styles.title}>{t(`nativeDsh.conversation.${role}`)}</Text>
-        <MessageContent content={node.data.content} />
+        <MessageContent content={node.data.content} images={images} />
       </>
     );
   }
@@ -105,6 +109,9 @@ export function ChatContent({
                     bytes: block.attachment.bytes,
                   })}
                 </Text>
+                {images !== undefined && (
+                  <ImagePreview attachment={block.attachment} images={images} />
+                )}
               </View>
             );
           if (block.kind === "tool-call")
@@ -154,7 +161,7 @@ export function ChatContent({
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
-              <MessageContent content={root.content} />
+              <MessageContent content={root.content} images={images} />
             </ScrollView>
           )}
         </View>
@@ -206,16 +213,18 @@ export function ChatContent({
 const ChatRow = memo(function ChatRow({
   source,
   history,
+  images,
 }: {
   source: dsh.ChatNodeSource;
   history: DshHistory;
+  images: DshImages;
 }) {
   const node = useSyncExternalStore(source.subscribe, source.getSnapshot);
   if (node === undefined || node.visibility === "hidden") return null;
   if (node.kind === "turn-tail") return null;
   return (
     <View style={[styles.row, styles.historyRow]}>
-      <ChatContent node={node} history={history} />
+      <ChatContent node={node} history={history} images={images} />
     </View>
   );
 });
@@ -234,7 +243,9 @@ const Transcript = memo(function Transcript({
   const renderItem = useCallback(
     (key: string) => {
       if (snapshot === undefined) return null;
-      return <ChatRow source={snapshot.nodes.source(key)} history={view.history} />;
+      return (
+        <ChatRow source={snapshot.nodes.source(key)} history={view.history} images={view.images} />
+      );
     },
     [snapshot, view],
   );

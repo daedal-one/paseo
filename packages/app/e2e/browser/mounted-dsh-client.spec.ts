@@ -153,7 +153,91 @@ async function readBackImage(
   };
 }
 
-test.describe("mounted native DSH image admission", () => {
+function observeImageReads(page: Page, reads: Request[]) {
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/session/attachment") reads.push(request);
+  });
+}
+async function expectDecodedPreview(page: Page, ref: z.infer<typeof imageRefSchema>) {
+  const preview = page.getByTestId("dsh-image-preview");
+  await expect(preview).toHaveCount(1);
+  const image = preview.locator("img");
+  await expect
+    .poll(() =>
+      image.evaluate((element: HTMLImageElement) => ({
+        complete: element.complete,
+        width: element.naturalWidth,
+        height: element.naturalHeight,
+      })),
+    )
+    .toEqual({ complete: true, width: ref.width, height: ref.height });
+  const uri = await image.getAttribute("src");
+  expect(uri).toMatch(new RegExp(`^data:${ref.mediaType};base64,`));
+  const bytes = Buffer.from(uri!.split(",")[1]!, "base64");
+  expect(bytes.length).toBe(ref.bytes);
+  const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  expect(digest).toBe(ref.attachmentId);
+  return { attachmentId: digest, bytes: bytes.length, width: ref.width, height: ref.height };
+}
+async function exerciseImagePreview(
+  page: Page,
+  sessionId: string,
+  refs: z.infer<typeof imageRefSchema>[],
+  reads: Request[],
+) {
+  const endpoint = "**/api/session/attachment";
+  const blocks = page.getByTestId("dsh-block-image");
+  expect(reads).toHaveLength(0);
+  await expect(page.getByTestId("dsh-image-load")).toHaveCount(refs.length);
+  await expect(page.getByTestId("dsh-image-preview")).toHaveCount(0);
+  let capture!: (route: Route) => void;
+  const held = new Promise<Route>((resolve) => {
+    capture = resolve;
+  });
+  await page.route(endpoint, (route) => capture(route));
+  await blocks.nth(0).getByTestId("dsh-image-load").click();
+  const route = await held;
+  await blocks.nth(0).getByTestId("dsh-image-hide").click();
+  for (const button of await page.getByTestId("dsh-image-load").all())
+    await expect(button).toBeDisabled();
+  // Internal view replacement retains the same Host runtime/physical read gate.
+  await page.getByRole("button", { name: "Back to sessions", exact: true }).click();
+  await expect(page.getByTestId("dsh-session-list")).toBeVisible();
+  await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+  await expectImageTranscript(page, refs);
+  await expect(page.getByTestId("dsh-image-load")).toHaveCount(refs.length);
+  for (const button of await page.getByTestId("dsh-image-load").all())
+    await expect(button).toBeDisabled();
+  expect(reads).toHaveLength(1);
+  await route.fulfill({ response: await route.fetch() });
+  await page.unroute(endpoint);
+  for (const button of await page.getByTestId("dsh-image-load").all())
+    await expect(button).toBeEnabled();
+  await expect(page.getByTestId("dsh-image-preview")).toHaveCount(0);
+  expect(reads).toHaveLength(1);
+  await blocks.nth(0).getByTestId("dsh-image-load").click();
+  const first = await expectDecodedPreview(page, refs[0]!);
+  await blocks.nth(1).getByTestId("dsh-image-load").click();
+  const second = await expectDecodedPreview(page, refs[1]!);
+  await expect(blocks.nth(0).getByTestId("dsh-image-preview")).toHaveCount(0);
+  await blocks.nth(1).getByTestId("dsh-image-hide").click();
+  await expect(page.getByTestId("dsh-image-preview")).toHaveCount(0);
+  expect(reads).toHaveLength(3);
+  await page.route(endpoint, (request) =>
+    request.fulfill({ status: 503, body: "Controlled read failure" }),
+  );
+  await blocks.nth(0).getByTestId("dsh-image-load").click();
+  await expect(blocks.nth(0).getByTestId("dsh-image-error")).toContainText("could not be loaded");
+  await expect(page.getByTestId("dsh-image-preview")).toHaveCount(0);
+  expect(reads).toHaveLength(4);
+  await page.unroute(endpoint);
+  await blocks.nth(0).getByTestId("dsh-image-load").click();
+  const retry = await expectDecodedPreview(page, refs[0]!);
+  expect(reads).toHaveLength(5);
+  return { first, second, retry, heldViewReplacementReadCount: 1, failureStatus: 503 };
+}
+
+test.describe("mounted native DSH image admission and preview", () => {
   for (const width of WIDTHS) {
     test(`persists actual picker images without partial selection or replay at ${width}px`, async ({
       page,
@@ -169,6 +253,8 @@ test.describe("mounted native DSH image admission", () => {
         await attachDshSession(freshContext, host.config);
         const mutations: Request[] = [];
         observeImageMutations(page, mutations);
+        const imageReads: Request[] = [];
+        observeImageReads(page, imageReads);
         const clients = observeClientIds(page);
         await page.goto(host.companionUrl);
         await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
@@ -279,15 +365,53 @@ test.describe("mounted native DSH image admission", () => {
           expect(detectPromptImageMediaType(stored.toString("base64"))).toBe(ref.mediaType);
         }
         await expectImageTranscript(page, refs);
+        const previews = await exerciseImagePreview(page, sessionId, refs, imageReads);
+        await expectReachableComposer(page);
+        await page.screenshot({
+          path: testInfo.outputPath(`images-preview-${width}.png`),
+          fullPage: true,
+        });
         const previousClient = clients.at(-1);
         expect(previousClient).not.toBeUndefined();
         expect(await openOnlySession(page, host.companionUrl)).toBe(sessionId);
         await expect.poll(() => clients.at(-1)).not.toBe(previousClient);
         await expectImageTranscript(page, refs);
+        await expect(page.getByTestId("dsh-image-preview")).toHaveCount(0);
+        expect(imageReads).toHaveLength(5);
         const fresh = await freshContext.newPage();
         observeImageMutations(fresh, mutations);
+        observeImageReads(fresh, imageReads);
         expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
         await expectImageTranscript(fresh, refs);
+        await expect(fresh.getByTestId("dsh-image-preview")).toHaveCount(0);
+        expect(imageReads).toHaveLength(5);
+        await fresh.getByTestId("dsh-block-image").nth(0).getByTestId("dsh-image-load").click();
+        const freshPreview = await expectDecodedPreview(fresh, refs[0]!);
+        expect(imageReads).toHaveLength(6);
+        const previewRequests = imageReads.map(
+          (request) =>
+            z
+              .object({
+                method: z.literal("session/attachment"),
+                payload: z.object({
+                  args: z.object({
+                    request: z.object({
+                      sessionId: z.literal(sessionId),
+                      attachmentId: z.string(),
+                    }),
+                  }),
+                }),
+              })
+              .parse(request.postDataJSON()).payload.args.request,
+        );
+        expect(previewRequests.map((request) => request.attachmentId)).toEqual([
+          refs[0]!.attachmentId,
+          refs[0]!.attachmentId,
+          refs[1]!.attachmentId,
+          refs[0]!.attachmentId,
+          refs[0]!.attachmentId,
+          refs[0]!.attachmentId,
+        ]);
         const readbacks = [];
         for (const ref of refs)
           readbacks.push(
@@ -310,6 +434,9 @@ test.describe("mounted native DSH image admission", () => {
             messages,
             completedTurn: ends[0],
             readbacks,
+            previews,
+            freshPreview,
+            previewRequests,
             browserMutationAttempts: mutations.length,
             clientIds: clients,
           }),

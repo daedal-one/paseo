@@ -13,6 +13,14 @@ function queueIds(session: SessionFace): readonly string[] {
   return session.getSnapshot().queue.map((item) => item.id);
 }
 import { createDshHostRuntime, type DshHostRuntimeOptions } from "./runtime";
+import type { ImageAttachmentRef } from "./images";
+const previewRef: ImageAttachmentRef = {
+  attachmentId: brandString<ImageAttachmentRef["attachmentId"]>(`sha256:${"a".repeat(64)}`),
+  mediaType: "image/png",
+  width: 1,
+  height: 1,
+  bytes: 68,
+};
 
 function offlineHost(hostId: string) {
   let selection: SessionSelection = {};
@@ -547,10 +555,23 @@ describe("native DSH Conversation ownership", () => {
         await Promise.all([first.history.loadOlder(), first.history.loadDetail(0)]);
         expect(host.calls).not.toContain("session/page");
         expect(host.calls).not.toContain("session/historyDetail");
+        // Missing optional image capability never prevents basic Session/history admission.
+        expect(first.images.getSnapshot()).toMatchObject({
+          availability: "unavailable",
+          busy: false,
+        });
+        await first.images.load(previewRef);
+        expect(host.calls).not.toContain("session/attachment");
         expect(runtime.openConversation(host.ids[0], null)).toBe(first);
         expect(host.calls.filter((endpoint) => endpoint === "session/follow")).toHaveLength(1);
         const second = runtime.openConversation(host.ids[1], null);
         expect(second.sessionId).toBe(host.ids[1]);
+        expect(first.images.getSnapshot()).toMatchObject({
+          availability: "offline",
+          preview: { status: "idle" },
+        });
+        await first.images.load(previewRef);
+        expect(host.calls).not.toContain("session/attachment");
         expect(first.history.getSnapshot()).toMatchObject({ older: "offline", detail: "offline" });
         await Promise.all([first.history.loadOlder(), first.history.loadDetail(0)]);
         expect(host.calls).not.toContain("session/page");

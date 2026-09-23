@@ -9,6 +9,7 @@ import {
   parseDshPairing,
   dshSessionEndpoints,
   dshHistoryEndpoints,
+  dshImageEndpoints,
   dshCreationEndpoints,
   dshRegistrationEndpoints,
   dshSearchEndpoints,
@@ -27,6 +28,7 @@ const rpcPaths = new Set([
   ...selectRemoteCapabilities([
     ...dshSessionEndpoints,
     ...dshHistoryEndpoints,
+    ...dshImageEndpoints,
     ...dshCreationEndpoints,
     ...dshRegistrationEndpoints,
     ...dshSearchEndpoints,

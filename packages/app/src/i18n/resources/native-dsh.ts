@@ -304,6 +304,16 @@ export const nativeDsh = {
     details: "Show save details",
     hideDetails: "Hide save details",
   },
+  images: {
+    load: "Load image",
+    hide: "Hide image",
+    retry: "Retry image",
+    offline: "Reconnect to load this image.",
+    unavailable: "Image loading is unavailable on this host. Update the host to use it.",
+    failed: "The image could not be loaded or displayed. Try again.",
+    busy: "An image read is still finishing. Loading will be available when it settles.",
+    tooLarge: "This image exceeds the app’s preview size limit. Its metadata is still available.",
+  },
   history: {
     loadOlder: "Load earlier messages",
     retryOlder: "Retry earlier messages",

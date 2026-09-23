@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import type * as dsh from "@deepseek-ai/dsh-client";
 import { Button } from "@/components/ui/button";
 import { styles } from "./styles";
+import type { DshImages } from "../images";
+import { ImagePreview } from "./image-preview";
 
 type ContentBlock = dsh.UserMessageNode["content"][number];
 type QueueEntry = Pick<
@@ -28,7 +30,7 @@ export function queueAvailability(
 }
 
 /* eslint-disable react/no-array-index-key -- DSH message blocks are ordered slots; streamed text changes within a slot. */
-function MessageBlock({ block }: { block: ContentBlock }) {
+function MessageBlock({ block, images }: { block: ContentBlock; images?: DshImages }) {
   const { t } = useTranslation();
   if (block.type === "text")
     return (
@@ -58,6 +60,7 @@ function MessageBlock({ block }: { block: ContentBlock }) {
             bytes: block.attachment.bytes,
           })}
         </Text>
+        {images !== undefined && <ImagePreview attachment={block.attachment} images={images} />}
       </View>
     );
   if (block.type === "file")
@@ -96,7 +99,7 @@ function MessageBlock({ block }: { block: ContentBlock }) {
             ? t("nativeDsh.conversation.toolFailed")
             : t("nativeDsh.conversation.toolResult")}
         </Text>
-        <MessageContent content={block.content} />
+        <MessageContent content={block.content} images={images} />
       </View>
     );
   return (
@@ -106,11 +109,17 @@ function MessageBlock({ block }: { block: ContentBlock }) {
   );
 }
 
-export function MessageContent({ content }: { content: readonly ContentBlock[] }) {
+export function MessageContent({
+  content,
+  images,
+}: {
+  content: readonly ContentBlock[];
+  images?: DshImages;
+}) {
   return (
     <>
       {content.map((block, index) => (
-        <MessageBlock key={index} block={block} />
+        <MessageBlock key={index} block={block} images={images} />
       ))}
     </>
   );
