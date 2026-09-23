@@ -16,6 +16,8 @@ export const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   detail: { maxHeight: 320, flexGrow: 0 },
+  queue: { maxHeight: 160, flexGrow: 0 },
+  queueItem: { gap: theme.spacing[2] },
   screen: { flex: 1, backgroundColor: theme.colors.surface0 },
   content: {
     padding: theme.spacing[6],

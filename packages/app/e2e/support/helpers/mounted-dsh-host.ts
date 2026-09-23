@@ -32,10 +32,18 @@ function companionRepoRoot(): string {
   throw new Error("Could not locate the companion checkout for the mounted DSH preview");
 }
 
-export async function launchMountedDshHost(options: { fixture?: string } = {}) {
+interface MountedDshHostOptions {
+  fixture?: string;
+  /** Hold a real model turn until teardown so queue assertions need no timing window. */
+  holdTurn?: boolean;
+}
+
+export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
   const fixture = path.join(repository, "snapshots", options.fixture ?? testFixture);
+  const override = path.join(home, "replay.override.json");
+  if (options.holdTurn) await writeFile(override, JSON.stringify([{ kind: "hang" }]));
   const overlay = path.join(home, "companion-mounted.yml");
   await writeFile(
     overlay,
@@ -82,6 +90,7 @@ export async function launchMountedDshHost(options: { fixture?: string } = {}) {
         DSH_HOME: home,
         DSH_SNAPSHOT: "replay",
         DSH_SNAPSHOT_FILE: fixture,
+        ...(options.holdTurn ? { DSH_SNAPSHOT_OVERRIDE: override } : {}),
         DSH_SNAPSHOT_SESSIONS_ROOT: path.join(home, "sessions"),
         DSH_PERMISSION_MODE: "workspace-write",
       },

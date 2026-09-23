@@ -85,6 +85,23 @@ export const nativeDsh = {
     unavailableStorage: "Fork storage is unavailable.",
   },
 
+  queue: {
+    title: "Last observed queue",
+    toggle: "Last observed queue ({{count}})",
+    empty: "No entries in the last observed queue. Waiting for Host updates.",
+    overflow:
+      "Showing the first 20 of {{count}} entries. Use the current DSH interface for the rest.",
+    stale: "Queued message state may be out of date.",
+    unavailable: "Queued message state is unavailable.",
+    readOnly: "Queue editing is unavailable here. Use the current DSH interface.",
+    unsupportedContent: "Open the current DSH interface to inspect this queued content.",
+    placement: {
+      queued: "Queued",
+      steering: "Steering",
+      context: "Context",
+    },
+  },
+
   registration: {
     title: "Register workspace",
     review: "Review registration",

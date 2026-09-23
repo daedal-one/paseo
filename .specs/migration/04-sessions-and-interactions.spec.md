@@ -7,7 +7,7 @@ owners: [daedal-one]
 progress: in-progress
 addresses:
   ["REQ:frontend/sessions", "REQ:frontend/interactions", "REQ:frontend/workspaces-and-tools"]
-blocked_by: ["TASK:migration/03-native-client"]
+blocked_by: []
 ---
 
 # Replace session and workspace presentation with native DSH state
@@ -115,6 +115,20 @@ The sheet renders the retained attempt from the shared owner: sending, not-dispa
 Current-child review calls the shared exact summary reader through the owner. Found shows the exact child identity and parent and offers explicit adoption as the CURRENT child; absence, wrong lineage and failed reads cannot authorize adoption, reset or another fork. Workspace membership is read from the shared Workspace list as a separate current observation, where an unavailable baseline differs from a ready-empty membership. Lookup and adoption never rename, attach, open history or resend. Closing the sheet releases only the review reader and leaves the durable attempt owned by the runtime.
 
 Qualify the visible control in narrow and wide browser and development Electron, including anchor acceptance and refusal, one dispatch, unconfirmed review, absence/wrong-lineage refusal, explicit adoption and terminal reset. Keep packaged desktop, physical iPhone execution and Phase 4 publication as separate gates.
+
+## Native queue read presentation increment
+
+Expose the existing shared Session queue in the native conversation as a collapsed, bounded read-only view. Preserve Host occurrence order and identity and distinguish queued follow-ups, steering and context. Render content through the same text and attachment-metadata presentation as the transcript; do not create a local queue projection or infer admission from matching text. Offline, syncing, removed and unopened state must not claim a confirmed empty queue. Opening, closing and reconnecting the view issue no queue mutations.
+
+Qualify replacement and withdrawal, attachment-only entries, stale versus empty state and concurrent browser readers at narrow and wide widths against the existing shared Client. Queue edit/remove/steer admission, mutation uncertainty recovery and concurrent approval/question one-winner qualification remain separate work. No new endpoint or portable artifact is introduced; Phase 4 and platform/release gates stay open.
+
+### Queue read qualification
+
+The read view labels every snapshot as last observed because the shared Client exposes no separate control-baseline readiness flag. It starts collapsed and renders at most twenty entries in a 160px viewport, with an explicit overflow notice. This is a rendering bound, not a Host queue-size or process-memory limit.
+
+Forty-four focused transcript/queue/runtime cases pass, including replacement, withdrawal, same-text distinct occurrence identities, unrelated Session updates and retained unknown prompt outcomes across reconnect without replay. Production browser exports at 390px and 1280px use two independent browser contexts on one real isolated Host. A replay-provider hang holds a real turn while each client submits a follow-up; both observe the same ordered queue and a fresh reader obtains its control baseline without another prompt. Composer reachability, retained unsent draft and no queue mutations are asserted. Existing fork gestures pass at both widths, for four browser cases total. Full workspace types/lint, scoped formatting, spec lint and the production Web export pass. The portable Client remains pinned to `05a28a1b`.
+
+Forge receipts and captured screenshots are recorded in handoff evidence `evidence/frontend/native-queue-read-20260923/verification.json`. Screenshot inspection was unavailable in this Session; browser geometry assertions passed. These are Linux/browser checks, not development or packaged Electron, physical iPhone execution, queue mutation recovery, concurrent interaction-winner qualification or Phase 4 completion. No source publication, deployment, service restart or TestFlight upload occurred.
 
 ## Implementation surfaces
 

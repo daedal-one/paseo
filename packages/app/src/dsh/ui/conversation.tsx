@@ -9,6 +9,7 @@ import type { DshHistory } from "../history";
 import { HistoryList } from "./history-list";
 import { ForkControl } from "./fork-sheet";
 import { styles } from "./styles";
+import { MessageContent, Queue, queueAvailability } from "./queue";
 import { WorkspaceOutcome } from "./workspace-outcome";
 
 // The installed Chat Definitions own the payload for each registered renderer kind.
@@ -20,100 +21,6 @@ function nodeIs<K extends dsh.ChatNodeKind>(
 }
 
 /* eslint-disable react/no-array-index-key -- DSH message blocks are ordered slots; streamed text changes within a slot. */
-type ContentBlock = dsh.UserMessageNode["content"][number];
-
-/**
- * Render one durable content block. Images and files are shown by their stored metadata; the
- * native client does not own attachment URLs, so the current DSH interface renders the pixels.
- */
-function MessageBlock({ block }: { block: ContentBlock }) {
-  const { t } = useTranslation();
-  if (block.type === "text")
-    return (
-      <Text selectable style={styles.message} testID="dsh-block-text">
-        {block.text}
-      </Text>
-    );
-  if (block.type === "reasoning")
-    return (
-      <View style={styles.group} testID="dsh-block-reasoning">
-        <Text style={styles.muted}>{t("nativeDsh.conversation.reasoning")}</Text>
-        <Text selectable style={styles.message}>
-          {block.text}
-        </Text>
-      </View>
-    );
-  if (block.type === "image")
-    return (
-      <View style={styles.group} testID="dsh-block-image">
-        <Text style={styles.muted}>{t("nativeDsh.conversation.image")}</Text>
-        <Text selectable style={styles.text}>
-          {t("nativeDsh.conversation.imageDetail", {
-            name: block.attachment.name ?? t("nativeDsh.conversation.imageUnnamed"),
-            media: block.attachment.mediaType,
-            width: block.attachment.width,
-            height: block.attachment.height,
-            bytes: block.attachment.bytes,
-          })}
-        </Text>
-      </View>
-    );
-  if (block.type === "file")
-    return (
-      <View style={styles.group} testID="dsh-block-file">
-        <Text style={styles.muted}>{t("nativeDsh.conversation.file")}</Text>
-        <Text selectable style={styles.text}>
-          {t("nativeDsh.conversation.fileDetail", {
-            name: block.attachment.name,
-            bytes: block.attachment.bytes,
-          })}
-        </Text>
-      </View>
-    );
-  if (block.type === "tool-call")
-    return (
-      <View style={styles.group} testID="dsh-block-tool-call">
-        <Text style={styles.muted}>{t("nativeDsh.conversation.toolCall")}</Text>
-        <Text selectable style={styles.text}>
-          {block.name}
-        </Text>
-        {block.arguments !== "" && (
-          <ScrollView style={styles.detail} nestedScrollEnabled>
-            <Text selectable style={styles.muted}>
-              {block.arguments}
-            </Text>
-          </ScrollView>
-        )}
-      </View>
-    );
-  if (block.type === "tool-result")
-    return (
-      <View style={styles.group} testID="dsh-block-tool-result">
-        <Text style={styles.muted}>
-          {block.isError === true
-            ? t("nativeDsh.conversation.toolFailed")
-            : t("nativeDsh.conversation.toolResult")}
-        </Text>
-        <MessageContent content={block.content} />
-      </View>
-    );
-  return (
-    <Text style={styles.muted} testID="dsh-block-unsupported">
-      {t("nativeDsh.conversation.unsupportedContent")}
-    </Text>
-  );
-}
-
-function MessageContent({ content }: { content: readonly ContentBlock[] }) {
-  return (
-    <>
-      {content.map((block, index) => (
-        <MessageBlock key={index} block={block} />
-      ))}
-    </>
-  );
-}
-
 function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(history.subscribe, history.getSnapshot);
@@ -375,6 +282,10 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
         </Button>
         <Text style={styles.title}>{title}</Text>
         <ForkControl runtime={runtime} sessionId={view.sessionId} busy={busy} />
+        <Queue
+          queue={state.queue}
+          availability={queueAvailability(state, generation !== undefined)}
+        />
         {generation === undefined && (
           <>
             <Text style={styles.muted}>{t("nativeDsh.conversation.offline")}</Text>

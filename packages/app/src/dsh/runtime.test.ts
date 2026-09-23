@@ -2,7 +2,16 @@ import { z } from "zod";
 import { selectRemoteCapabilities } from "@deepseek-ai/dsh-client";
 import { describe, expect, it, vi } from "vitest";
 import { brandString } from "@deepseek-ai/dsh-brand";
-import type { ConnectionHostId, SessionId, SessionSelection } from "@deepseek-ai/dsh-client";
+import type {
+  ConnectionHostId,
+  SessionId,
+  SessionSelection,
+  SessionFace,
+} from "@deepseek-ai/dsh-client";
+
+function queueIds(session: SessionFace): readonly string[] {
+  return session.getSnapshot().queue.map((item) => item.id);
+}
 import { createDshHostRuntime, type DshHostRuntimeOptions } from "./runtime";
 
 function offlineHost(hostId: string) {
@@ -941,6 +950,47 @@ describe("native DSH text submission", () => {
         submission: { kind: "unknown" },
       });
       expect(host.prompts).toHaveLength(1);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  it("replaces ordered Host queue occurrences without confusing identity, admission or Sessions", async () => {
+    const host = conversationHost();
+    host.replyToPrompt(async () => {
+      throw new Error("Reply lost");
+    });
+    const runtime = await createDshHostRuntime(host.options);
+    try {
+      await vi.waitFor(() => expect(runtime.sessions.list.getSnapshot().phase).toBe("ready"));
+      const view = runtime.openConversation(host.ids[0], null);
+      await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
+      view.prompt.setText("same text");
+      expect(await view.prompt.send()).toBe(false);
+      const queued = (id: string) => ({
+        id,
+        placement: "queued",
+        message: { id, content: [{ type: "text", text: "same text" }] },
+      });
+      host.control({ type: "queue", sessionId: host.ids[0], items: [queued("a"), queued("b")] });
+      await vi.waitFor(() => expect(queueIds(view.session)).toEqual(["a", "b"]));
+      expect(view.prompt.getSnapshot().submission.kind).toBe("unknown");
+      host.control({ type: "queue", sessionId: host.ids[1], items: [queued("other")] });
+      await vi.waitFor(() => expect(queueIds(view.session)).toEqual(["a", "b"]));
+      host.control({ type: "queue", sessionId: host.ids[0], items: [queued("b")] });
+      await vi.waitFor(() => expect(queueIds(view.session)).toEqual(["b"]));
+      host.control({ type: "queue", sessionId: host.ids[0], items: [] });
+      await vi.waitFor(() => expect(view.session.getSnapshot().queue).toEqual([]));
+      expect(view.prompt.getSnapshot().submission.kind).toBe("unknown");
+      // Reconnection replaces retained control with the Host's fresh empty baseline.
+      host.control({ type: "queue", sessionId: host.ids[0], items: [queued("retained")] });
+      await vi.waitFor(() => expect(queueIds(view.session)).toEqual(["retained"]));
+      runtime.connection.reconnect();
+      await vi.waitFor(() => expect(view.session.getSnapshot().queue).toEqual([]));
+      expect(view.prompt.getSnapshot().submission.kind).toBe("unknown");
+      expect(await view.prompt.send()).toBe(false);
+      expect(host.prompts).toHaveLength(1);
+      expect(host.calls.filter((method) => method === "session/updateQueue")).toEqual([]);
     } finally {
       await runtime.dispose();
     }
