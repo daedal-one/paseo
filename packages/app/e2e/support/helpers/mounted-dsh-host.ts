@@ -32,10 +32,10 @@ function companionRepoRoot(): string {
   throw new Error("Could not locate the companion checkout for the mounted DSH preview");
 }
 
-export async function launchMountedDshHost() {
+export async function launchMountedDshHost(options: { fixture?: string } = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
-  const fixture = path.join(repository, "snapshots", testFixture);
+  const fixture = path.join(repository, "snapshots", options.fixture ?? testFixture);
   const overlay = path.join(home, "companion-mounted.yml");
   await writeFile(
     overlay,
@@ -171,6 +171,8 @@ export async function launchMountedDshHost() {
       workspaceDir: cwd,
       /** The recorded prompt the replay fixture answers, for driving one completed turn. */
       prompt: fixturePrompt,
+      /** The fixture file this Host replays. */
+      fixture,
       /** Captured Host output, for diagnosing a Host that exits during a run. */
       outputTail: () => output.replace(/token=\S+/g, "token=[redacted]").slice(-3000),
       close: closeProcess,
