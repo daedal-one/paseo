@@ -147,7 +147,8 @@ function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
   );
 }
 
-function ChatContent({
+/** Exported for the transcript presentation harness; the row wires it to its own node source. */
+export function ChatContent({
   node,
   history,
 }: {
