@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "sourceCommit": "05a28a1b0438ba1c0eb91e8e919886dcb818a0e9",
+  "sourceCommit": "33204affd69f6f555b542324dae7308441816edc",
   "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
       "name": "@deepseek-ai/cordis",
       "version": "4.0.2",
       "file": "deepseek-ai-cordis-4.0.2.tgz",
-      "sha256": "98f6e220473c2874a664f9870029c4e2ee2c854c4b95986dbea8e7948c5624be"
+      "sha256": "23c61f1fb4f2901519f6eb9c321440e945f96932b5c27f31dc2b65d955086190"
     },
     {
       "name": "@deepseek-ai/cosmokit",
       "version": "1.8.3",
       "file": "deepseek-ai-cosmokit-1.8.3.tgz",
-      "sha256": "69647a14229708b2c168294c8daec07884c74d95c1a8f03efecfcfa97150d3b4"
+      "sha256": "552f10313ddfdc2b92cce1867b9bf30b2a4c9de55543ad222fe67c22015e4400"
     },
     {
       "name": "@deepseek-ai/dsh-brand",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-brand-0.1.5-alpha.2.tgz",
-      "sha256": "c8100a065446f66f3c887086e437004c05bf7856ee0c872af1b30af4f1786625"
+      "sha256": "d4972fd62a96e55ea68c65d7c1c721cec6a67a08fab26eb6786474839a1c1779"
     },
     {
       "name": "@deepseek-ai/dsh-typert-protocol",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-typert-protocol-0.1.5-alpha.2.tgz",
-      "sha256": "ccefa528ef97b4fc5f149df13e0ecde86ce9f2e172be2186b139e8c335fbd858"
+      "sha256": "bd857584091982a6df2c28c78a24984a63f317f16fdd140624697ad6a931849c"
     },
     {
       "name": "@deepseek-ai/dsh-util-values",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-util-values-0.1.5-alpha.2.tgz",
-      "sha256": "540cf2eb5036325840681efd32c613446c3fdbdfc7f3c3b20e3ff6b300ef9c81"
+      "sha256": "b00fbc76a4352a5249f60b71f4cbe0a0bbf45c68a8e779ef71721399be67d71b"
     },
     {
       "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
-      "sha256": "240f55e3705b25e097387908b3e93388a1aaebf4e95c15c7bab2c308d6a29740"
+      "sha256": "b8e64238e4c285c57a9058a1bc908b50f8fbf22295cee920b54338d3f3047311"
     }
   ]
 }

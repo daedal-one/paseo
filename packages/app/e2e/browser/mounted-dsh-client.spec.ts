@@ -12,6 +12,9 @@ import {
   createHostSession,
   launchMountedDshHost,
   mountedDshImageFixturePaths,
+  WORKSPACE_PROVENANCE_ID,
+  WORKSPACE_PROVENANCE_PROMPT,
+  WORKSPACE_PROVENANCE_REPLY,
 } from "../support/helpers/mounted-dsh-host";
 
 import { detectPromptImageMediaType } from "../../src/dsh/ui/prompt-image-bytes";
@@ -1448,6 +1451,430 @@ test.describe("mounted native DSH fork in the production browser", () => {
         await page.screenshot({ path: testInfo.outputPath(`fork-${width}-confirmed.png`) });
         expect(errors).toEqual([]);
       } finally {
+        await host.close();
+      }
+    });
+  }
+});
+
+const workspaceFixtureRefs = {
+  "refs/heads/dsh/fix-recovery-111111111111111111111111/turn-1": "d".repeat(40),
+  "refs/heads/dsh/fix-recovery-222222222222222222222222/turn-1": "d".repeat(40),
+};
+const workspaceEventEnvelope = z.object({
+  seq: z.number().int().nonnegative(),
+  time: z.number().int(),
+  // These are required events. Passing only after a fixture marks them ignorable is not proof.
+  ignorable: z.never().optional(),
+});
+const provenanceEventSchema = workspaceEventEnvelope.extend({
+  type: z.literal("workspace/provenance"),
+  data: z.object({
+    version: z.literal(1),
+    id: z.literal(WORKSPACE_PROVENANCE_ID),
+    workspaceId: z.literal("a".repeat(32)),
+    sessionId: z.string(),
+    turn: z.literal(1),
+    eventRange: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]),
+    repository: z.literal("/example/repository"),
+    baseline: z.literal("b".repeat(40)),
+    createdAt: z.literal("2026-09-23T12:00:00Z"),
+    refs: z.array(
+      z.object({ source: z.string(), branch: z.string(), commit: z.string(), topic: z.string() }),
+    ),
+    observedCommits: z.array(z.string()),
+    createdCommits: z.array(z.string()),
+  }),
+});
+const branchNameEventSchema = workspaceEventEnvelope.extend({
+  type: z.literal("workspace/branch-name-request"),
+  data: z.object({
+    turn: z.literal(1),
+    system: z.string().min(1),
+    messages: z.tuple([
+      z.object({
+        role: z.literal("user"),
+        source: z.object({
+          kind: z.literal("plugin"),
+          plugin: z.literal("conversation-workspaces"),
+        }),
+        content: z.tuple([z.object({ type: z.literal("text"), text: z.string() })]),
+      }),
+    ]),
+    provider: z.literal("deepseek-official"),
+    model: z.literal("deepseek-flash"),
+    maxTokens: z.literal(128),
+  }),
+});
+const workspaceStateSchema = workspaceEventEnvelope.extend({
+  type: z.literal("workspace/state"),
+  data: z.object({
+    workspaceId: z.literal("a".repeat(32)),
+    turn: z.literal(1),
+    phase: z.enum(["saving", "pending", "returned"]),
+    branches: z.record(z.string(), z.string()),
+    error: z.string().optional(),
+  }),
+});
+const workspaceRequiredSchema = z.discriminatedUnion("type", [
+  provenanceEventSchema,
+  branchNameEventSchema,
+]);
+const workspaceType = z.object({ type: z.string() });
+
+function workspaceRequiredEvents(rows: unknown[]) {
+  return rows
+    .filter((row) => {
+      const type = workspaceType.parse(row).type;
+      return type === "workspace/provenance" || type === "workspace/branch-name-request";
+    })
+    .map((row) => workspaceRequiredSchema.parse(row));
+}
+
+function assertWorkspaceLog(rows: unknown[], sessionId: string, requestId: string) {
+  const userMessages = rows
+    .filter((row) => workspaceType.parse(row).type === "user/message")
+    .filter(
+      (row) =>
+        z.object({ data: z.object({ source: z.object({ kind: z.string() }) }) }).parse(row).data
+          .source.kind === "user",
+    )
+    .map((row) =>
+      z
+        .object({
+          seq: z.number().int(),
+          data: z.object({
+            source: z.object({ kind: z.literal("user"), rpcId: z.string() }),
+            content: z.tuple([z.object({ type: z.literal("text"), text: z.string() })]),
+          }),
+        })
+        .parse(row),
+    );
+  expect(userMessages).toHaveLength(1);
+  expect(userMessages[0]!.data).toEqual({
+    source: { kind: "user", rpcId: requestId },
+    content: [{ type: "text", text: WORKSPACE_PROVENANCE_PROMPT }],
+  });
+  const ends = rows
+    .filter((row) => turnEndIdentity.safeParse(row).success)
+    .map((row) => turnEndSchema.parse(row));
+  expect(ends).toHaveLength(1);
+  expect(ends[0]!.seq).toBeGreaterThan(userMessages[0]!.seq);
+  const provenance = rows
+    .filter((row) => workspaceType.parse(row).type === "workspace/provenance")
+    .map((row) => provenanceEventSchema.parse(row));
+  const naming = rows
+    .filter((row) => workspaceType.parse(row).type === "workspace/branch-name-request")
+    .map((row) => branchNameEventSchema.parse(row));
+  const states = rows
+    .filter((row) => workspaceType.parse(row).type === "workspace/state")
+    .map((row) => workspaceStateSchema.parse(row));
+  expect(provenance).toHaveLength(1);
+  expect(naming).toHaveLength(1);
+  expect(states.map((event) => event.data.phase)).toEqual(["saving", "pending", "returned"]);
+  expect(states[1]!.data.error).toBe("Result branch changed outside this conversation.");
+  expect(states[2]!.data.branches).toEqual(workspaceFixtureRefs);
+  expect(provenance[0]!.data).toMatchObject({
+    sessionId,
+    eventRange: [0, ends[0]!.seq],
+    refs: Object.entries(workspaceFixtureRefs).map(([branch, commit], index) => ({
+      source: index === 0 ? "HEAD" : "refs/heads/main",
+      branch,
+      commit,
+      topic: "fix-recovery",
+    })),
+    observedCommits: ["d".repeat(40), "e".repeat(40)],
+    createdCommits: ["d".repeat(40)],
+  });
+  expect(provenance[0]!.seq).toBeGreaterThan(ends[0]!.seq);
+  expect(states[2]!.seq).toBeGreaterThan(provenance[0]!.seq);
+  expect(naming[0]!.seq).toBeGreaterThan(ends[0]!.seq);
+  const input = JSON.parse(naming[0]!.data.messages[0].content[0].text);
+  expect(input).toEqual({
+    refs: ["HEAD", "refs/heads/main"],
+    conversation: [{ seq: userMessages[0]!.seq, text: WORKSPACE_PROVENANCE_PROMPT }],
+    changes: "Recorded workspace return fixture; no repository mutation is performed.",
+  });
+  return {
+    userMessages,
+    ends,
+    provenance,
+    naming,
+    states,
+    required: workspaceRequiredEvents(rows),
+  };
+}
+
+/** Observe actual follow items/snapshots, without bypassing the installed Client decoder. */
+function observeWorkspaceHistory(page: Page) {
+  const events: unknown[] = [];
+  page.on("websocket", (socket) => {
+    const streams = new Set<string>();
+    socket.on("framesent", ({ payload }) => {
+      const raw = typeof payload === "string" ? payload : payload.toString("utf8");
+      const frame = z
+        .object({ type: z.string(), streamId: z.string(), endpoint: z.string().optional() })
+        .safeParse(JSON.parse(raw));
+      if (frame.success && frame.data.type === "open" && frame.data.endpoint === "session/follow")
+        streams.add(frame.data.streamId);
+    });
+    socket.on("framereceived", ({ payload }) => {
+      const raw = typeof payload === "string" ? payload : payload.toString("utf8");
+      const frame = z
+        .object({ type: z.literal("item"), streamId: z.string(), value: z.unknown() })
+        .safeParse(JSON.parse(raw));
+      if (!frame.success || !streams.has(frame.data.streamId)) return;
+      const snapshot = z
+        .object({ type: z.literal("snapshot"), records: z.array(z.unknown()) })
+        .safeParse(frame.data.value);
+      const records = snapshot.success ? snapshot.data.records : [frame.data.value];
+      for (const record of records) {
+        const entry = z
+          .object({ type: z.literal("event"), event: z.object({ type: z.string() }).passthrough() })
+          .safeParse(record);
+        if (entry.success && entry.data.event.type.startsWith("workspace/"))
+          events.push(entry.data.event);
+      }
+    });
+  });
+  return events;
+}
+
+/** Delay real workspace follow packets so draft preservation is tested across actual updates. */
+async function holdWorkspaceUpdates(page: Page) {
+  const pending: (() => void)[] = [];
+  let released = false;
+  await page.routeWebSocket("**/api/remote.mux", (socket) => {
+    const server = socket.connectToServer();
+    const heldStreams = new Set<string>();
+    server.onMessage((message) => {
+      const raw = typeof message === "string" ? message : message.toString("utf8");
+      const frame = z
+        .object({ type: z.string(), streamId: z.string(), value: z.unknown().optional() })
+        .safeParse(JSON.parse(raw));
+      if (frame.success && !released) {
+        const item = z
+          .object({ type: z.literal("event"), event: z.object({ type: z.string() }) })
+          .safeParse(frame.data.value);
+        if (item.success && item.data.event.type.startsWith("workspace/"))
+          heldStreams.add(frame.data.streamId);
+        if (heldStreams.has(frame.data.streamId)) {
+          pending.push(() => socket.send(message));
+          return;
+        }
+      }
+      socket.send(message);
+    });
+  });
+  return {
+    count: () => pending.length,
+    release() {
+      released = true;
+      for (const deliver of pending.splice(0)) deliver();
+    },
+  };
+}
+
+function observeWorkspaceMutations(page: Page, mutations: Request[]) {
+  const sessionMutations = new Set([
+    "create",
+    "prompt",
+    "cancel",
+    "rename",
+    "fork",
+    "forkTo",
+    "updateQueue",
+    "selectModel",
+  ]);
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return;
+    const pathname = new URL(request.url()).pathname;
+    if (
+      pathname.startsWith("/api/workspace/") ||
+      sessionMutations.has(pathname.replace(/^\/api\/session\//, "")) ||
+      /fileUploads|uploadFile/.test(pathname)
+    )
+      mutations.push(request);
+  });
+}
+
+async function expectWorkspaceOutcome(page: Page) {
+  const outcome = page
+    .getByTestId("dsh-workspace-outcome")
+    .filter({ hasText: "Changes saved to host branches" });
+  await expect(outcome).toHaveCount(1);
+  for (const branch of Object.keys(workspaceFixtureRefs)) {
+    const label = outcome.getByText(branch.replace(/^refs\/heads\//, ""), { exact: true });
+    await expect(label).toBeVisible();
+    await expect(label).toHaveCSS("user-select", "text");
+  }
+  await expect(page.getByText(WORKSPACE_PROVENANCE_REPLY, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Could not read this conversation. Reconnect and try again.", { exact: true }),
+  ).toHaveCount(0);
+  await expectReachableComposer(page);
+}
+
+/** Storage receipts are fixture-backed; naming input and both durable event envelopes are real. */
+test.describe("mounted native DSH workspace provenance compatibility", () => {
+  for (const width of WIDTHS) {
+    test(`reads required workspace events across reload and a fresh client at ${width}px`, async ({
+      context,
+      page,
+      browser,
+    }, testInfo) => {
+      test.setTimeout(180_000);
+      const host = await launchMountedDshHost({ workspaceProvenance: true });
+      const freshContext = await browser.newContext({ viewport: { width, height: 844 } });
+      const mutations: Request[] = [];
+      const errors: string[] = [];
+      try {
+        await page.setViewportSize({ width, height: 844 });
+        await attachDshSession(context, host.config);
+        await attachDshSession(freshContext, host.config);
+        observeWorkspaceMutations(page, mutations);
+        page.on("pageerror", (error) => errors.push(error.message));
+        const clientIds = observeClientIds(page);
+        const wireEvents = observeWorkspaceHistory(page);
+        const gate = await holdWorkspaceUpdates(page);
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await createHostSession(page, host.workspaceDir);
+        const sessionId = await openOnlySession(page, host.companionUrl);
+        await page.getByLabel("Message").fill(host.prompt);
+        await page.getByTestId("dsh-prompt-send").click();
+        await expect(page.getByText(WORKSPACE_PROVENANCE_REPLY, { exact: true })).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect.poll(gate.count).toBeGreaterThan(0);
+        const draft = "Unsent draft survives required workspace events";
+        await page.getByLabel("Message").fill(draft);
+        await expect(page.getByTestId("dsh-workspace-outcome")).toHaveCount(0);
+        await expect
+          .poll(() => host.readWorkspaceNaming())
+          .toEqual({ HEAD: "fix-recovery", "refs/heads/main": "fix-recovery" });
+        const promptRequests = mutations.filter(
+          (request) => new URL(request.url()).pathname === "/api/session/prompt",
+        );
+        expect(promptRequests).toHaveLength(1);
+        const prompt = z
+          .object({
+            payload: z.object({
+              args: z.object({
+                request: z.object({
+                  sessionId: z.string(),
+                  requestId: z.string(),
+                  mode: z.literal("queue"),
+                  content: z.tuple([
+                    z.object({
+                      type: z.literal("text"),
+                      text: z.literal(WORKSPACE_PROVENANCE_PROMPT),
+                    }),
+                  ]),
+                }),
+              }),
+            }),
+          })
+          .parse(promptRequests[0]!.postDataJSON()).payload.args.request;
+        expect(prompt.sessionId).toBe(sessionId);
+        await expect
+          .poll(async () => {
+            const log = await host.readSessionLog();
+            return workspaceRequiredEvents(log.rows).length;
+          })
+          .toBe(2);
+        const log = await host.readSessionLog();
+        expect(log.sessionId).toBe(sessionId);
+        const evidence = assertWorkspaceLog(log.rows, sessionId, prompt.requestId);
+        const heldPackets = gate.count();
+        gate.release();
+        await expectWorkspaceOutcome(page);
+        await expect(page.getByLabel("Message")).toHaveValue(draft);
+        await expect.poll(() => workspaceRequiredEvents(wireEvents)).toEqual(evidence.required);
+        await page.screenshot({
+          path: testInfo.outputPath(`workspace-provenance-${width}-live.png`),
+        });
+        const liveClientId = clientIds.at(-1);
+        const liveHistory = workspaceRequiredEvents(wireEvents);
+        expect(liveClientId).toBeTruthy();
+        wireEvents.splice(0);
+        await page.reload();
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+        await expectWorkspaceOutcome(page);
+        await expect.poll(() => clientIds.at(-1)).not.toBe(liveClientId);
+        await expect.poll(() => workspaceRequiredEvents(wireEvents)).toEqual(evidence.required);
+        await page.screenshot({
+          path: testInfo.outputPath(`workspace-provenance-${width}-reloaded.png`),
+        });
+        const fresh = await freshContext.newPage();
+        const freshClientIds = observeClientIds(fresh);
+        const freshEvents = observeWorkspaceHistory(fresh);
+        observeWorkspaceMutations(fresh, mutations);
+        fresh.on("pageerror", (error) => errors.push(error.message));
+        expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+        await expectWorkspaceOutcome(fresh);
+        await expect.poll(() => workspaceRequiredEvents(freshEvents)).toEqual(evidence.required);
+        expect(freshClientIds.at(-1)).toBeTruthy();
+        expect(clientIds).not.toContain(freshClientIds.at(-1));
+        expect(mutations.map((request) => new URL(request.url()).pathname)).toEqual([
+          "/api/session/create",
+          "/api/session/prompt",
+        ]);
+        const finalLog = await host.readSessionLog();
+        expect(assertWorkspaceLog(finalLog.rows, sessionId, prompt.requestId)).toEqual(evidence);
+        await fresh.screenshot({
+          path: testInfo.outputPath(`workspace-provenance-${width}-fresh.png`),
+        });
+        const artifact = testInfo.outputPath(`workspace-provenance-${width}.json`);
+        await writeFile(
+          artifact,
+          JSON.stringify({
+            width,
+            sessionId,
+            requestId: prompt.requestId,
+            clientIds,
+            freshClientIds,
+            requiredEvents: evidence.required,
+            states: evidence.states,
+            userMessages: evidence.userMessages,
+            completedTurns: evidence.ends,
+            namingTopics: await host.readWorkspaceNaming(),
+            mutations: mutations.map((request) => new URL(request.url()).pathname),
+            counts: {
+              create: mutations.filter(
+                (request) => new URL(request.url()).pathname === "/api/session/create",
+              ).length,
+              prompt: promptRequests.length,
+              cancel: mutations.filter(
+                (request) => new URL(request.url()).pathname === "/api/session/cancel",
+              ).length,
+              workspaceMutations: mutations.filter((request) =>
+                new URL(request.url()).pathname.startsWith("/api/workspace/"),
+              ).length,
+              humanMessages: evidence.userMessages.length,
+              completedTurns: evidence.ends.length,
+              namingRequests: evidence.naming.length,
+              provenance: evidence.provenance.length,
+              workspaceStates: evidence.states.length,
+              heldPackets,
+            },
+            rawReadback: {
+              live: liveHistory,
+              reloaded: workspaceRequiredEvents(wireEvents),
+              fresh: workspaceRequiredEvents(freshEvents),
+            },
+            fixtureBoundary:
+              "Committed storage-outcome fixture; actual naming helper with replay-only provider. No physical Git publication or receipt-store algorithm qualification.",
+          }),
+        );
+        await testInfo.attach("workspace-provenance-compatibility", {
+          path: artifact,
+          contentType: "application/json",
+        });
+        expect(errors).toEqual([]);
+      } finally {
+        await freshContext.close();
         await host.close();
       }
     });

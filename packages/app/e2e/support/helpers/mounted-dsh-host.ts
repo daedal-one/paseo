@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { z } from "zod";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 const repository = process.env.DSH_REPOSITORY ?? "/home/carlo/devel/deepseek-harness-daedal-dsh";
@@ -12,6 +13,60 @@ const fixturePrompt = "Reply with exactly the word: PONG. Do not use any tools."
 export const APPROVAL_MARKER_NAME = "approval-marker.txt";
 export const APPROVAL_MARKER_CONTENT = "approved marker\n";
 export const APPROVAL_MARKER_REASON = "Approve one invocation writing private approval-marker.txt";
+export const WORKSPACE_PROVENANCE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+export const WORKSPACE_PROVENANCE_PROMPT = "Reply with exactly: SDK snapshot OK";
+export const WORKSPACE_PROVENANCE_REPLY = "SDK snapshot OK";
+
+/** Reuse the committed storage-outcome fixture and the real auxiliary naming recorder. */
+function workspaceProvenancePlugin(resultPath: string): string {
+  const root = path.join(repository, "packages/sandbox/local-container-runtime");
+  const outcomes = pathToFileURL(path.join(root, "tests/fixtures/workspace-outcomes.ts")).href;
+  const names = pathToFileURL(path.join(root, "src/workspace-names.ts")).href;
+  return [
+    "import { rename, writeFile } from 'node:fs/promises';",
+    `import { apply as applyOutcomes } from ${JSON.stringify(outcomes)};`,
+    `import { generateWorkspaceTopics } from ${JSON.stringify(names)};`,
+    "export const name = 'mounted-workspace-provenance';",
+    "export const inject = ['agents', 'systemPrompt', 'sessions', 'llm'];",
+    "export function apply(ctx) {",
+    "  applyOutcomes(ctx, { provenance: true });",
+    "  ctx.on('agent/turn-settled', async ({ agent, turn }) => {",
+    "    const topics = await generateWorkspaceTopics(ctx, agent.session, turn, ['HEAD', 'refs/heads/main'],",
+    "      'Recorded workspace return fixture; no repository mutation is performed.', {",
+    "        messageProvider: 'deepseek-official', messageModel: 'deepseek-flash',",
+    "        messageInputBytes: 16384, messageOutputTokens: 128,",
+    "        messageTimeoutMs: 10000, maxOutputBytes: 16384,",
+    "      });",
+    "    if (topics?.HEAD !== 'fix-recovery' || topics?.['refs/heads/main'] !== 'fix-recovery')",
+    "      throw new Error('Recorded workspace naming did not return the validated topics');",
+    `    await writeFile(${JSON.stringify(`${resultPath}.tmp`)}, JSON.stringify(topics), { mode: 0o600 });`,
+    `    await rename(${JSON.stringify(`${resultPath}.tmp`)}, ${JSON.stringify(resultPath)});`,
+    "  });",
+    "}",
+    "",
+  ].join("\n");
+}
+
+/** Preserve the recorded main turn and add one keyless response for the real naming helper. */
+function workspaceNamingReplay(): string {
+  const text = JSON.stringify({ HEAD: "fix-recovery", "refs/heads/main": "fix-recovery" });
+  return JSON.stringify({
+    patches: [
+      {
+        at: 1,
+        entry: {
+          kind: "chunks",
+          chunks: [
+            { type: "block-start", index: 0, blockType: "text" },
+            { type: "text-delta", index: 0, text },
+            { type: "block-end", index: 0, block: { type: "text", text } },
+            { type: "finish", reason: { kind: "stop" } },
+          ],
+        },
+      },
+    ],
+  });
+}
 
 function markerApprovalPolicy(cwd: string): string {
   return [
@@ -75,20 +130,32 @@ interface MountedDshHostOptions {
   /** Serialized provider replay entries, written only inside this test Host's private home. */
   replayOverride?: string;
   requireMarkerApproval?: boolean;
+  /** Required workspace events from the committed outcome fixture and real naming helper. */
+  workspaceProvenance?: boolean;
 }
 
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
-  const fixture = path.join(repository, "snapshots", options.fixture ?? testFixture);
+  const fixture = path.join(
+    repository,
+    "snapshots",
+    options.fixture ??
+      (options.workspaceProvenance ? "sdk/workspace-provenance/session.v3.jsonl" : testFixture),
+  );
   const cwd = path.join(home, "workspace");
   const marker = path.join(cwd, APPROVAL_MARKER_NAME);
   const override = path.join(home, "replay.override.json");
+  const heldReplay = options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined;
   const replayOverride =
-    options.replayOverride ?? (options.holdTurn ? JSON.stringify([{ kind: "hang" }]) : undefined);
+    options.replayOverride ?? (options.workspaceProvenance ? workspaceNamingReplay() : heldReplay);
   if (replayOverride !== undefined) await writeFile(override, replayOverride);
   const approvalPolicy = path.join(home, "mounted-approval-policy.mjs");
   if (options.requireMarkerApproval) await writeFile(approvalPolicy, markerApprovalPolicy(cwd));
+  const workspacePlugin = path.join(home, "mounted-workspace-provenance.mjs");
+  const workspaceNamingResult = path.join(home, "workspace-naming-result.json");
+  if (options.workspaceProvenance)
+    await writeFile(workspacePlugin, workspaceProvenancePlugin(workspaceNamingResult));
   const overlay = path.join(home, "companion-mounted.yml");
   const overlayRows = [
     "- id: session-title-llm",
@@ -108,6 +175,13 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       "- insert:",
       "    - id: mounted-approval-policy",
       `      name: ${approvalPolicy}`,
+    );
+  }
+  if (options.workspaceProvenance) {
+    overlayRows.push(
+      "- insert:",
+      "    - id: mounted-workspace-provenance",
+      `      name: ${workspacePlugin}`,
     );
   }
   overlayRows.push("");
@@ -227,7 +301,7 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       /** Scratch working directory this Host owns, usable as a Session target. */
       workspaceDir: cwd,
       /** The recorded prompt the replay fixture answers, for driving one completed turn. */
-      prompt: fixturePrompt,
+      prompt: options.workspaceProvenance ? WORKSPACE_PROVENANCE_PROMPT : fixturePrompt,
       /** The fixture file this Host replays. */
       fixture,
       /** Captured Host output, for diagnosing a Host that exits during a run. */
@@ -251,6 +325,14 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       },
       async readMarker() {
         return existsSync(marker) ? readFile(marker, "utf8") : null;
+      },
+      /** Test-only acknowledgement from the real helper, never a fabricated Session event. */
+      async readWorkspaceNaming() {
+        if (!existsSync(workspaceNamingResult)) return null;
+        return z
+          .object({ HEAD: z.literal("fix-recovery"), "refs/heads/main": z.literal("fix-recovery") })
+          .strict()
+          .parse(JSON.parse(await readFile(workspaceNamingResult, "utf8")));
       },
       async imageObjectIds() {
         const objects = path.join(home, "attachments", "v1", "objects");
