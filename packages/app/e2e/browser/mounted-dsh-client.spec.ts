@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { APIRequestContext, Page, Request, Route, WebSocketRoute } from "@playwright/test";
+import type {
+  APIRequestContext,
+  BrowserContext,
+  Page,
+  Request,
+  Route,
+  WebSocketRoute,
+} from "@playwright/test";
 import { z } from "zod";
 import { expect, metroTest as test } from "../support/fixtures";
 import {
@@ -17,6 +24,7 @@ import {
   WORKSPACE_PROVENANCE_REPLY,
 } from "../support/helpers/mounted-dsh-host";
 
+import { MountedDshAdmissionGate } from "../support/helpers/mounted-dsh-admission-gate";
 import { detectPromptImageMediaType } from "../../src/dsh/ui/prompt-image-bytes";
 import {
   closeMountedDshOwner,
@@ -2680,6 +2688,369 @@ test.describe("mounted native DSH generic file picker", () => {
         await freshContext.close();
         await host.close();
       }
+    });
+  }
+});
+
+const recoveryPromptRequestSchema = genericFilePromptSchema.extend({ rpcId: z.string() });
+const recoveryPromptReplySchema = z.object({
+  rpcId: z.string(),
+  result: z.object({ ok: z.literal(true), value: z.object({ accepted: z.literal(true) }) }),
+});
+function recoveryMutationPaths(mutations: Request[]) {
+  return mutations.map((request) => new URL(request.url()).pathname);
+}
+function expectRecoveryMutations(mutations: Request[]) {
+  expect(recoveryMutationPaths(mutations)).toEqual([
+    "/api/session/create",
+    "/api/fileUploads/upload",
+    "/api/fileUploads/upload",
+    "/api/session/prompt",
+  ]);
+}
+async function expectFrozenFilePrompt(page: Page, text: string, images: number) {
+  await expect(page.getByTestId("dsh-prompt-file-status")).toContainText(
+    "This file message is unconfirmed",
+  );
+  await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(2);
+  await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(images);
+  await expect(page.getByTestId("dsh-block-file")).toHaveCount(0);
+  await expect(page.getByLabel("Message")).toHaveValue(text);
+  await expect(page.getByLabel("Message")).not.toBeEditable();
+  await expect(page.getByTestId("dsh-prompt-files-discard")).toHaveCount(0);
+  await expect(page.getByTestId("dsh-prompt-discard-selection")).toHaveCount(0);
+  for (const id of [
+    "dsh-prompt-send",
+    "dsh-prompt-attach-files",
+    "dsh-prompt-attach",
+    "dsh-prompt-file-remove",
+    "dsh-prompt-attachment-remove",
+  ])
+    for (const control of await page.getByTestId(id).all()) await expect(control).toBeDisabled();
+}
+function recoveryBarrier(
+  gate: MountedDshAdmissionGate,
+  mutations: Request[],
+  expectedUsers: number,
+) {
+  const evidence = gate.snapshot();
+  expect(evidence.matchingUsers).toHaveLength(expectedUsers);
+  expect(evidence.matchingQueueItems).toBe(0);
+  expect(evidence.controlDuringHold).toBe(0);
+  for (const read of evidence.http) {
+    if (!read.delivered || read.phase === "open") continue;
+    expect(["/api/connection/identity", "/api/$capabilities"]).toContain(read.path);
+  }
+  expectRecoveryMutations(mutations);
+  return { evidence, heldHistory: gate.heldHistory(), mutations: recoveryMutationPaths(mutations) };
+}
+function heldRecoveryHttpCount(gate: MountedDshAdmissionGate) {
+  return gate.snapshot().http.filter((entry) => entry.held && !entry.delivered).length;
+}
+function heldRecoveryMessages(gate: MountedDshAdmissionGate) {
+  return genericFileMessages(gate.heldHistory().flatMap((packet) => packet.users));
+}
+
+/** Lost prompt reply, then separate real ready and exact durable-admission delivery barriers. */
+test.describe("mounted native DSH file prompt recovery", () => {
+  for (const width of WIDTHS) {
+    test(`reconciles a lost file prompt without replay at ${width}px`, async ({
+      page,
+      context,
+      browser,
+    }, testInfo) => {
+      // Same budget as the existing mounted Host scenarios; no delay-based recovery assertions.
+      test.setTimeout(180_000);
+      const host = await launchMountedDshHost();
+      let freshContext: BrowserContext | undefined;
+      let gate: MountedDshAdmissionGate | undefined;
+      let freshGate: MountedDshAdmissionGate | undefined;
+      const mutations: Request[] = [];
+      const errors: string[] = [];
+      const uploads: {
+        request: z.infer<typeof genericFileUploadSchema>;
+        receipt: z.infer<typeof genericFileReceiptSchema>;
+      }[] = [];
+      const acceptedReplies: {
+        status: number;
+        request: z.infer<typeof recoveryPromptRequestSchema>;
+        reply: z.infer<typeof recoveryPromptReplySchema>;
+      }[] = [];
+      let lostReplies = 0;
+      const mixed = width === 1280;
+      const text = mixed ? host.prompt : "";
+      const files: PickerFile[] = [
+        {
+          name: "recovery-first.bin",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from([0, 128, 255, 10, 13, 66]),
+        },
+        {
+          name: "recovery-second.dat",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from("exact admission recovery\n", "utf8"),
+        },
+      ];
+      const refs = files.map((file) => ({
+        attachmentId: `sha256:${createHash("sha256").update(file.buffer).digest("hex")}`,
+        name: file.name,
+        bytes: file.buffer.length,
+      }));
+      const executionErrors: unknown[] = [];
+      try {
+        freshContext = await browser.newContext({ viewport: { width, height: 844 } });
+        await page.setViewportSize({ width, height: 844 });
+        await attachDshSession(context, host.config);
+        await attachDshSession(freshContext, host.config);
+        gate = await MountedDshAdmissionGate.install(page);
+        const admission = gate;
+        observeWorkspaceMutations(page, mutations);
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.route("**/api/fileUploads/upload", async (route) => {
+          const request = genericFileUploadSchema.parse(route.request().postDataJSON());
+          const response = await route.fetch({ maxRetries: 0 });
+          expect(response.status()).toBe(200);
+          const reply = genericFileReplySchema.parse(await response.json());
+          expect(reply.rpcId).toBe(request.rpcId);
+          uploads.push({ request, receipt: reply.result.value });
+          await route.fulfill({ response });
+        });
+        await page.route("**/api/session/prompt", async (route) => {
+          const request = recoveryPromptRequestSchema.parse(route.request().postDataJSON());
+          admission.arm(
+            request.payload.args.request.sessionId,
+            request.payload.args.request.requestId,
+          );
+          const response = await route.fetch({ maxRetries: 0 });
+          expect(response.status()).toBe(200);
+          const reply = recoveryPromptReplySchema.parse(await response.json());
+          expect(reply.rpcId).toBe(request.rpcId);
+          acceptedReplies.push({ status: response.status(), request, reply });
+          // Permanently lose this accepted reply: it is never stored in the gate's release queues.
+          await route.abort("failed");
+          lostReplies += 1;
+        });
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await createHostSession(page, host.workspaceDir);
+        const sessionId = await openOnlySession(page, host.companionUrl);
+        if (mixed) {
+          await page.getByLabel("Message").fill(text);
+          await selectImages(page, [
+            {
+              name: "recovery-image.png",
+              mimeType: "image/png",
+              buffer: await readFile(mountedDshImageFixturePaths().light),
+            },
+          ]);
+        }
+        await selectGenericFiles(page, files);
+        expect(uploads).toEqual([]);
+        expect(recoveryMutationPaths(mutations)).toEqual(["/api/session/create"]);
+        await page.getByTestId("dsh-prompt-send").click();
+        await expectFrozenFilePrompt(page, text, mixed ? 1 : 0);
+        expect(lostReplies).toBe(1);
+        expect(acceptedReplies).toHaveLength(1);
+        expect(uploads).toHaveLength(2);
+        await page.getByTestId("dsh-prompt-send").dispatchEvent("click");
+        const prompt = acceptedReplies[0]!.request.payload.args.request;
+        expect(prompt.sessionId).toBe(sessionId);
+        expect(new Set(uploads.map((upload) => upload.receipt.receiptId)).size).toBe(2);
+        expect(prompt.content.filter((part) => part.type === "file")).toEqual(
+          uploads.map((upload) => ({ type: "file", receiptId: upload.receipt.receiptId })),
+        );
+        const partOrder = mixed ? ["text", "image", "file", "file"] : ["file", "file"];
+        expect(prompt.content.map((part) => part.type)).toEqual(partOrder);
+        await expect
+          .poll(async () => completedTurnCount((await host.readSessionLog()).rows))
+          .toBe(1);
+        const log = await host.readSessionLog();
+        const messages = genericFileMessages(log.rows);
+        const ends = log.rows
+          .filter((row) => turnEndIdentity.safeParse(row).success)
+          .map((row) => turnEndSchema.parse(row));
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.data.source.rpcId).toBe(prompt.requestId);
+        expect(messages[0]!.data.content.map((part) => part.type)).toEqual(partOrder);
+        expect(messages[0]!.data.content.filter((part) => part.type === "file")).toEqual(
+          refs.map((attachment) => ({ type: "file", attachment })),
+        );
+        expect(messages[0]!.data.content.filter((part) => part.type === "text")).toEqual(
+          mixed ? [{ type: "text", text }] : [],
+        );
+        expect(ends).toHaveLength(1);
+        expect(ends[0]!.seq).toBeGreaterThan(messages[0]!.seq);
+        await expect.poll(() => heldRecoveryMessages(admission)).toEqual(messages);
+        const unknownBeforeReconnect = recoveryBarrier(admission, mutations, 0);
+        await page.screenshot({
+          path: testInfo.outputPath(`file-prompt-recovery-${width}-unknown.png`),
+        });
+
+        const firstClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+        await admission.disconnectAndHold();
+        const conversation = page.getByTestId("dsh-conversation");
+        const reconnect = conversation.getByRole("button", { name: "Reconnect", exact: true });
+        await expect(
+          conversation.getByText("Disconnected. Showing the last received conversation.", {
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expectFrozenFilePrompt(page, text, mixed ? 1 : 0);
+        const beforeClick = admission.opened();
+        await reconnect.click();
+        await expect.poll(() => admission.opened()).toBeGreaterThan(beforeClick);
+        await expect(reconnect).toBeVisible();
+        expect(admission.deliveredClientIds().at(-1)).toBe(firstClientId);
+        admission.releaseReady();
+        await expect.poll(() => admission.deliveredClientIds().at(-1)).not.toBe(firstClientId);
+        await expect(reconnect).toHaveCount(0);
+        await expectFrozenFilePrompt(page, text, mixed ? 1 : 0);
+        await expect.poll(() => admission.snapshot().heldEmptyControlBaselines).toBeGreaterThan(0);
+        await expect.poll(() => heldRecoveryMessages(admission)).toEqual(messages);
+        await expect.poll(() => heldRecoveryHttpCount(admission)).toBeGreaterThan(0);
+        const recoveredClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+        const freshReadyStillUnknown = recoveryBarrier(admission, mutations, 0);
+        expect(
+          freshReadyStillUnknown.evidence.http.some((entry) => entry.held && !entry.delivered),
+        ).toBe(true);
+        await page.getByTestId("dsh-prompt-send").dispatchEvent("click");
+        expectRecoveryMutations(mutations);
+        await page.screenshot({
+          path: testInfo.outputPath(`file-prompt-recovery-${width}-ready-unknown.png`),
+        });
+
+        const releasedHistory = admission.heldHistory();
+        admission.releaseExactHistory();
+        await expect(page.getByTestId("dsh-prompt-file")).toHaveCount(0);
+        await expect(page.getByTestId("dsh-prompt-attachment")).toHaveCount(0);
+        await expect(page.getByTestId("dsh-prompt-file-status")).toHaveCount(0);
+        await expect(page.getByLabel("Message")).toHaveValue("");
+        await expect(page.getByLabel("Message")).toBeEditable();
+        await expect(page.getByTestId("dsh-prompt-send")).toBeDisabled();
+        const exactHistoryAccepted = recoveryBarrier(admission, mutations, 1);
+        expect(genericFileMessages(exactHistoryAccepted.evidence.matchingUsers)).toEqual(messages);
+        admission.releaseAll();
+        await expectGenericFileMetadata(page, refs);
+        await page.screenshot({
+          path: testInfo.outputPath(`file-prompt-recovery-${width}-reconciled.png`),
+        });
+
+        for (const [index, upload] of uploads.entries()) {
+          expect(upload.request.payload.args.agentId).toBe(sessionId);
+          expect(upload.request.payload.args.request).toEqual({
+            name: files[index]!.name,
+            data: files[index]!.buffer.toString("base64"),
+          });
+          expect(upload.receipt.file).toEqual(refs[index]);
+        }
+        expect(await host.fileObjectIds()).toEqual(refs.map((ref) => ref.attachmentId).sort());
+        for (const [index, ref] of refs.entries()) {
+          const bytes = await host.readFileObject(ref.attachmentId);
+          expect(bytes).toEqual(files[index]!.buffer);
+          expect(`sha256:${createHash("sha256").update(bytes).digest("hex")}`).toBe(
+            ref.attachmentId,
+          );
+        }
+        const images = messages[0]!.data.content.filter((part) => part.type === "image");
+        expect(images.map((part) => part.attachment.name)).toEqual(
+          mixed ? ["recovery-image.png"] : [],
+        );
+        expect(await host.imageObjectIds()).toEqual(
+          images.map((part) => part.attachment.attachmentId).sort(),
+        );
+        for (const image of images) {
+          const bytes = await host.readImageObject(image.attachment.attachmentId);
+          expect(`sha256:${createHash("sha256").update(bytes).digest("hex")}`).toBe(
+            image.attachment.attachmentId,
+          );
+        }
+        const beforeReload = admission.deliveredClientIds();
+        await page.reload();
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await page.getByTestId(`dsh-open-session-${sessionId}`).click();
+        await expectGenericFileMetadata(page, refs);
+        const reloadedClientId = z.string().min(1).parse(admission.deliveredClientIds().at(-1));
+        expect(beforeReload).not.toContain(reloadedClientId);
+        const fresh = await freshContext.newPage();
+        freshGate = await MountedDshAdmissionGate.install(fresh);
+        observeWorkspaceMutations(fresh, mutations);
+        fresh.on("pageerror", (error) => errors.push(error.message));
+        expect(await openOnlySession(fresh, host.companionUrl)).toBe(sessionId);
+        await expectGenericFileMetadata(fresh, refs);
+        const freshClientId = z.string().min(1).parse(freshGate.deliveredClientIds().at(-1));
+        expect(admission.deliveredClientIds()).not.toContain(freshClientId);
+        expectRecoveryMutations(mutations);
+        expect(acceptedReplies).toHaveLength(1);
+        expect(lostReplies).toBe(1);
+        expect(uploads).toHaveLength(2);
+        const finalLog = await host.readSessionLog();
+        expect(genericFileMessages(finalLog.rows)).toEqual(messages);
+        expect(completedTurnCount(finalLog.rows)).toBe(1);
+        expect(await host.fileObjectIds()).toEqual(refs.map((ref) => ref.attachmentId).sort());
+        const artifact = testInfo.outputPath(`file-prompt-recovery-${width}.json`);
+        await writeFile(
+          artifact,
+          JSON.stringify({
+            width,
+            sessionId,
+            requestId: prompt.requestId,
+            acceptedReplies,
+            lostReplies,
+            uploads,
+            prompt,
+            messages,
+            ends,
+            firstClientId,
+            recoveredClientId,
+            reloadedClientId,
+            freshClientId,
+            forwardedClientIds: admission.deliveredClientIds(),
+            freshForwardedClientIds: freshGate.deliveredClientIds(),
+            barriers: { unknownBeforeReconnect, freshReadyStillUnknown, exactHistoryAccepted },
+            releasedHistory,
+            fileObjects: refs,
+            mutations: recoveryMutationPaths(mutations),
+            counts: {
+              create: 1,
+              uploads: uploads.length,
+              prompt: acceptedReplies.length,
+              cancel: 0,
+              humanMessages: messages.length,
+              completedTurns: ends.length,
+              genericObjects: refs.length,
+              images: images.length,
+            },
+            boundary:
+              "Actual production chooser/Send; accepted prompt reply permanently dropped. Real mux ready/capabilities delivered separately from complete exact-request history; all Session control and unary read evidence remains held through admission. No owner injection, mutation replay, Host restart, receipt survival or physical-native qualification.",
+          }),
+        );
+        await testInfo.attach("file-prompt-recovery", {
+          path: artifact,
+          contentType: "application/json",
+        });
+        expect(errors).toEqual([]);
+      } catch (error) {
+        executionErrors.push(error);
+      } finally {
+        const cleanup = [
+          () => gate?.dispose(),
+          () => freshGate?.dispose(),
+          () => page.close(),
+          () => freshContext?.close(),
+          () => host.close(),
+        ];
+        for (const operation of cleanup) {
+          try {
+            await operation();
+          } catch (error) {
+            executionErrors.push(error);
+          }
+        }
+      }
+      if (executionErrors.length > 0)
+        throw new AggregateError(executionErrors, "File prompt recovery failed", {
+          cause: executionErrors[0],
+        });
     });
   }
 });
