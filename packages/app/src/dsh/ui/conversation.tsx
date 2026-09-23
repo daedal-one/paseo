@@ -20,18 +20,97 @@ function nodeIs<K extends dsh.ChatNodeKind>(
 }
 
 /* eslint-disable react/no-array-index-key -- DSH message blocks are ordered slots; streamed text changes within a slot. */
-function MessageContent({ content }: { content: dsh.UserMessageNode["content"] }) {
+type ContentBlock = dsh.UserMessageNode["content"][number];
+
+/**
+ * Render one durable content block. Images and files are shown by their stored metadata; the
+ * native client does not own attachment URLs, so the current DSH interface renders the pixels.
+ */
+function MessageBlock({ block }: { block: ContentBlock }) {
   const { t } = useTranslation();
-  return content.map((block, index) =>
-    block.type === "text" ? (
-      <Text key={index} selectable style={styles.message}>
+  if (block.type === "text")
+    return (
+      <Text selectable style={styles.message} testID="dsh-block-text">
         {block.text}
       </Text>
-    ) : (
-      <Text key={index} style={styles.muted}>
-        {t("nativeDsh.conversation.unsupportedContent")}
-      </Text>
-    ),
+    );
+  if (block.type === "reasoning")
+    return (
+      <View style={styles.group} testID="dsh-block-reasoning">
+        <Text style={styles.muted}>{t("nativeDsh.conversation.reasoning")}</Text>
+        <Text selectable style={styles.message}>
+          {block.text}
+        </Text>
+      </View>
+    );
+  if (block.type === "image")
+    return (
+      <View style={styles.group} testID="dsh-block-image">
+        <Text style={styles.muted}>{t("nativeDsh.conversation.image")}</Text>
+        <Text selectable style={styles.text}>
+          {t("nativeDsh.conversation.imageDetail", {
+            name: block.attachment.name ?? t("nativeDsh.conversation.imageUnnamed"),
+            media: block.attachment.mediaType,
+            width: block.attachment.width,
+            height: block.attachment.height,
+            bytes: block.attachment.bytes,
+          })}
+        </Text>
+      </View>
+    );
+  if (block.type === "file")
+    return (
+      <View style={styles.group} testID="dsh-block-file">
+        <Text style={styles.muted}>{t("nativeDsh.conversation.file")}</Text>
+        <Text selectable style={styles.text}>
+          {t("nativeDsh.conversation.fileDetail", {
+            name: block.attachment.name,
+            bytes: block.attachment.bytes,
+          })}
+        </Text>
+      </View>
+    );
+  if (block.type === "tool-call")
+    return (
+      <View style={styles.group} testID="dsh-block-tool-call">
+        <Text style={styles.muted}>{t("nativeDsh.conversation.toolCall")}</Text>
+        <Text selectable style={styles.text}>
+          {block.name}
+        </Text>
+        {block.arguments !== "" && (
+          <ScrollView style={styles.detail} nestedScrollEnabled>
+            <Text selectable style={styles.muted}>
+              {block.arguments}
+            </Text>
+          </ScrollView>
+        )}
+      </View>
+    );
+  if (block.type === "tool-result")
+    return (
+      <View style={styles.group} testID="dsh-block-tool-result">
+        <Text style={styles.muted}>
+          {block.isError === true
+            ? t("nativeDsh.conversation.toolFailed")
+            : t("nativeDsh.conversation.toolResult")}
+        </Text>
+        <MessageContent content={block.content} />
+      </View>
+    );
+  return (
+    <Text style={styles.muted} testID="dsh-block-unsupported">
+      {t("nativeDsh.conversation.unsupportedContent")}
+    </Text>
+  );
+}
+
+function MessageContent({ content }: { content: readonly ContentBlock[] }) {
+  return (
+    <>
+      {content.map((block, index) => (
+        <MessageBlock key={index} block={block} />
+      ))}
+    </>
   );
 }
 
@@ -92,21 +171,45 @@ function ChatContent({
         {node.data.blocks.map((block, index) => {
           if (block.kind === "text")
             return (
-              <Text key={index} selectable style={styles.message}>
+              <Text key={index} selectable style={styles.message} testID="dsh-block-text">
                 {block.text}
               </Text>
             );
           if (block.kind === "reasoning")
             return (
-              <View key={index} style={styles.group}>
+              <View key={index} style={styles.group} testID="dsh-block-reasoning">
                 <Text style={styles.muted}>{t("nativeDsh.conversation.reasoning")}</Text>
                 <Text selectable style={styles.message}>
                   {block.text}
                 </Text>
               </View>
             );
+          if (block.kind === "image")
+            return (
+              <View key={index} style={styles.group} testID="dsh-block-image">
+                <Text style={styles.muted}>{t("nativeDsh.conversation.image")}</Text>
+                <Text selectable style={styles.text}>
+                  {t("nativeDsh.conversation.imageDetail", {
+                    name: block.attachment.name ?? t("nativeDsh.conversation.imageUnnamed"),
+                    media: block.attachment.mediaType,
+                    width: block.attachment.width,
+                    height: block.attachment.height,
+                    bytes: block.attachment.bytes,
+                  })}
+                </Text>
+              </View>
+            );
+          if (block.kind === "tool-call")
+            return (
+              <View key={index} style={styles.group} testID="dsh-block-tool-call">
+                <Text style={styles.muted}>{t("nativeDsh.conversation.toolCall")}</Text>
+                <Text selectable style={styles.text}>
+                  {block.name}
+                </Text>
+              </View>
+            );
           return (
-            <Text key={index} style={styles.muted}>
+            <Text key={index} style={styles.muted} testID="dsh-block-unsupported">
               {t("nativeDsh.conversation.unsupportedContent")}
             </Text>
           );
@@ -121,15 +224,20 @@ function ChatContent({
     const root = node.data.root;
     if ("kind" in root)
       return (
-        <>
+        <View style={styles.group} testID="dsh-tool-result">
           <Text style={styles.title}>
             {root.call === null ? t("nativeDsh.conversation.tool") : root.call.name}
           </Text>
-          <Text style={styles.muted}>
+          <Text style={styles.muted} testID="dsh-tool-status">
             {root.isError
               ? t("nativeDsh.conversation.toolFailed")
               : t("nativeDsh.conversation.toolFinished")}
           </Text>
+          {root.subCalls.length > 0 && (
+            <Text style={styles.muted} testID="dsh-tool-subcalls">
+              {String(root.subCalls.length)}
+            </Text>
+          )}
           {root.deferred ? (
             <DetailControl history={history} seq={root.seq} />
           ) : (
@@ -141,38 +249,48 @@ function ChatContent({
               <MessageContent content={root.content} />
             </ScrollView>
           )}
-        </>
+        </View>
       );
     return (
-      <>
+      <View style={styles.group} testID="dsh-tool-running">
         <Text style={styles.title}>{root.name}</Text>
         <Text style={styles.muted}>{t("nativeDsh.running")}</Text>
-      </>
+      </View>
     );
   }
   if (nodeIs(node, "turn-process"))
     return (
-      <Text style={styles.muted}>
-        {t("nativeDsh.conversation.process", {
-          messages: node.data.messageCount,
-          tools: node.data.toolCallCount,
-        })}
+      <Text style={styles.muted} testID="dsh-turn-process">
+        {node.data.subagentCount > 0
+          ? t("nativeDsh.conversation.processSubagents", {
+              messages: node.data.messageCount,
+              tools: node.data.toolCallCount,
+              subagents: node.data.subagentCount,
+            })
+          : t("nativeDsh.conversation.process", {
+              messages: node.data.messageCount,
+              tools: node.data.toolCallCount,
+            })}
       </Text>
     );
   if (nodeIs(node, "workspace-state")) return <WorkspaceOutcome node={node} />;
   if (nodeIs(node, "turn-tail")) return null;
   if (nodeIs(node, "turn-error"))
     return (
-      <>
+      <View style={styles.group} testID="dsh-turn-error">
         <Text style={styles.error}>{t("nativeDsh.conversation.turnFailed")}</Text>
         {node.data.message !== "" && (
           <Text selectable style={styles.error}>
             {node.data.message}
           </Text>
         )}
-      </>
+      </View>
     );
-  return <Text style={styles.muted}>{t("nativeDsh.conversation.unsupportedContent")}</Text>;
+  return (
+    <Text style={styles.muted} testID="dsh-node-unsupported">
+      {t("nativeDsh.conversation.unsupportedContent")}
+    </Text>
+  );
 }
 
 /* eslint-enable react/no-array-index-key */
