@@ -27,6 +27,7 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { isFdroidBuild } from "@/constants/build-profile";
 import { isWeb, isNative } from "@/constants/platform";
 import { isElectronRuntime } from "@/desktop/host";
+import { CompanionDiscoverySection } from "./companion-discovery-section";
 
 interface WelcomeAction {
   key: "scan-qr" | "direct-connection" | "remote-ssh" | "paste-pairing-link";
@@ -214,6 +215,10 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     },
     [onHostAdded, finishOnboarding],
   );
+  const handleDiscoveredHost = useCallback(
+    (profile: HostProfile) => handleHostSaved({ profile, serverId: profile.serverId }),
+    [handleHostSaved],
+  );
 
   const actions: WelcomeAction[] =
     isWeb || isFdroidBuild
@@ -300,6 +305,9 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
           </View>
 
           <View style={styles.actions}>
+            {isElectronRuntime() ? (
+              <CompanionDiscoverySection onConnected={handleDiscoveredHost} />
+            ) : null}
             {actions.map((action) => (
               <WelcomeActionButton key={action.key} action={action} />
             ))}

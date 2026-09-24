@@ -14,6 +14,8 @@ related: [INV:frontend/dsh-authority, IFC:frontend/dsh-connection]
 Users MUST be able to enroll through a one-time QR challenge and discover DSH candidates through a trusted host on Tailscale without typing addresses. Enrollment MUST be short-lived, single-use and bound to host identity; resulting device credentials MUST be revocable and held in protected platform storage. Discovery MUST be bounded and permissioned, verify endpoint identity/reachability, and never forward an existing host credential to a candidate. Network membership MUST NOT substitute for DSH authorization. The existing loopback/Tailscale deployment boundary MUST remain supported.
 :::
 
+Desktop MUST additionally discover available companion servers through its local Tailscale peer inventory before any host is saved or connected. Welcome and Add host MUST start this bounded read automatically and offer explicit selection of discovered candidates. Mobile discovery continues through an online paired host.
+
 ## Verification
 
 Verify initial QR, expired/reused QR, candidate identity mismatch, revoked device, offline host, bounded peer scan and cross-host credential isolation. Test discovery on an actual iPhone without tailnet administrative credentials and verify transition from the current pairing link.

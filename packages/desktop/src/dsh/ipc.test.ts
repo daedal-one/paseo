@@ -5,11 +5,16 @@ import { DesktopDshIpc } from "./ipc";
 import { DesktopDshDeviceStore } from "./device-store";
 import { DshAccessError, type DesktopDshReply } from "@getpaseo/protocol/dsh-access";
 const electron = vi.hoisted(() => ({ handle: vi.fn(), removeHandler: vi.fn() }));
+const discovery = vi.hoisted(() => vi.fn());
 vi.mock("electron", () => ({ ipcMain: electron }));
+vi.mock("@getpaseo/server/companion-discovery", () => ({
+  createCompanionDiscovery: () => discovery,
+}));
 const facades: DesktopDshIpc[] = [];
 beforeEach(() => {
   electron.handle.mockReset();
   electron.removeHandler.mockReset();
+  discovery.mockReset();
 });
 afterEach(async () => {
   await Promise.all(facades.splice(0).map((facade) => facade.dispose()));
@@ -45,6 +50,34 @@ function fixture() {
 }
 
 describe("desktop DSH IPC admission", () => {
+  it("discovers local Tailscale peers without reading paired hosts and rejects scan parameters and foreign frames", async () => {
+    const { request, contents, list } = fixture();
+    const result = {
+      status: "ready",
+      hosts: [
+        {
+          service: "dsh-companion",
+          version: 1,
+          serverId: "peer",
+          hostname: "Peer",
+          address: "100.64.0.2",
+          passwordRequired: false,
+        },
+      ],
+      truncated: false,
+    };
+    discovery.mockResolvedValue(result);
+    expect(await request({ type: "discover-companions" })).toEqual({ ok: true, value: result });
+    expect(list).not.toHaveBeenCalled();
+    expect(await request({ type: "discover-companions", address: "127.0.0.1" })).toEqual({
+      ok: false,
+      error: "invalid-response",
+    });
+    expect(
+      await request({ type: "discover-companions" }, contents, { origin: "paseo://app" }),
+    ).toEqual({ ok: false, error: "unsupported-platform" });
+    expect(discovery).toHaveBeenCalledOnce();
+  });
   it("admits the registered app's top frame and rejects subframes, foreign origins and other contents", async () => {
     const { request, contents, list } = fixture();
     expect(await request({ type: "list" })).toEqual({ ok: true, value: [] });

@@ -18,6 +18,11 @@
       "source": "./src/server/exports.ts",
       "default": "./dist/server/server/exports.js"
     },
+    "./companion-discovery": {
+      "types": "./dist/server/server/companion-discovery.d.ts",
+      "source": "./src/server/companion-discovery.ts",
+      "default": "./dist/server/server/companion-discovery.js"
+    },
     "./utils/tool-call-parsers": {
       "types": "./dist/server/utils/tool-call-parsers.d.ts",
       "source": "./src/utils/tool-call-parsers.ts",

@@ -60,7 +60,9 @@ The desktop product uses daedal-one assets and the fork-owned GitHub update dest
 
 With Tailscale connected on the Mac and iPhone, run `npm run companion:pair` on the Mac. Open the generated `.dev/companion-pair.png`, then choose **Scan QR code** in Daedal DSH. Confirm the host name and connect. The matching `.txt` file can also be pasted into **Paste pairing link**. The QR contains a private address and expected host identity; a host password, if configured, is entered separately on the phone.
 
-After pairing, **Settings → Add host** searches automatically through connected hosts that support discovery. Tap a discovered name to connect. The phone verifies both reachability and host identity before saving it. Existing saved hosts remain available when discovery cannot run. At least one paired host must be online to search; the phone does not need a Tailscale admin credential.
+On Desktop, the welcome screen and **Add host** automatically search the local Tailscale peer list, including before any host is paired. Keep the Tailscale app connected, select a discovered server, and confirm **Connect**. A local companion daemon is not required. The Desktop scanner uses the same bounded peer probes as host-assisted discovery; its application-frame-only IPC accepts no addresses, ports or commands from the renderer.
+
+On iPhone, after pairing, **Settings → Add host** searches automatically through connected hosts that support discovery. Tap a discovered name to connect. The phone verifies both reachability and host identity before saving it. Existing saved hosts remain available when discovery cannot run. At least one paired host must be online to search; the phone does not need a Tailscale admin credential.
 
 Every discoverable machine must run this fork's companion with DSH enabled and authenticated. Keep its listener on `127.0.0.1:6769`, allow its own Tailscale IPv4 address in `daemon.hostnames` in the companion home's `config.json`, and expose only companion port 6769 with Tailscale TCP Serve. On macOS:
 

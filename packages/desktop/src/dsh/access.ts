@@ -1,3 +1,4 @@
+import { createCompanionDiscovery } from "@getpaseo/server/companion-discovery";
 import {
   claimDeviceEnrollment,
   HOST_DISCOVERY_ENDPOINT,
@@ -81,6 +82,7 @@ interface ClaimOwner {
 
 /** Coordinates protected access across trusted app windows. It never owns a DSH process. */
 export class DesktopDshAccess {
+  private readonly discoverCompanions = createCompanionDiscovery();
   private readonly owners = new Map<string, HostOwner>();
   private readonly claims = new Map<string, ClaimOwner>();
   private readonly forgetting = new Set<ConnectionHostId>();
@@ -325,6 +327,8 @@ export class DesktopDshAccess {
 
   async run(windowId: number, command: DesktopDshCommand): Promise<unknown> {
     switch (command.type) {
+      case "discover-companions":
+        return this.discoverCompanions();
       case "list":
         return this.store.list();
       case "pair":
