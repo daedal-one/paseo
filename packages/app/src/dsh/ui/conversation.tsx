@@ -1,4 +1,4 @@
-import { memo, useCallback, useSyncExternalStore } from "react";
+import { memo, useCallback, useState, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type * as dsh from "@deepseek-ai/dsh-client";
@@ -12,6 +12,8 @@ import { HistoryList } from "./history-list";
 import { ForkControl } from "./fork-sheet";
 import { styles } from "./styles";
 import { MessageContent, Queue, queueAvailability } from "./queue";
+import { TerminalControl } from "./terminal";
+import { SessionControls } from "./session-controls";
 import { WorkspaceOutcome } from "./workspace-outcome";
 
 // The installed Chat Definitions own the payload for each registered renderer kind.
@@ -56,6 +58,87 @@ function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
   );
 }
 
+function Disclosure({ title, text }: { title: string; text: string | null }) {
+  const [open, setOpen] = useState(false);
+  const toggle = useCallback(() => setOpen((value) => !value), []);
+  return (
+    <View style={styles.group}>
+      <Button variant="ghost" size="sm" onPress={toggle} disabled={text === null}>
+        {title}
+      </Button>
+      {open && text !== null && (
+        <ScrollView style={styles.detail}>
+          <Text selectable style={styles.message}>
+            {text}
+          </Text>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function ContextContent({ node, images }: { node: dsh.ChatNode<"context">; images?: DshImages }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const toggle = useCallback(() => setOpen((value) => !value), []);
+  return (
+    <View style={styles.group} testID="dsh-context-details">
+      <Button variant="ghost" size="sm" onPress={toggle}>
+        {t("nativeDsh.conversation.context")}
+      </Button>
+      {open && <MessageContent content={node.data.content} images={images} />}
+    </View>
+  );
+}
+
+const controlKinds = new Set([
+  "command",
+  "compaction",
+  "manual-compaction",
+  "model-retry",
+  "turn-max-tokens",
+  "system-prompt",
+  "unknown",
+]);
+function ControlContent({ node }: { node: dsh.ChatConversationViewNode }) {
+  const { t } = useTranslation();
+  if (nodeIs(node, "command"))
+    return (
+      <View style={styles.group} testID="dsh-command-result">
+        <Text style={styles.title}>
+          {node.data.name === null
+            ? t("nativeDsh.features.commands")
+            : `/${node.data.name}${node.data.args ? ` ${node.data.args}` : ""}`}
+        </Text>
+        <Text style={node.data.outcome?.kind === "error" ? styles.error : styles.text}>
+          {node.data.outcome?.text ??
+            t(node.data.outcome === null ? "nativeDsh.running" : "nativeDsh.features.refreshed")}
+        </Text>
+      </View>
+    );
+  if (nodeIs(node, "compaction") || nodeIs(node, "manual-compaction")) {
+    const compact = nodeIs(node, "compaction") ? node.data : node.data.compaction;
+    return (
+      <Disclosure title={t("nativeDsh.conversation.compaction")} text={compact?.summary ?? null} />
+    );
+  }
+  if (nodeIs(node, "model-retry"))
+    return (
+      <Text style={styles.muted} testID="dsh-model-retry">
+        {t(`nativeDsh.conversation.retryState.${node.data.current.retryState}`, {
+          attempt: node.data.current.retry,
+        })}
+      </Text>
+    );
+  if (nodeIs(node, "turn-max-tokens"))
+    return <Text style={styles.muted}>{t("nativeDsh.conversation.maxTokens")}</Text>;
+  if (nodeIs(node, "system-prompt"))
+    return <Disclosure title={t("nativeDsh.conversation.systemPrompt")} text={node.data.text} />;
+  if (nodeIs(node, "unknown"))
+    return <Disclosure title={node.data.type} text={JSON.stringify(node.data.data, null, 2)} />;
+  return null;
+}
+
 /** Exported for the transcript presentation harness; the row wires it to its own node source. */
 export function ChatContent({
   node,
@@ -67,11 +150,12 @@ export function ChatContent({
   images?: DshImages;
 }) {
   const { t } = useTranslation();
-  if (nodeIs(node, "user") || nodeIs(node, "steering") || nodeIs(node, "context")) {
-    const role = node.kind === "context" ? "context" : "user";
+  if (controlKinds.has(node.kind)) return <ControlContent node={node} />;
+  if (nodeIs(node, "context")) return <ContextContent node={node} images={images} />;
+  if (nodeIs(node, "user") || nodeIs(node, "steering")) {
     return (
       <>
-        <Text style={styles.title}>{t(`nativeDsh.conversation.${role}`)}</Text>
+        <Text style={styles.title}>{t("nativeDsh.conversation.user")}</Text>
         <MessageContent content={node.data.content} images={images} />
       </>
     );
@@ -288,15 +372,24 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
   return (
     <View style={styles.fill} testID="dsh-conversation">
       <View style={styles.conversationHeader}>
-        <Button variant="ghost" onPress={back}>
-          {t("nativeDsh.conversation.back")}
-        </Button>
-        <Text style={styles.title}>{title}</Text>
-        <ForkControl runtime={runtime} sessionId={view.sessionId} busy={busy} />
-        <Queue
-          queue={state.queue}
-          availability={queueAvailability(state, generation !== undefined)}
-        />
+        <View style={styles.conversationTop}>
+          <Button size="sm" variant="ghost" onPress={back}>
+            {t("nativeDsh.conversation.back")}
+          </Button>
+          <Text style={styles.conversationHeading} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <View style={styles.actions}>
+          <TerminalControl runtime={runtime} view={view} />
+          <SessionControls runtime={runtime} view={view} model={model} />
+          <ForkControl runtime={runtime} sessionId={view.sessionId} busy={busy} />
+          <Queue
+            session={session}
+            queue={state.queue}
+            availability={queueAvailability(state, generation !== undefined)}
+          />
+        </View>
         {generation === undefined && (
           <>
             <Text style={styles.muted}>{t("nativeDsh.conversation.offline")}</Text>

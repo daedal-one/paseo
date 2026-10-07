@@ -1,3 +1,5 @@
+import { CachedConversation } from "./cached-conversation";
+import { useContinuumLifecycle } from "../use-continuum-lifecycle";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Linking, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -101,6 +103,7 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
         </KeyboardDock>
       </ComposerViewport>
     );
+  if (state.cachedSessionId !== null) return <CachedConversation model={model} />;
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.muted}>{t("nativeDsh.preview")}</Text>
@@ -121,7 +124,7 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
         <Text style={styles.text}>{t("common.loading")}</Text>
       )}
       {idle && state.directory.status === "failed" && <AccessError code={state.directory.error} />}
-      {idle && state.directory.status === "ready" && state.directory.hosts.length === 0 && (
+      {state.directory.status === "ready" && state.directory.hosts.length === 0 && (
         <Text style={styles.text}>{t("nativeDsh.emptyHosts")}</Text>
       )}
       {idle &&
@@ -149,12 +152,22 @@ export default function DshDirectoryScreen() {
   const safeArea = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
   const { t } = useTranslation();
   const router = useRouter();
+  const companion = useCallback(() => router.push("/sessions"), [router]);
+  const rightContent = useMemo(
+    () => (
+      <Button size="sm" variant="ghost" onPress={companion}>
+        {t("nativeDsh.continuum.legacy")}
+      </Button>
+    ),
+    [companion, t],
+  );
   const back = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.replace("/settings");
   }, [router]);
   const focused = useIsFocused();
   const [model, setModel] = useState<DshDirectory | null>(null);
+  useContinuumLifecycle(model);
   const [disposeFailed, setDisposeFailed] = useState(false);
   useEffect(() => {
     if (!focused) return;
@@ -182,7 +195,7 @@ export default function DshDirectoryScreen() {
   }, [focused]);
   return (
     <View style={[styles.screen, safeArea]}>
-      <BackHeader title={t("nativeDsh.title")} onBack={back} />
+      <BackHeader title={t("nativeDsh.title")} onBack={back} rightContent={rightContent} />
       {disposeFailed && <AccessError code="runtime-unavailable" />}
       {focused && model !== null && <DirectoryContent model={model} />}
     </View>

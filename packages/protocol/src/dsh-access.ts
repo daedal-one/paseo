@@ -200,3 +200,34 @@ export const dshSearchEndpoints = ["session/search"] as const;
 
 /** Optional native fork with a caller-owned fresh child identity. */
 export const dshForkEndpoints = ["session/forkTo"] as const;
+
+/** Optional native controls; these never include device enrollment or grant management. */
+export const dshControlEndpoints = [
+  "session/rename",
+  "session/modelCatalog",
+  "session/selectModel",
+  "session/updateQueue",
+  "commands/list",
+  "commands/execute",
+  "goals/get",
+  "goals/create",
+  "goals/edit",
+  "goals/pause",
+  "goals/resume",
+  "goals/complete",
+  "goals/clear",
+  "settings/describe",
+  "settings/update",
+  "pluginInventory/list",
+  "authorization/list",
+  "authorization/signIn",
+  "authorization/answer",
+  "authorization/signOut",
+  "workspaceFiles/list",
+  "workspaceFiles/read",
+  "subagents/prompt",
+  "subagents/interruptByParent",
+  "session/terminal",
+  "session/terminalInput",
+  "session/terminalResize",
+] as const;

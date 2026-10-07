@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { ConversationScheduler, SessionListState, SessionId } from "@deepseek-ai/dsh-client";
@@ -8,6 +8,8 @@ import type { DshHostRuntime } from "../runtime";
 import { SearchControl } from "./search-sheet";
 import { RegistrationControl } from "./registration-sheet";
 import { CreationControl } from "./creation-sheet";
+import { CachedSessions } from "./cached-sessions";
+import { HostControls } from "./host-controls";
 import { styles } from "./styles";
 
 const conversationScheduler: ConversationScheduler = {
@@ -55,6 +57,7 @@ export function Sessions({ runtime, model, busy }: SessionsProps) {
     },
     [model],
   );
+  const directory = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const pending = useSyncExternalStore(runtime.pending.subscribe, runtime.pending.getSnapshot);
   const { t } = useTranslation();
   const generation = useSyncExternalStore(
@@ -79,13 +82,17 @@ export function Sessions({ runtime, model, busy }: SessionsProps) {
   const reconnect = useCallback(() => model.reconnect(), [model]);
   const refresh = useCallback(() => model.refreshSessions(), [model]);
   const loadMore = useCallback(() => model.loadMoreSessions(), [model]);
+  const autoPage = canPage(list, ready, reading, busy);
+  useEffect(() => {
+    if (autoPage) void model.loadMoreSessions();
+  }, [autoPage, model]);
   return (
     <View style={styles.group} testID="dsh-session-list">
-      <Text style={styles.title}>{t("nativeDsh.sessions")}</Text>
+      <Text style={styles.title}>{t("nativeDsh.continuum.title")}</Text>
       <CreationControl runtime={runtime} onOpenSession={openCreated} busy={busy} />
+      <HostControls runtime={runtime} />
       <RegistrationControl runtime={runtime} busy={busy} />
       <SearchControl runtime={runtime} busy={busy} onOpenSession={openCreated} />
-      <Text style={styles.muted}>{runtime.hostId}</Text>
       <Text style={styles.text}>{t(`nativeDsh.connection.${status}`)}</Text>
       {!ready && !readFailed && <Text style={styles.muted}>{t("nativeDsh.waiting")}</Text>}
       {readFailed && (
@@ -93,19 +100,19 @@ export function Sessions({ runtime, model, busy }: SessionsProps) {
           {t("nativeDsh.errors.session-refresh-failed")}
         </Text>
       )}
+      <OfflineSessions ready={ready} list={list} cache={directory.cache} model={model} />
       {ready && !readFailed && list.ids.length === 0 && (
         <Text style={styles.text}>{t("nativeDsh.emptySessions")}</Text>
       )}
-      {ready &&
-        list.ids.map((id) => (
-          <SessionRow
-            key={id}
-            session={list.byId[id]}
-            model={model}
-            busy={busy}
-            pending={pending.has(id)}
-          />
-        ))}
+      {list.ids.map((id) => (
+        <SessionRow
+          key={id}
+          session={list.byId[id]}
+          model={model}
+          busy={busy}
+          pending={pending.has(id)}
+        />
+      ))}
       <View style={styles.actions}>
         <Button size="sm" disabled={busy} onPress={reconnect}>
           {t("nativeDsh.reconnect")}
@@ -133,4 +140,24 @@ export function Sessions({ runtime, model, busy }: SessionsProps) {
       </View>
     </View>
   );
+}
+
+function canPage(list: SessionListState, ready: boolean, reading: boolean, busy: boolean): boolean {
+  return (
+    ready && list.hasMore === true && !list.loadingMore && !reading && !busy && list.error === null
+  );
+}
+function OfflineSessions({
+  ready,
+  list,
+  cache,
+  model,
+}: {
+  ready: boolean;
+  list: SessionListState;
+  cache: import("../continuum").DshContinuum | null;
+  model: DshDirectory;
+}) {
+  if (ready || list.ids.length > 0 || cache === null) return null;
+  return <CachedSessions cache={cache} model={model} />;
 }

@@ -240,7 +240,11 @@ export class DshPrompt {
     const generation = this.connection.generation.getSnapshot();
     const session = this.binding.session.getSnapshot();
     let availability: DshPromptSnapshot["availability"];
-    if (session.subagent !== null) availability = "subagent";
+    if (
+      session.subagent !== null &&
+      (session.subagent.address.mode === "one-shot" || session.subagent.parentAvailable !== true)
+    )
+      availability = "subagent";
     else if (session.removed || session.openState !== "open") availability = "unavailable";
     else if (generation === undefined) availability = "offline";
     else availability = "ready";
@@ -253,9 +257,10 @@ export class DshPrompt {
       this.invalidateUpload();
     }
     this.generation = generation;
-    let fileAvailability: DshPromptFileAvailability = availability;
+    let fileAvailability: DshPromptFileAvailability =
+      session.subagent === null ? availability : "subagent";
     if (
-      availability === "ready" &&
+      fileAvailability === "ready" &&
       (this.filePort === undefined || !dshFileUploadAvailable(this.filePort.capabilities()))
     ) {
       fileAvailability = "unavailable";

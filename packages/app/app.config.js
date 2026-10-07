@@ -193,6 +193,7 @@ export default {
       autolinkingModuleResolution: true,
     },
     extra: {
+      dshClient: isCompanion,
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       router: {},

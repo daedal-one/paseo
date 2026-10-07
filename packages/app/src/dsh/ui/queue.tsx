@@ -2,6 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type * as dsh from "@deepseek-ai/dsh-client";
+import { brandString } from "@deepseek-ai/dsh-brand";
+import { useMutation } from "@tanstack/react-query";
+import { Field, FormTextInput } from "@/components/ui/form-field";
+import { remoteValue } from "../features";
 import { Button } from "@/components/ui/button";
 import { styles } from "./styles";
 import type { DshImages } from "../images";
@@ -154,12 +158,69 @@ function QueueStatus({ availability, empty }: { availability: QueueAvailability;
   return null;
 }
 
+function QueueActions({
+  item,
+  session,
+  disabled,
+}: {
+  item: QueueEntry;
+  session: dsh.SessionFace;
+  disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(item.text ?? "");
+  const mutation = useMutation({
+    retry: false,
+    mutationFn: async (kind: "edit" | "remove" | "steer") => {
+      if (disabled) throw new Error("offline");
+      const action =
+        kind === "edit" ? { kind, content: [{ type: "text" as const, text }] } : { kind };
+      return remoteValue(
+        await session.updateQueue(
+          brandString<Parameters<dsh.SessionFace["updateQueue"]>[0]>(item.id),
+          action,
+        ),
+      );
+    },
+  });
+  const edit = useCallback(() => mutation.mutate("edit"), [mutation]);
+  const remove = useCallback(() => mutation.mutate("remove"), [mutation]);
+  const steer = useCallback(() => mutation.mutate("steer"), [mutation]);
+  const blocked = disabled || mutation.isPending || mutation.isSuccess || mutation.isError;
+  return (
+    <View style={styles.group}>
+      {item.text !== null && (
+        <>
+          <Field label={t("nativeDsh.queue.edit")}>
+            <FormTextInput initialValue={item.text} onChangeText={setText} multiline />
+          </Field>
+          <Button disabled={blocked || text.trim() === ""} onPress={edit}>
+            {t("nativeDsh.features.save")}
+          </Button>
+        </>
+      )}
+      <View style={styles.actions}>
+        <Button disabled={blocked} variant="outline" onPress={remove}>
+          {t("nativeDsh.queue.remove")}
+        </Button>
+        {item.placement === "queued" && (
+          <Button disabled={blocked} variant="outline" onPress={steer}>
+            {t("nativeDsh.queue.steer")}
+          </Button>
+        )}
+      </View>
+      {mutation.isError && <Text style={styles.error}>{t("nativeDsh.features.failed")}</Text>}
+    </View>
+  );
+}
+
 interface QueueProps {
   queue: readonly QueueEntry[];
   availability: QueueAvailability;
+  session?: dsh.SessionFace;
 }
 
-export function Queue({ queue, availability }: QueueProps) {
+export function Queue({ queue, availability, session }: QueueProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const accessibilityState = useMemo(() => ({ expanded }), [expanded]);
@@ -179,7 +240,9 @@ export function Queue({ queue, availability }: QueueProps) {
       {expanded && (
         <View style={styles.group}>
           <Text style={styles.title}>{t("nativeDsh.queue.title")}</Text>
-          <Text style={styles.muted}>{t("nativeDsh.queue.readOnly")}</Text>
+          {session === undefined && (
+            <Text style={styles.muted}>{t("nativeDsh.queue.readOnly")}</Text>
+          )}
           <ScrollView
             style={styles.queue}
             nestedScrollEnabled
@@ -196,6 +259,14 @@ export function Queue({ queue, availability }: QueueProps) {
               <View key={item.id} style={styles.queueItem} testID="dsh-queue-item">
                 <Text style={styles.muted}>{t(`nativeDsh.queue.placement.${item.placement}`)}</Text>
                 <QueueContent item={item} />
+                {session !== undefined && (
+                  <QueueActions
+                    key={`${item.id}:${item.text}`}
+                    item={item}
+                    session={session}
+                    disabled={availability !== "available"}
+                  />
+                )}
               </View>
             ))}
           </ScrollView>

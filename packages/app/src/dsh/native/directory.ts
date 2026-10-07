@@ -1,3 +1,5 @@
+import type { ContinuumStorage } from "../continuum";
+import { continuumStorage } from "../continuum-storage";
 import {
   DshDirectory as SharedDirectory,
   createDshDirectoryOwner,
@@ -44,8 +46,8 @@ const nativeAccess: DshDirectoryAccess = {
 };
 
 export class DshDirectory extends SharedDirectory {
-  constructor() {
-    super(nativeAccess);
+  constructor(storage?: ContinuumStorage) {
+    super(nativeAccess, storage);
   }
 }
-export const openDshDirectory = createDshDirectoryOwner(() => new DshDirectory());
+export const openDshDirectory = createDshDirectoryOwner(() => new DshDirectory(continuumStorage));

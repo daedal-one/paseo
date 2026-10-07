@@ -1,5 +1,14 @@
 import { StyleSheet } from "react-native-unistyles";
 export const styles = StyleSheet.create((theme) => ({
+  terminal: { height: 420, width: "100%" },
+  conversationTop: { flexDirection: "row", alignItems: "center", gap: theme.spacing[3] },
+  conversationHeading: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+  },
   fill: { flex: 1, minHeight: 0 },
   historyRow: {
     width: "100%",

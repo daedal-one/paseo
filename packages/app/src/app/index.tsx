@@ -14,9 +14,16 @@ import {
 } from "@/stores/navigation-active-workspace-store";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 
+import { isDshClient } from "@/constants/build-profile";
+
 const isDesktop = shouldUseDesktopDaemon();
 
 export default function Index() {
+  if (isDshClient) return <Redirect href="/dsh-hosts" />;
+  return <CompanionIndex />;
+}
+
+function CompanionIndex() {
   const pathname = usePathname();
   const bootstrapState = useHostRuntimeBootstrapState();
   const anyOnlineHostServerId = useEarliestOnlineHostServerId();

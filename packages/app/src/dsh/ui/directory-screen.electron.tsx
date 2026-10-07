@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { CachedConversation } from "./cached-conversation";
+import { useContinuumLifecycle } from "../use-continuum-lifecycle";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
@@ -53,6 +55,7 @@ function DesktopContent({ model }: { model: DshDirectory }) {
   const reload = useCallback(() => model.reload(), [model]);
   if (state.runtime !== null && state.conversation !== null)
     return <WebConversation model={model} state={state} />;
+  if (state.cachedSessionId !== null) return <CachedConversation model={model} />;
   const idle = state.pairing.status === "idle";
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -100,8 +103,18 @@ function DesktopContent({ model }: { model: DshDirectory }) {
 export default function DesktopDshDirectoryScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const companion = useCallback(() => router.push("/sessions"), [router]);
+  const rightContent = useMemo(
+    () => (
+      <Button size="sm" variant="ghost" onPress={companion}>
+        {t("nativeDsh.continuum.legacy")}
+      </Button>
+    ),
+    [companion, t],
+  );
   const focused = useIsFocused();
   const [model, setModel] = useState<DshDirectory | null>(null);
+  useContinuumLifecycle(model);
   const [failed, setFailed] = useState(false);
   const back = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -133,7 +146,7 @@ export default function DesktopDshDirectoryScreen() {
   }, [focused]);
   return (
     <View style={styles.screen}>
-      <BackHeader title={t("nativeDsh.title")} onBack={back} />
+      <BackHeader title={t("nativeDsh.title")} onBack={back} rightContent={rightContent} />
       {failed && <AccessError code="runtime-unavailable" />}
       {focused && model !== null && <DesktopContent model={model} />}
     </View>

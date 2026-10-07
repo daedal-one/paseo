@@ -27,6 +27,7 @@ import {
 } from "../support/helpers/mounted-dsh-host";
 
 import { MountedDshAdmissionGate } from "../support/helpers/mounted-dsh-admission-gate";
+import { getTerminalBufferText } from "../support/helpers/terminal-perf";
 import { detectPromptImageMediaType } from "../../src/dsh/ui/prompt-image-bytes";
 import {
   closeMountedDshOwner,
@@ -3672,4 +3673,110 @@ test.describe("mounted native DSH file host restart", () => {
   }, testInfo) => {
     await runFileHostRestart(page, context, browser, testInfo, 1280);
   });
+});
+
+test.describe("mounted native DSH continuum", () => {
+  test.describe.configure({ timeout: 300_000 });
+  for (const width of [390, 1280]) {
+    test(`restores conversations and local drafts without imports or prompt replay at ${width}px`, async ({
+      context,
+      page,
+      browser,
+    }, testInfo) => {
+      const host = await launchMountedDshHost();
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      let prompts = 0;
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname === "/api/session/prompt") prompts++;
+      });
+      const other = await browser.newContext();
+      try {
+        await attachDshSession(context, host.config);
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto(host.companionUrl);
+        await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        const settingsReads = Promise.all([
+          page.waitForResponse(
+            (response) => new URL(response.url()).pathname === "/api/settings/describe",
+          ),
+          page.waitForResponse(
+            (response) => new URL(response.url()).pathname === "/api/pluginInventory/list",
+          ),
+        ]);
+        await page.getByTestId("dsh-host-controls-open").click();
+        for (const response of await settingsReads) {
+          expect(response.status()).toBe(200);
+          expect(
+            z.object({ result: z.object({ ok: z.literal(true) }) }).safeParse(await response.json())
+              .success,
+          ).toBe(true);
+        }
+        await expect(page.getByTestId("dsh-host-controls")).toBeVisible();
+        await page.getByRole("button", { name: "Close", exact: true }).click();
+        await createHostSession(page, host.workspaceDir);
+        await page.getByTestId("dsh-create-open").click();
+        await expect(page.getByTestId("dsh-conversation")).toBeVisible({ timeout: 60_000 });
+        await page.getByLabel("Message", { exact: true }).fill(host.prompt);
+        await page.getByRole("button", { name: "Send message", exact: true }).click();
+        await expect(page.getByText("PONG", { exact: true }).first()).toBeVisible({
+          timeout: 120_000,
+        });
+        if (width === 1280) {
+          await page.getByTestId("dsh-terminal-open").click();
+          await expect(page.getByTestId("dsh-terminal-sheet")).toBeVisible();
+          await expect(page.getByTestId("dsh-terminal-sheet")).toContainText("Connected", {
+            timeout: 30_000,
+          });
+          const input = page.getByTestId("dsh-terminal-emulator").locator(".xterm-helper-textarea");
+          await input.pressSequentially("printf 'CONTINUUM_%s\\n' 'TERMINAL'", { delay: 5 });
+          await input.press("Enter");
+          await expect
+            .poll(() => getTerminalBufferText(page), { timeout: 30_000 })
+            .toContain("CONTINUUM_TERMINAL");
+          await page.getByRole("button", { name: "Close", exact: true }).click();
+        }
+        await page.getByLabel("Message", { exact: true }).fill("Unsent local continuum draft");
+        await page.getByTestId("dsh-controls-open").click();
+        await expect(page.getByTestId("dsh-goals")).toBeVisible();
+        await page.getByTestId("dsh-command-line").fill("/plan");
+        await page.getByTestId("dsh-command-run").click();
+        await expect(page.getByTestId("dsh-command-result")).toContainText("/plan");
+        await page.getByRole("button", { name: "Close", exact: true }).click();
+        // Flush the background snapshot as a phone/tab suspension would, then cold-open the page.
+        await page.evaluate(() => {
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "hidden",
+          });
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await page.waitForFunction(() =>
+          Object.values(localStorage).join(" ").includes("Unsent local continuum draft"),
+        );
+        await page.reload();
+        await expect(page.getByTestId("dsh-conversation")).toBeVisible({ timeout: 60_000 });
+        await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+          "Unsent local continuum draft",
+        );
+        await expect(page.getByText("PONG", { exact: true }).first()).toBeVisible();
+        expect(prompts).toBe(1);
+        // A different device reads the same authoritative conversation, with its own draft.
+        await attachDshSession(other, host.config);
+        const reader = await other.newPage();
+        await reader.goto(host.companionUrl);
+        await expect(reader.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
+        await reader.locator('[data-testid^="dsh-open-session-"]').first().click();
+        await expect(reader.getByText("PONG", { exact: true }).first()).toBeVisible({
+          timeout: 60_000,
+        });
+        await expect(reader.getByLabel("Message", { exact: true })).toHaveValue("");
+        await page.screenshot({ path: testInfo.outputPath(`continuum-${width}.png`) });
+        expect(errors).toEqual([]);
+      } finally {
+        await other.close();
+        await host.close();
+      }
+    });
+  }
 });

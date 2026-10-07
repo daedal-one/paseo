@@ -6,6 +6,8 @@ import type * as dsh from "@deepseek-ai/dsh-client";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import { i18n } from "@/i18n/i18next";
 import type { DshHistory } from "../history";
+import type { DshConversation } from "../runtime";
+import { conversationPreview } from "../continuum-preview";
 import { ChatContent } from "./conversation";
 import { Queue } from "./queue";
 
@@ -66,6 +68,34 @@ function row(kind: string, data: unknown): dsh.ChatConversationViewNode {
   return { kind, data, target: "chat", anchorSeq: 1, visibility: "visible" } as never;
 }
 
+it("caches ordinary conversation text without internal context, reasoning or attachments", () => {
+  const nodes = [
+    row("user", { content: [{ type: "text", text: "Question" }, { type: "image" }] }),
+    row("context", { content: [{ type: "text", text: "Internal context" }] }),
+    row("assistant-step", {
+      blocks: [
+        { kind: "reasoning", text: "Thinking" },
+        { kind: "text", text: "Answer" },
+        { kind: "image" },
+      ],
+    }),
+    row("tool", { text: "Tool output" }),
+    { ...row("user", { content: [{ type: "text", text: "Hidden" }] }), visibility: "hidden" },
+  ];
+  // Only the shared Chat snapshot reader is exercised; no lifecycle methods are used.
+  const view = {
+    conversation: {
+      target: () => ({
+        getSnapshot: () => ({
+          order: nodes.map((_, index) => index),
+          nodes: { source: (index: number) => ({ getSnapshot: () => nodes[index] }) },
+        }),
+      }),
+    },
+  } as unknown as DshConversation;
+  expect(conversationPreview(view)).toBe("Question\n\nAnswer");
+});
+
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(async () => {
@@ -111,6 +141,33 @@ function queueItemText(index: number): string {
 }
 
 describe("transcript content blocks", () => {
+  it("keeps internal context behind an explicit disclosure", () => {
+    render(
+      row("context", {
+        content: [{ type: "text", text: "<system-reminder>Internal context</system-reminder>" }],
+      }),
+    );
+    expect(container.textContent).not.toContain("Internal context");
+    click("[data-testid=dsh-context-details] [role=button]");
+    expect(container.textContent).toContain("Internal context");
+  });
+  it("shows server command outcomes and keeps command arguments separate", () => {
+    render(
+      row("command", {
+        name: "plan",
+        args: "off",
+        outcome: { kind: "error", text: "Plan unavailable" },
+      }),
+    );
+    expect(text("[data-testid=dsh-command-result]")).toContain("/plan off");
+    expect(text("[data-testid=dsh-command-result]")).toContain("Plan unavailable");
+  });
+  it("discloses a compaction summary only when requested", () => {
+    render(row("compaction", { summary: "Earlier conversation summary" }));
+    expect(container.textContent).not.toContain("Earlier conversation summary");
+    click("[role=button]");
+    expect(container.textContent).toContain("Earlier conversation summary");
+  });
   it("renders text and reasoning assistant blocks", () => {
     render(
       row("assistant-step", {

@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "sourceCommit": "7c9f5a3779e4f3d3b0ba8a260a0f45f6c463eb31",
+  "sourceCommit": "a17881c3c7962b5ecf9bcfea99b99fcf0fc19c0d",
   "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
       "name": "@deepseek-ai/cordis",
       "version": "4.0.2",
       "file": "deepseek-ai-cordis-4.0.2.tgz",
-      "sha256": "23c61f1fb4f2901519f6eb9c321440e945f96932b5c27f31dc2b65d955086190"
+      "sha256": "02fd258a5e644c906202d0c783f53a8857eeb963e2bb1ecffc110705242c39c3"
     },
     {
       "name": "@deepseek-ai/cosmokit",
       "version": "1.8.3",
       "file": "deepseek-ai-cosmokit-1.8.3.tgz",
-      "sha256": "552f10313ddfdc2b92cce1867b9bf30b2a4c9de55543ad222fe67c22015e4400"
+      "sha256": "69647a14229708b2c168294c8daec07884c74d95c1a8f03efecfcfa97150d3b4"
     },
     {
       "name": "@deepseek-ai/dsh-brand",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-brand-0.1.5-alpha.2.tgz",
-      "sha256": "d4972fd62a96e55ea68c65d7c1c721cec6a67a08fab26eb6786474839a1c1779"
+      "sha256": "c8100a065446f66f3c887086e437004c05bf7856ee0c872af1b30af4f1786625"
     },
     {
       "name": "@deepseek-ai/dsh-typert-protocol",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-typert-protocol-0.1.5-alpha.2.tgz",
-      "sha256": "bd857584091982a6df2c28c78a24984a63f317f16fdd140624697ad6a931849c"
+      "sha256": "ccefa528ef97b4fc5f149df13e0ecde86ce9f2e172be2186b139e8c335fbd858"
     },
     {
       "name": "@deepseek-ai/dsh-util-values",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-util-values-0.1.5-alpha.2.tgz",
-      "sha256": "b00fbc76a4352a5249f60b71f4cbe0a0bbf45c68a8e779ef71721399be67d71b"
+      "sha256": "540cf2eb5036325840681efd32c613446c3fdbdfc7f3c3b20e3ff6b300ef9c81"
     },
     {
       "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
-      "sha256": "96a70f52715a5aaa3dcb12762586c7a51250605707a4663dae2dedc7ea4ef9ca"
+      "sha256": "f7b4707dad60cd279a565817d600866f91f3ad592c05328371145feeb42f923c"
     }
   ]
 }

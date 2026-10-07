@@ -1992,6 +1992,23 @@ describe("native generic-file receipt ownership", () => {
       runtime.connection.reconnect();
       expect(view.prompt.getSnapshot().fileAvailability).toBe("subagent");
       expect(await view.prompt.stageFile({ data: "YQ==" })).toBe(false);
+      read.mockReturnValue({
+        ...snapshot,
+        subagent: {
+          address: {
+            parentSessionId: host.ids[1],
+            childSessionId: host.ids[0],
+            mode: "continuable",
+          },
+          parentAvailable: true,
+        },
+      });
+      runtime.connection.reconnect();
+      await vi.waitFor(() => expect(view.prompt.getSnapshot().availability).toBe("ready"));
+      view.prompt.setText("Continue");
+      expect(view.prompt.getSnapshot().canSend).toBe(true);
+      expect(view.prompt.getSnapshot().fileAvailability).toBe("subagent");
+      expect(await view.prompt.stageFile({ data: "YQ==" })).toBe(false);
       read.mockRestore();
       expect(host.uploads).toEqual([]);
     } finally {

@@ -1,3 +1,4 @@
+import { continuumStorage } from "../continuum-storage";
 import { DshDirectory, createDshDirectoryOwner, type DshDirectoryAccess } from "../directory";
 import { listDesktopDshHosts, openDesktopDshHost, pairDesktopDshHost } from "./access";
 import { desktopDshRequest } from "./bridge";
@@ -16,4 +17,6 @@ const access: DshDirectoryAccess = {
     await desktopDshRequest({ type: "forget", hostId });
   },
 };
-export const openDesktopDshDirectory = createDshDirectoryOwner(() => new DshDirectory(access));
+export const openDesktopDshDirectory = createDshDirectoryOwner(
+  () => new DshDirectory(access, continuumStorage),
+);

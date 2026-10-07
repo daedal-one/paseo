@@ -1,3 +1,4 @@
+import { continuumStorage } from "../continuum-storage";
 import { DshDirectory, createDshDirectoryOwner, type DshDirectoryAccess } from "../directory";
 import { DshAccessError } from "../access-error";
 import { openBrowserDshHost, readBrowserDshHost } from "./access";
@@ -16,5 +17,5 @@ const browserAccess: DshDirectoryAccess = {
   },
 };
 export const openBrowserDshDirectory = createDshDirectoryOwner(
-  () => new DshDirectory(browserAccess),
+  () => new DshDirectory(browserAccess, continuumStorage),
 );

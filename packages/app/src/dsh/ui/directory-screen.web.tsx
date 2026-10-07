@@ -1,3 +1,5 @@
+import { CachedConversation } from "./cached-conversation";
+import { useContinuumLifecycle } from "../use-continuum-lifecycle";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -28,6 +30,7 @@ function BrowserContent({ model }: { model: DshDirectory }) {
   if (state.runtime !== null && state.conversation !== null) {
     return <WebConversation model={model} state={state} />;
   }
+  if (state.cachedSessionId !== null) return <CachedConversation model={model} />;
   const error = state.error ?? (state.directory.status === "failed" ? state.directory.error : null);
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -63,6 +66,7 @@ export default function BrowserDshDirectoryScreen() {
   const focused = useIsFocused();
   const electron = getIsElectron();
   const [model, setModel] = useState<DshDirectory | null>(null);
+  useContinuumLifecycle(model);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!focused || electron) return;
