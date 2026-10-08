@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { hasAppUpdateConfiguration } from "./app-update-availability";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { UUID } from "builder-util-runtime";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const { autoUpdaterMock } = vi.hoisted(() => {
   const handlers = new Map<string, (value: unknown) => void>();
@@ -47,6 +48,51 @@ import {
 } from "./auto-updater";
 
 describe("checkForAppUpdate", () => {
+  let resourcesPath: string;
+  const originalResourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+  beforeAll(async () => {
+    resourcesPath = await mkdtemp(path.join(os.tmpdir(), "daedal-updater-resources-"));
+    await writeFile(
+      path.join(resourcesPath, "app-update.yml"),
+      "provider: github\nowner: daedal-one\nrepo: paseo\n",
+    );
+    Object.defineProperty(process, "resourcesPath", { value: resourcesPath, configurable: true });
+  });
+  afterAll(async () => {
+    if (originalResourcesPath)
+      Object.defineProperty(process, "resourcesPath", originalResourcesPath);
+    else Reflect.deleteProperty(process, "resourcesPath");
+    await rm(resourcesPath, { recursive: true, force: true });
+  });
+
+  it("does not contact the updater when the packaged metadata file is missing", async () => {
+    const configPath = path.join(resourcesPath, "app-update.yml");
+    const contents = await readFile(configPath, "utf8");
+    await rm(configPath);
+    const calls = autoUpdaterMock.checkForUpdates.mock.calls.length;
+    try {
+      expect(
+        await checkForAppUpdate({
+          currentVersion: "1.2.3",
+          releaseChannel: "stable",
+          intent: "manual",
+        }),
+      ).toMatchObject({ unavailable: true, hasUpdate: false, errorMessage: null });
+      expect(autoUpdaterMock.checkForUpdates.mock.calls.length).toBe(calls);
+    } finally {
+      await writeFile(configPath, contents);
+    }
+  });
+
+  it("distinguishes an absent metadata file from an invalid filesystem location", async () => {
+    const file = path.join(resourcesPath, "app-update.yml");
+    expect(await hasAppUpdateConfiguration(file)).toBe(true);
+    expect(await hasAppUpdateConfiguration(path.join(resourcesPath, "missing.yml"))).toBe(false);
+    await expect(
+      hasAppUpdateConfiguration(path.join(file, "app-update.yml")),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
+  });
+
   it("treats an unpublished channel manifest as an unavailable update", async () => {
     const error = Object.assign(new Error("Cannot find latest-mac.yml"), {
       code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
@@ -65,6 +111,7 @@ describe("checkForAppUpdate", () => {
     });
 
     expect(result).toEqual({
+      unavailable: false,
       hasUpdate: false,
       readyToInstall: false,
       currentVersion: "1.2.3",

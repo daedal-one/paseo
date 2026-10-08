@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
 import { DshConfigSchema } from "./connection.js";
@@ -39,6 +39,131 @@ async function attach(transport: DshTestTransport) {
 }
 
 describe("DSH existing sessions", () => {
+  test("closing during the initial snapshot settles initialization without leaving a timer", async () => {
+    vi.useFakeTimers();
+    const transport = new DshTestTransport();
+    let followOpened!: () => void;
+    const opened = new Promise<void>((resolve) => {
+      followOpened = resolve;
+    });
+    transport.opened = (endpoint) => {
+      if (endpoint === "session/follow") followOpened();
+    };
+    const interactions = new DshInteractions(transport, 100);
+    const session = new DshSession("session-1", "/workspace", transport, interactions, config);
+    const initializing = expect(session.initialize()).rejects.toThrow("DSH companion detached");
+    try {
+      await opened;
+      await session.close();
+      await initializing;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await session.close();
+      interactions.close();
+      vi.useRealTimers();
+    }
+  });
+
+  test("answers a pending question while transcript recovery is unavailable", async () => {
+    const transport = new DshTestTransport();
+    transport.initial = (endpoint) =>
+      endpoint === "$events" ? { type: "ready", clientId: "client-1" } : snapshot([], -1);
+    const attached = await attach(transport);
+    try {
+      transport.streams.get("session/follow")!.error(new Error("Transcript unavailable"));
+      transport.send("$events", {
+        type: "waterfall",
+        event: "user-questions/request",
+        eventId: "question",
+        agentId: "session-1",
+        request: {
+          questions: [{ id: "choice", question: "Continue?", options: [{ label: "Yes" }] }],
+        },
+      });
+      await attached.session.respondToPermission("question", {
+        behavior: "allow",
+        updatedInput: { structuredAnswers: { choice: { selected: ["Yes"] } } },
+      });
+      expect(transport.requests).toEqual([
+        {
+          endpoint: "$events/result",
+          args: {
+            clientId: "client-1",
+            eventId: "question",
+            outcome: {
+              kind: "result",
+              value: {
+                answers: [{ id: "choice", selected: ["Yes"] }],
+              },
+            },
+          },
+        },
+      ]);
+    } finally {
+      await attached.close();
+    }
+  });
+
+  test("ignores frames from a dropped subscription and retains confirmed history", async () => {
+    vi.useFakeTimers();
+    const transport = new DshTestTransport();
+    transport.initial = (endpoint) =>
+      endpoint === "$events"
+        ? { type: "ready", clientId: "client-1" }
+        : snapshot([record(0, "user/message", user("external"))], 0);
+    const attached = await attach(transport);
+    try {
+      const stale = transport.streams.get("session/follow")!;
+      stale.error(new Error("offline"));
+      await vi.advanceTimersByTimeAsync(100);
+      stale.value(record(1, "user/message", { ...user("stale"), id: "stale" }));
+      stale.error(new Error("late socket error"));
+      await vi.advanceTimersByTimeAsync(0);
+      const history = [];
+      for await (const event of attached.session.streamHistory()) history.push(event);
+      expect(
+        history.flatMap((event) =>
+          event.type === "timeline" && event.item.type === "user_message"
+            ? [event.item.messageId]
+            : [],
+        ),
+      ).toEqual(["message-1"]);
+      expect((await attached.session.getRuntimeInfo()).extra.connection).toBe("connected");
+    } finally {
+      await attached.close();
+      vi.useRealTimers();
+    }
+  });
+
+  test("backs off failed transcript reconnects and releases the retry on close", async () => {
+    vi.useFakeTimers();
+    const transport = new DshTestTransport();
+    transport.initial = (endpoint) =>
+      endpoint === "$events" ? { type: "ready", clientId: "client-1" } : snapshot([], -1);
+    const attached = await attach(transport);
+    try {
+      let attempts = 0;
+      transport.initial = () => null;
+      transport.opened = (endpoint) => {
+        attempts++;
+        transport.streams.get(endpoint)!.error(new Error("offline"));
+      };
+      transport.streams.get("session/follow")!.error(new Error("offline"));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(attempts).toBe(1);
+      await vi.advanceTimersByTimeAsync(199);
+      expect(attempts).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(attempts).toBe(2);
+      await attached.close();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(attempts).toBe(2);
+    } finally {
+      await attached.close();
+      vi.useRealTimers();
+    }
+  });
+
   test("loads older history and detaches without canceling the host session", async () => {
     const transport = new DshTestTransport();
     transport.initial = (endpoint) =>
@@ -156,3 +281,95 @@ describe("DSH existing sessions", () => {
     }
   });
 });
+
+test("uses Host permission projections for external knob changes and command results", async () => {
+  const transport = new DshTestTransport();
+  let cut = -1;
+  let currentValue = "policy-reviewed";
+  const options = [
+    { value: "policy-reviewed", name: "Policy reviewed" },
+    { value: "read-only", name: "Read only" },
+  ];
+  transport.initial = (endpoint) =>
+    endpoint === "$events"
+      ? { type: "ready", clientId: "client" }
+      : {
+          ...snapshot([], cut),
+          projections: { asOfSeq: cut, values: { permissions: { currentValue, options } } },
+        };
+  const attached = await attach(transport);
+  const main = transport.streams.get("session/follow")!;
+  try {
+    expect(await attached.session.getCurrentMode()).toBe("policy-reviewed");
+    currentValue = "custom";
+    cut = 0;
+    main.value(record(0, "sandbox/mode", { mode: "read-only" }));
+    await vi.waitFor(async () => expect(await attached.session.getCurrentMode()).toBe("custom"));
+    transport.respond = () => ({ result: { kind: "success" } });
+    // A concurrent Host-side change wins over the requested mode.
+    currentValue = "read-only";
+    cut = 1;
+    await attached.session.setMode("policy-reviewed");
+    expect(await attached.session.getCurrentMode()).toBe("read-only");
+    expect(transport.closedStreams.filter((name) => name === "session/follow")).toHaveLength(2);
+    transport.respond = () => ({ result: { kind: "error", text: "Rejected" } });
+    await expect(attached.session.setMode("policy-reviewed")).rejects.toThrow("Rejected");
+    expect(await attached.session.getCurrentMode()).toBe("read-only");
+    await expect(attached.session.setMode("custom")).rejects.toThrow("does not offer");
+  } finally {
+    await attached.close();
+  }
+});
+
+test.each(["detach", "timeout"])(
+  "closes a late control reader after %s without cancelling the Session",
+  async (ending) => {
+    vi.useFakeTimers();
+    const transport = new DshTestTransport();
+    transport.initial = (endpoint) =>
+      endpoint === "$events"
+        ? { type: "ready", clientId: "client" }
+        : {
+            ...snapshot([], -1),
+            projections: {
+              asOfSeq: -1,
+              values: {
+                permissions: {
+                  currentValue: "read-only",
+                  options: [{ value: "read-only", name: "Read only" }],
+                },
+              },
+            },
+          };
+    const attached = await attach(transport);
+    let finishOpen!: (reader: { close: () => void }) => void;
+    let started!: () => void;
+    const opened = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const closeReader = vi.fn();
+    transport.respond = () => ({ result: { kind: "success" } });
+    transport.open = () =>
+      new Promise((resolve) => {
+        finishOpen = resolve;
+        started();
+      });
+    const changing = expect(attached.session.setMode("read-only")).rejects.toThrow(
+      ending === "detach" ? "detached" : "timed out",
+    );
+    try {
+      await opened;
+      if (ending === "detach") await attached.close();
+      else await vi.advanceTimersByTimeAsync(config.requestTimeoutMs);
+      await changing;
+      finishOpen({ close: closeReader });
+      await Promise.resolve();
+      expect(closeReader).toHaveBeenCalledTimes(1);
+      expect(transport.requests.map((request) => request.endpoint)).toEqual(["commands/execute"]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await attached.close();
+      vi.useRealTimers();
+    }
+  },
+);

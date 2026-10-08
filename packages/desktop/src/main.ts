@@ -1,3 +1,5 @@
+import { DesktopDshIpc } from "./dsh/ipc.js";
+import { DesktopDshDeviceStore } from "./dsh/device-store.js";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
 import log from "electron-log/main";
@@ -22,6 +24,7 @@ import {
   net,
   protocol,
   screen,
+  safeStorage,
   session,
   shell,
   webContents,
@@ -87,15 +90,7 @@ import {
 } from "./window/desktop-window-owner.js";
 import { getDesktopSettingsStore } from "./settings/desktop-settings-electron.js";
 import { clampWindowStateToWorkAreas, createWindowStateStore } from "./settings/window-state.js";
-import {
-  isDesktopManagedDaemonRunningSync,
-  stopDesktopDaemonViaCli,
-} from "./daemon/daemon-manager.js";
-import {
-  createQuitLifecycle,
-  registerExternalQuitSignals,
-  stopDesktopManagedDaemonOnQuitIfNeeded,
-} from "./daemon/quit-lifecycle.js";
+import { createQuitLifecycle, registerExternalQuitSignals } from "./daemon/quit-lifecycle.js";
 import { runDesktopStartup } from "./desktop-startup.js";
 import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.js";
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
@@ -111,7 +106,7 @@ const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
+const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Daedal DSH";
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
@@ -120,6 +115,7 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
 const agentNavigationInbox = new AgentNavigationInbox();
+let dshIpc: DesktopDshIpc | undefined;
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -707,6 +703,10 @@ async function createWindow(
   });
   applyDesktopWindowChromeMode({ win: mainWindow, mode: DESKTOP_WINDOW_CHROME_MODE });
 
+  dshIpc?.attach(
+    mainWindow.webContents,
+    app.isPackaged ? `${APP_SCHEME}://app` : new URL(DEV_SERVER_URL).origin,
+  );
   const webContentsId = mainWindow.webContents.id;
   options.onCreated?.(webContentsId);
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
@@ -925,6 +925,13 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
 
+  dshIpc = new DesktopDshIpc(
+    new DesktopDshDeviceStore(
+      path.join(app.getPath("userData"), "dsh-device-access.v1"),
+      safeStorage,
+      process.platform,
+    ),
+  );
   const appDistDir = getAppDistDir();
   protocol.handle(APP_SCHEME, (request) => {
     const { pathname, search, hash } = new URL(request.url);
@@ -961,7 +968,7 @@ async function bootstrap(): Promise<void> {
     },
   });
   ensureNotificationCenterRegistration();
-  registerDaemonManager();
+  registerDaemonManager({ allowDaemonManagement: false });
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
   registerNotificationHandlers();
@@ -1020,22 +1027,13 @@ void runDesktopStartup({
   process.exit(1);
 });
 
-function showDaemonShutdownDialog(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("paseo:event:quitting", {});
-  }
-}
-
 const quitLifecycle = createQuitLifecycle({
   app,
-  closeTransportSessions: closeAllTransportSessions,
-  stopDesktopManagedDaemonIfNeeded: () =>
-    stopDesktopManagedDaemonOnQuitIfNeeded({
-      settingsStore: getDesktopSettingsStore(),
-      isDesktopManagedDaemonRunning: isDesktopManagedDaemonRunningSync,
-      stopDaemon: () => stopDesktopDaemonViaCli("quit"),
-      showShutdownFeedback: showDaemonShutdownDialog,
-    }),
+  closeTransportSessions: async () => {
+    await dshIpc?.dispose();
+    await closeAllTransportSessions();
+  },
+  stopDesktopManagedDaemonIfNeeded: async () => false,
   installAppUpdateOnQuit: async (signal) => {
     const settings = await getDesktopSettingsStore().get();
     return installAppUpdateOnQuit({

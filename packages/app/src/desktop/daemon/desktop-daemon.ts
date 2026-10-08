@@ -179,7 +179,7 @@ function parseDesktopUpdaterDiagnostics(raw: unknown): DesktopUpdaterDiagnostics
 }
 
 export function shouldUseDesktopDaemon(): boolean {
-  return isElectronRuntime();
+  return isElectronRuntime() && getDesktopHost()?.managesDaemon !== false;
 }
 
 export async function getDesktopDaemonStatus(): Promise<DesktopDaemonStatus> {

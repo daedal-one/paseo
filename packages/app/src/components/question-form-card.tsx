@@ -1,5 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { View, Text, Pressable, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -8,7 +8,10 @@ import { useTranslation } from "react-i18next";
 import type { PendingPermission } from "@/types/shared";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { isWeb } from "@/constants/platform";
-import { EditingTextInput as TextInput } from "@/components/ui/text-input";
+import {
+  EditingTextInput as TextInput,
+  type EditingTextInputHandle,
+} from "@/components/ui/text-input";
 import {
   areQuestionsAnswered,
   buildQuestionFormUpdatedInput,
@@ -25,6 +28,25 @@ interface QuestionFormCardProps {
   permission: PendingPermission;
   onRespond: (response: AgentPermissionResponse) => void;
   isResponding: boolean;
+  submissionError?: string | null;
+}
+
+function SubmissionError({ message }: { message?: string | null }) {
+  if (!message) return null;
+  return (
+    <Text accessibilityRole="alert" testID="permission-submit-error" style={styles.questionText}>
+      {message}
+    </Text>
+  );
+}
+
+function questionActionLabel(
+  last: boolean,
+  error: string | null | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (!last) return t("message.question.next");
+  return error ? t("common.actions.retry") : t("message.question.submit");
 }
 
 const IS_WEB = isWeb;
@@ -276,6 +298,10 @@ function QuestionOtherInput({
   onSubmit,
 }: QuestionOtherInputProps) {
   const { theme } = useUnistyles();
+  const inputRef = useRef<EditingTextInputHandle>(null);
+  useEffect(() => {
+    if (inputRef.current?.getText() !== value) inputRef.current?.replaceText(value);
+  }, [qIndex, value]);
   const handleChange = useCallback(
     (text: string) => {
       onChange(qIndex, text);
@@ -308,6 +334,7 @@ function QuestionOtherInput({
       accessibilityLabel={accessibilityLabel}
       placeholder={placeholder}
       placeholderTextColor={theme.colors.foregroundMuted}
+      ref={inputRef}
       initialValue={value}
       onChangeText={handleChange}
       onSubmitEditing={onSubmit}
@@ -317,7 +344,12 @@ function QuestionOtherInput({
   );
 }
 
-export function QuestionFormCard({ permission, onRespond, isResponding }: QuestionFormCardProps) {
+export function QuestionFormCard({
+  permission,
+  onRespond,
+  isResponding,
+  submissionError,
+}: QuestionFormCardProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -326,6 +358,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
     [permission.request.input],
   );
 
+  const acceptsStructuredAnswers = permission.request.input?.answerFormat === "structured";
   const [selections, setSelections] = useState<Record<number, Set<number>>>({});
   const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
   const [respondingAction, setRespondingAction] = useState<"submit" | "dismiss" | null>(null);
@@ -349,29 +382,34 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
       }
 
       setSelections((prev) => ({ ...prev, [qIndex]: next }));
-      setOtherTexts((prev) => {
-        if (!prev[qIndex]) return prev;
-        const nextTexts = { ...prev };
-        delete nextTexts[qIndex];
-        return nextTexts;
-      });
+      if (!acceptsStructuredAnswers || !multiSelect) {
+        setOtherTexts((prev) => {
+          if (!prev[qIndex]) return prev;
+          const nextTexts = { ...prev };
+          delete nextTexts[qIndex];
+          return nextTexts;
+        });
+      }
 
       if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
         setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
       }
     },
-    [activeQuestionIndex, questions, selections],
+    [acceptsStructuredAnswers, activeQuestionIndex, questions, selections],
   );
 
-  const setOtherText = useCallback((qIndex: number, text: string) => {
-    setOtherTexts((prev) => ({ ...prev, [qIndex]: text }));
-    if (text.length > 0) {
-      setSelections((prev) => {
-        if (!prev[qIndex] || prev[qIndex].size === 0) return prev;
-        return { ...prev, [qIndex]: new Set<number>() };
-      });
-    }
-  }, []);
+  const setOtherText = useCallback(
+    (qIndex: number, text: string) => {
+      setOtherTexts((prev) => ({ ...prev, [qIndex]: text }));
+      if (text.length > 0 && !(acceptsStructuredAnswers && questions?.[qIndex]?.multiSelect)) {
+        setSelections((prev) => {
+          if (!prev[qIndex] || prev[qIndex].size === 0) return prev;
+          return { ...prev, [qIndex]: new Set<number>() };
+        });
+      }
+    },
+    [acceptsStructuredAnswers, questions],
+  );
 
   const allAnswered = areQuestionsAnswered(questions, selections, otherTexts);
   const resolvedActiveQuestionIndex = questions
@@ -458,9 +496,8 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
   );
 
   const primaryDisabled = isResponding || (isLastQuestion ? !allAnswered : !activeQuestionAnswered);
-  const primaryActionLabel = isLastQuestion
-    ? t("message.question.submit")
-    : t("message.question.next");
+  const primaryActionLabel = questionActionLabel(isLastQuestion, submissionError, t);
+  const activeResponse = isResponding ? respondingAction : null;
   const submitButtonStyle = useCallback(
     ({ pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.actionButton,
@@ -524,6 +561,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
 
   return (
     <View style={containerStyle} testID="question-form-card">
+      <SubmissionError message={submissionError} />
       <QuestionNav
         questions={questions}
         activeIndex={resolvedActiveQuestionIndex}
@@ -582,7 +620,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
           accessibilityLabel={dismissLabel}
           testID="question-form-dismiss"
         >
-          {respondingAction === "dismiss" ? (
+          {activeResponse === "dismiss" ? (
             <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
           ) : (
             <View style={styles.actionContent}>
@@ -600,7 +638,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
           accessibilityLabel={primaryActionLabel}
           testID="question-form-primary-action"
         >
-          {respondingAction === "submit" ? (
+          {activeResponse === "submit" ? (
             <LoadingSpinner size="small" color={theme.colors.accentForeground} />
           ) : (
             <View style={styles.actionContent}>

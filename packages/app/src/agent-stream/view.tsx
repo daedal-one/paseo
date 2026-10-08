@@ -1518,12 +1518,24 @@ function PermissionRequestCard({
         permission={permission}
         onRespond={handleResponse}
         isResponding={isResponding}
+        submissionError={
+          permissionMutation.isError ? t("agentStream.permission.submitFailed") : null
+        }
       />
     );
   }
 
   const footer = (
     <>
+      {permissionMutation.isError ? (
+        <Text
+          accessibilityRole="alert"
+          testID="permission-submit-error"
+          style={permissionStyles.description}
+        >
+          {t("agentStream.permission.submitFailed")}
+        </Text>
+      ) : null}
       <Text testID="permission-request-question" style={permissionStyles.question}>
         {t("agentStream.permission.question")}
       </Text>

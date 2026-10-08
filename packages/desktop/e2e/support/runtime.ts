@@ -56,6 +56,7 @@ export async function loadRealDaemonState(): Promise<RealDaemonState> {
 export interface DesktopRuntimeConfig {
   serverId: string;
   updateAvailable?: boolean;
+  updatesUnavailable?: boolean;
   latestVersion?: string;
   updateReadyToInstall?: boolean;
   manualUpdateBypassesRollout?: boolean;
@@ -184,6 +185,7 @@ export async function installDesktopRuntime(
 
     function buildAppUpdateCheckResult(hasUpdate: boolean, readyToInstall: boolean) {
       return {
+        unavailable: cfg.updatesUnavailable === true,
         hasUpdate,
         readyToInstall,
         currentVersion: "1.0.0",

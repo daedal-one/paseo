@@ -33,7 +33,7 @@ export const companionDiscovery = {
     paired: "{{name}} · Vinculado",
     connectHint: "Mantén Tailscale conectado en el teléfono y en este host.",
     connect: "Conectar al host",
-    invalidHost: "Este enlace de vinculación de DSH Companion no es válido.",
+    invalidHost: "Este enlace de vinculación de Daedal DSH no es válido.",
     hostChanged: "La identidad del host ha cambiado. Escanea un nuevo código QR.",
     connectionFailed:
       "No se pudo conectar. Comprueba Tailscale, el host y su contraseña si se requiere.",
@@ -53,7 +53,7 @@ export const companionDiscovery = {
     paired: "{{name}} · Associé",
     connectHint: "Gardez Tailscale connecté sur votre téléphone et cet hôte.",
     connect: "Connecter l'hôte",
-    invalidHost: "Ce lien d'association DSH Companion n'est pas valide.",
+    invalidHost: "Ce lien d'association Daedal DSH n'est pas valide.",
     hostChanged: "L'identité de l'hôte a changé. Scannez un nouveau code QR.",
     connectionFailed:
       "Connexion impossible. Vérifiez Tailscale, l'hôte et son mot de passe si nécessaire.",
@@ -74,7 +74,7 @@ export const companionDiscovery = {
     paired: "{{name}} · ペアリング済み",
     connectHint: "スマートフォンとこのホストで Tailscale を接続したままにしてください。",
     connect: "ホストに接続",
-    invalidHost: "有効な DSH Companion ペアリングリンクではありません。",
+    invalidHost: "有効な Daedal DSH ペアリングリンクではありません。",
     hostChanged: "ホストの識別情報が変わりました。新しい QR コードを読み取ってください。",
     connectionFailed:
       "接続できませんでした。Tailscale、ホスト、必要な場合はパスワードを確認してください。",
@@ -94,7 +94,7 @@ export const companionDiscovery = {
     paired: "{{name}} · 페어링됨",
     connectHint: "휴대폰과 이 호스트에서 Tailscale 연결을 유지하세요.",
     connect: "호스트에 연결",
-    invalidHost: "올바른 DSH Companion 페어링 링크가 아닙니다.",
+    invalidHost: "올바른 Daedal DSH 페어링 링크가 아닙니다.",
     hostChanged: "호스트의 식별 정보가 변경되었습니다. 새 QR 코드를 스캔하세요.",
     connectionFailed:
       "연결하지 못했습니다. Tailscale, 호스트 및 필요한 경우 비밀번호를 확인하세요.",
@@ -115,7 +115,7 @@ export const companionDiscovery = {
     paired: "{{name}} · Pareado",
     connectHint: "Mantenha o Tailscale conectado no celular e neste host.",
     connect: "Conectar ao host",
-    invalidHost: "Este link de pareamento do DSH Companion não é válido.",
+    invalidHost: "Este link de pareamento do Daedal DSH não é válido.",
     hostChanged: "A identidade do host mudou. Escaneie um novo código QR.",
     connectionFailed:
       "Não foi possível conectar. Verifique o Tailscale, o host e a senha, se necessária.",
@@ -135,7 +135,7 @@ export const companionDiscovery = {
     paired: "{{name}} · Сопряжён",
     connectHint: "Оставьте Tailscale подключённым на телефоне и этом хосте.",
     connect: "Подключить хост",
-    invalidHost: "Недействительная ссылка сопряжения DSH Companion.",
+    invalidHost: "Недействительная ссылка сопряжения Daedal DSH.",
     hostChanged: "Идентификатор хоста изменился. Отсканируйте новый QR-код.",
     connectionFailed:
       "Не удалось подключиться. Проверьте Tailscale, хост и пароль, если он требуется.",
@@ -153,7 +153,7 @@ export const companionDiscovery = {
     paired: "{{name}} · 已配对",
     connectHint: "请保持手机和此主机上的 Tailscale 连接。",
     connect: "连接主机",
-    invalidHost: "这不是有效的 DSH Companion 配对链接。",
+    invalidHost: "这不是有效的 Daedal DSH 配对链接。",
     hostChanged: "主机身份已更改。请扫描新的配对二维码。",
     connectionFailed: "无法连接。请检查 Tailscale、主机以及所需的密码。",
   },
@@ -170,7 +170,7 @@ export const companionDiscovery = {
     paired: "{{name}} · مقترن",
     connectHint: "أبقِ Tailscale متصلًا على هاتفك وهذا المضيف.",
     connect: "الاتصال بالمضيف",
-    invalidHost: "رابط اقتران DSH Companion هذا غير صالح.",
+    invalidHost: "رابط اقتران Daedal DSH هذا غير صالح.",
     hostChanged: "تغيرت هوية المضيف. امسح رمز اقتران جديدًا.",
     connectionFailed: "تعذر الاتصال. تحقق من Tailscale والمضيف وكلمة المرور إن كانت مطلوبة.",
   },

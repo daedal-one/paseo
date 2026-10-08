@@ -18,6 +18,16 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
+// Metro must see physical dependency targets outside the workspace, including exports.
+config.watchFolders = [
+  ...new Set([
+    ...config.watchFolders,
+    ...config.resolver.nodeModulesPaths
+      .filter((root) => fs.existsSync(root))
+      .map((root) => fs.realpathSync(root)),
+  ]),
+];
+
 const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 
 // Keep app exports deterministic across dev machines and CI. Metro's Watchman
@@ -76,7 +86,7 @@ function resolveWithCustomWebOverlay(context, moduleName, platform) {
   return defaultResolveRequest(context, moduleName, platform);
 }
 
-config.resolver.resolveRequest = (context, moduleName, platform) => {
+function resolveAppModule(context, moduleName, platform) {
   if (isFdroidBuild && platform === "android" && fdroidModuleOverrides[moduleName]) {
     return resolveWithCustomWebOverlay(context, fdroidModuleOverrides[moduleName], platform);
   }
@@ -91,6 +101,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
 
   return resolveWithCustomWebOverlay(context, moduleName, platform);
+}
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolution = resolveAppModule(context, moduleName, platform);
+  if (resolution.type !== "sourceFile" || !path.isAbsolute(resolution.filePath)) return resolution;
+
+  // Shared dependency directories must produce one module identity for React contexts.
+  return { ...resolution, filePath: fs.realpathSync(resolution.filePath) };
 };
 
 if (process.env.PASEO_SERVE_SIM_PREVIEW === "1") {

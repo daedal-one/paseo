@@ -5371,6 +5371,9 @@ export class DaemonClient {
     response: AgentPermissionResponse,
     timeout = 15000,
   ): Promise<AgentPermissionResolvedPayload> {
+    if (this.connectionState.status !== "connected") {
+      throw new DaemonConnectionError("Reconnect to the host before answering this request.");
+    }
     const message = SessionInboundMessageSchema.parse({
       type: "agent_permission_response",
       agentId,

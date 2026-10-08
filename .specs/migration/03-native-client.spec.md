@@ -1,0 +1,131 @@
+---
+id: TASK:migration/03-native-client
+type: task
+status: accepted
+summary: "Prove native DSH connectivity and device access."
+owners: [daedal-one]
+progress: done
+addresses:
+  [
+    "IFC:frontend/dsh-connection",
+    "REQ:frontend/hosts-and-access",
+    "REQ:frontend/resilience",
+    "REQ:frontend/sessions",
+  ]
+blocked_by: ["TASK:migration/01-contract-baseline"]
+---
+
+# Prove native DSH connectivity and device access
+
+## Plan
+
+Test existing DSH client modules under Metro/Hermes, browser and Electron; extract a supported portable face in DSH only where needed. Add transports, handshake, operation reconciliation, enrollment/revocation and DSH-host discovery. Build one native session flow.
+
+## Portable dependency installation
+
+Consume the DSH-owned `@deepseek-ai/dsh-client` application distribution and its shared dependency archives, pinning their source commit, checksums and package-manager lockfile. Consume API, Conversation, Chat, the pending-interaction registry and approval/question carriers and Remote consumers from that one distribution so generated service types, contributed pending values and Chat declarations retain one identity. Verify registered-carrier narrowing and shared Session/Remote registration types after installation. Qualify installed answers, precedence, cancellation and disposal through the iOS bundler; this dependency qualification does not establish native answer controls or actual Remote delivery. Do not install the API-only distribution alongside it. Do not copy DSH wire schemas or import Host packages into the app. Verify a clean package-manager install and strict declaration consumption before running the installed dependency through Metro/Hermes. Native runtime assembly uses one Cordis root and one hydrated Session selection per Host, explicit generated capability requirements and the app-owned cancellation adapter. Host credential storage, platform transports, QR enrollment and Session presentation remain required application work.
+
+## Browser owner transport
+
+The browser preview runs on the DSH Host origin and uses its existing browser-owner authentication. It does not enroll a device, copy cookies into JavaScript or persist bearer grants. Pin HTTP and WebSocket requests to the complete page origin, reject URL credentials and fragments, refuse redirects, and preserve cancellation through response decoding. Unsupported page schemes fail before network access. Read Host identity through the authenticated generated Connection RPC and bind the shared runtime to that identity; every subsequent generation still requires native capability admission. Follow browser online/offline events and detach them when disposing the runtime. Cancelling initialization disposes late arrivals rather than publishing another connection. Other Host origins require separately authenticated pages; no cross-origin credential proxy is implied.
+
+Share Session presentation and interaction owners across platform screens. Browser qualification must use a real authenticated Host, including incompatible admission, cancellation, read/reconnect and an actual prompt/interaction. A transport unit test or static export does not satisfy this acceptance. Desktop uses its own protected device storage and transport owner; the browser cookie path must not become an Electron credential fallback.
+
+Build the browser preview with a matching `/daedal` asset/router base and mount it through DSH's authenticated frontend-static owner, with `/dsh-hosts` as an explicit index route. Retain the root Web interface and its launch-token sign-in. The mounted distribution owns its bootstrap and shares the Host API and Session writer.
+
+## Desktop device access
+
+Electron stores device grants in its main process using platform-protected encryption. Refuse missing encryption or Linux's plaintext backend; never fall back to ordinary storage. Serialize encrypted-record mutations and atomically replace the protected file. Only nonsecret Host descriptors cross into the renderer. Enrollment consumes one reviewed challenge and saves its grant before success; failure and uncertainty never replay a claim.
+
+The main process owns every authenticated HTTP request and WebSocket for one window's connection. Pin targets to its saved origin, refuse redirects and ambient cookies, and attach device credentials only in headers. Validate IPC requests and permit them only from the registered application window's top frame on its configured application origin. Bind each transport and request identifier to that window; another window or embedded browser cannot borrow it. Renderer cancellation, navigation, window destruction, local forgetting and application exit release owned carriers without stopping the external DSH Host. Errors expose fixed codes, never credentials or transport exception bodies.
+
+The renderer composes the same installed DSH runtime and shared directory using this bounded transport interface. Its native Host screen accepts enrollment QR contents for review, opens saved Hosts and exposes the existing Session, prompt and interaction controls. No device credential or browser-owner cookie reaches renderer storage. Qualification requires protected-storage and IPC isolation tests, real Electron enrollment and reconnect against an isolated Host, and a packaged desktop smoke before the direct desktop path is considered usable.
+
+## Native device access
+
+Use the installed DSH validators for enrollment and protected grant records. Native grants remain in Expo SecureStore with device-only, unlocked keychain access; a nonsecret Host-id index is the only enrollment data in ordinary storage. Serialize index/secret mutations, keep partially saved entries visibly unpaired, and surface storage failures without disclosing credentials. A missing or invalid stored grant never falls back to legacy passwords or browser ownership.
+
+Pin every native HTTP and WebSocket target to the selected origin. Require HTTPS except explicit loopback or numeric Tailscale endpoints. Use Expo fetch to omit ambient cookies and reject redirects; retain caller/disposal cancellation through complete JSON-body decoding. Own a cancellable body reader: the SDK 54 native text/JSON helper waits only for body completion and can remain pending after cancellation. Send the device credential only in the Authorization header. The iOS WebSocket carrier must refuse redirects and pass the selected origin; the Host must reject invalid bearer credentials even if the platform includes a cookie. Qualification of other native carriers remains explicit.
+
+Enrollment submits one claim and never replays it after a lost result. Store a returned grant before presenting pairing success. Opening a saved Host hydrates and validates its record before creating the per-Host runtime; final disposal cancels that runtime and its authenticated carriers. Forgetting local access and revoking a Host-side grant remain distinct operations. The actual QR and Session screens must consume this owner before native-client acceptance. The native access module now supplies protected storage, iOS carriers and saved-runtime composition. Its focused tests qualify failure and ownership behavior with native-module substitutes; platform execution and the application screens remain separate acceptance gates.
+
+## Native Host directory
+
+Expose an iPhone-native Host directory from Settings while retaining the existing companion UI. Scanning only validates and displays a bounded, strict enrollment QR; claiming requires a separate confirmation showing the selected origin and Host identity. Challenges stay in memory and never enter navigation, ordinary storage or diagnostics. Repeated camera frames cannot submit or replace a reviewed enrollment, and unknown claim outcomes have explicit owner-side recovery.
+
+Own at most one active Host runtime in the directory. Switching hosts and forgetting local access wait for disposal; leaving the screen cancels pending enrollment and disposes late runtime arrivals. A failed final disposal prevents another directory owner from opening until the app restarts. List saved entries without exposing credentials, keep corrupt or partial records visible with recovery, and distinguish initial loading from an authoritative empty Session list. Use the generated DSH Session feed directly, including reconnect and pagination. Observe its read activity and structured failures: a settled refresh is not proof of success. Keep retained rows visible after failed refresh or continuation and expose retry without presenting an initial failure as an empty list. Directory browsing has no durable conversation selection; selected-conversation restore belongs to the subsequent conversation surface. Qualification covers lifecycle races, native rendering and real Host reads; QR camera use and physical-device acceptance remain distinct gates. Preview copy uses locale dictionaries with an explicit English fallback until translations are supplied.
+
+## Host-assisted discovery in the directory
+
+After a saved Host connection passes native generation admission, automatically request optional discovery through that Host's authenticated Connection RPC. Keep scanning and its failures independent of Session browsing and submission. Display bounded candidate metadata, explicit missing or disabled discovery, Tailscale availability, partial scans and an empty scan without claiming that every Host was searched. An explicit refresh repeats only the read. A new admitted generation may perform a new read; never replay pairing or Session mutations.
+
+Bind every scan to the assisting Host and activation. Generation loss, Host replacement, local forgetting and directory disposal abort the request, clear candidates and refuse late results. Serialize requests while cancellation drains and release every subscription at disposal. Validate responses through the installed DSH portable reader and retain no candidate metadata beyond the directory lifetime. Old Hosts without discovery remain usable for ordinary Sessions. Desktop IPC admits only the exact installed discovery endpoint through its existing window-owned authenticated transport; anonymous candidate advertisements are not renderer grant targets.
+
+Candidates are untrusted labels and probe-derived addresses, never enrollment records. A candidate matching a paired Host can open only that Host's saved origin and protected grant; an advertisement cannot replace that origin or label. A new candidate leads to the existing owner-authorized QR review, with a matching Host identity required. Keep the QR's authoritative origin intact even when discovery used a different address; never send its challenge to an advertised address. Cancelled review releases the candidate constraint, and a mismatched QR never dispatches a claim. An unavailable stored record stays a visible recovery case rather than becoming automatic re-enrollment. Browser owner pages may display candidates but keep authentication tied to the current page and do not enroll remote devices.
+
+Qualify the installed distribution, automatic and explicit reads, disconnect and replacement races, old Hosts, malformed or wrong-activation responses, candidate identity mismatch and cross-Host credential isolation. Exercise the actual shared screens against authenticated Hosts and keep real tailnet, simulator and physical iPhone evidence distinct.
+
+## Native Session reading
+
+The directory opens a listed Session within its existing Host owner and returns to the list without creating another connection or cancelling Host execution. Compose the installed Conversation binding and shared Chat Definitions over the Session binding's event source; do not duplicate event projection or open another history stream. A Host owns at most one visible Conversation. Repeated selection retains its identity; selection changes and Host disposal detach the previous binding and cancel deferred publication. An unknown or removed Session cannot replace the current view silently.
+
+Render the loaded Session window using stable Chat order and per-node subscriptions. React snapshot readers and subscriptions must retain their owning Session receiver, remain stable across renders and detach when the selected Session changes. Show authoritative loading, empty, removed, resynchronizing and failed-read states. Retain readable content during disconnection and offer an explicit reconnect or initial-read retry. Render supported text and reasoning without raw event JSON; unsupported content remains visibly identified. Rich renderers and older-history loading remain subsequent work, and the current DSH interface remains available. Native Session selection is transient until durable restore is implemented. Qualify real native rendering against an isolated DSH Host as well as deterministic ownership and streaming cases; neither proves physical-device acceptance.
+
+## Native text submission
+
+Keep the composer and Send control outside the scrolling transcript. Reuse the application keyboard dock and stationary composer viewport so the entire form stays within the space between the header and software keyboard. Long drafts and status messages scroll independently of Send; opening or closing the keyboard must not remount the draft. Keep the focused answer and the caret in a growing multiline draft visible within the fields viewport, above the fixed actions. Keyboard space has one owner; field scrolling must not reserve that space twice. Preserve access to the start of the transcript while the dock is translated. Qualify long history, long drafts, software-keyboard transitions and a first-tap submission through the actual native app; simulated layout and compilation do not satisfy these gates.
+
+Add a text-only composer to a loaded ordinary Session. Use its existing generated prompt operation in queue mode so a running turn receives a queued follow-up; never use steering implicitly. The form owns draft text and one pending operation, requires an admitted connection and a readable, available Session, and prevents duplicate taps. Preserve drafts on a rejected or uncertain result and clear only the submitted draft after Host-confirmed acceptance; edits made while a request is pending remain intact, even if the user restores the same text. Keep an uncertain submitted message distinct from a newer unsent draft.
+
+Known pre-admission refusals are retryable after the user corrects the cause. Transport failure, cancellation, generation loss and unclassified failures remain unknown outcomes, never confirmed rejection. Do not expose a resend for an uncertain attempt or retry it on reconnect. Keep its draft and correlate the original request identity through the installed DSH admission observer. An exact authoritative history or queue match confirms acceptance even when the reply was lost; clear only that submitted draft and retain intervening edits. Local echoes and identical text are not confirmation. Reconnect may reveal a match but must never send another prompt. A missing match stays unknown; retry after an unobserved attempt remains unavailable. Ignore late transport failure after authoritative admission and release the observer when the conversation closes. Closing the view cancels only its in-flight request and never sends Session cancellation. A late reply cannot mutate a closed or replacement composer. Subagent submission, attachments and queue editing remain unavailable in this increment. Qualify controlled success, rejection, lost response, duplicate taps, draft edits, readiness and disposal through the real shared runtime, followed by an isolated Host refusal and platform rendering; static checks are not native acceptance.
+
+## Native pending interactions
+
+Compose one Host-owned pending-interaction registry with the installed approval and question Remote consumers. Each consumer's Remote service and domain registrar belong to the same Cordis contribution. Expose exact shared request objects by Session without copying waterfall settlement, Session scope or priority into the app. Native controls show the effective request, preserve unsent question drafts while a higher-priority request is visible, and keep requests for other Sessions reachable from the Session list. Leaving the directory releases its consumers; leaving one conversation does not cancel Host execution.
+
+Render tool approval with allow-once and reject choices. Render the complete question batch with verbatim option labels, single or multiple selection, free text and explicit per-question skip; submit only when every question is answered or deliberately skipped. Show plan detail and use the shared plan-review discriminator without assuming option order. Cancel a question only through its shared cancellation method. A form dispatches at most one settlement and never retries after delivery loss. Local carrier settlement is not Host acceptance; authoritative Session output and connection state remain the evidence of progress. Withdraw cancelled or disconnected requests and never restore stale answers on reconnect.
+
+Qualify generated Remote Event delivery, Session and Host isolation, mixed-request precedence, complete answers, Host cancellation, generation loss and disposal using installed owners. Follow with actual authenticated Host delivery and native controls, including the software keyboard. Controlled carriers and iOS compilation do not establish actual Host or device answering.
+
+## Implementation references
+
+- [Native discovery ownership](spec:src:packages/app/src/dsh/discovery.ts)
+- [Shared discovery controls](spec:src:packages/app/src/dsh/ui/host-discovery.tsx)
+- [Discovery and enrollment verification](spec:src:packages/app/src/dsh/discovery.test.ts)
+
+- [Desktop protected access](spec:src:packages/desktop/src/dsh/access.ts)
+- [Desktop native directory](spec:src:packages/app/src/dsh/ui/directory-screen.electron.tsx)
+- [Browser access](spec:src:packages/app/src/dsh/browser/access.ts)
+- [Shared directory ownership](spec:src:packages/app/src/dsh/directory.ts)
+- [Protected access](spec:src:packages/app/src/dsh/native/access.ts)
+- [Native directory ownership](spec:src:packages/app/src/dsh/native/directory.ts)
+- [Shared native Session runtime](spec:src:packages/app/src/dsh/runtime.ts)
+- [Native Session reading](spec:src:packages/app/src/dsh/ui/conversation.tsx)
+- [Native prompt ownership](spec:src:packages/app/src/dsh/prompt.ts)
+- [Native interaction form](spec:src:packages/app/src/dsh/interaction-form.ts)
+- [Native interaction controls](spec:src:packages/app/src/dsh/ui/interactions.tsx)
+- [Native text composer](spec:src:packages/app/src/dsh/ui/composer.tsx)
+- [iPhone directory screen](spec:src:packages/app/src/dsh/ui/directory-screen.ios.tsx)
+- [Directory lifecycle verification](spec:src:packages/app/src/dsh/native/directory.test.ts)
+
+## Acceptance
+
+Physical iPhone, desktop and browser attach to the same native session, stream, prompt and resolve an interaction without Paseo timeline projection. Authentication, incompatible versions, lost response and reconnect cases pass; backend gaps have accepted DSH specs.
+
+## Provisional physical iPhone acceptance
+
+Carlo accepted the remaining physical iPhone checks as passed for now on 20 September 2026, reporting that the app is mostly working and explicitly directing the migration to skip those tests. This clears the current physical-device acceptance requirement, including camera/QR, keyboard, interaction and network checks, for the delivered TestFlight 0.8.0 build 7003006 from frontend commit `491b80343a9342077b5388154d4e3140fd599967`.
+
+Record this disposition as provisional user acceptance. Automated device checks remain unperformed; the decision does not establish observed native-preview behavior. Do not wait for the outstanding device-access request, repeat it or keep iPhone availability as a migration blocker. Preserve that evidence distinction in release reports. Host activation, non-device regression checks, compatibility, publication and later feature work retain their own requirements.
+
+[Full work package and estimates](spec:doc:docs/daedal-dsh-migration-plan.md).
+
+## Delivery qualification
+
+Frontend application source `491b80343a9342077b5388154d4e3140fd599967` is qualified with native Host source `752e8d433dee797dea1b2e3dc032ce1846c28c85`. Browser and packaged Electron checks cover enrollment, Session reads, prompts, approval/questions, loss and reconnect, protected restore, cross-Host discovery and revocation. The intended dsh-dev Host preserves all 84 existing Sessions; independent native reads and its numeric-tailnet owner QR passed. The published 491b companion server now runs from an isolated release while the original staged checkout remains intact. Existing 18191 and current 491b clients both connect, discover Hosts and read Sessions.
+
+The installed ad-hoc-signed desktop and available TestFlight 0.8.0 build 7003006 use the qualified application source. Documentation-only acceptance records do not change either binary. The physical iPhone disposition above is provisional user acceptance, not an executed device test. Native access remains opt-in under Settings → DSH hosts; the existing interface and companion route remain available. Older history, rich tools, attachments, managed runtime, notarization and cutover retain their own tasks.
+
+The intended Linux Web profile and real rootless Podman checks pass. A separate headless smoke cannot acquire its user-namespace sandbox on this server and fails closed; its macOS owner passes. No host security policy was relaxed. Local evidence under `.dev/daedal-dsh-plan-audit/native-host-activation-20260920/` retains that limitation, exact sources, browser/runtime evidence and two exercised service recoveries with Session IDs preserved. This is phase-specific qualification, not full semantic adherence.
+
+Publish the qualified backend migration branch before the frontend documentation checkpoint. The installed native Client remains pinned to backend `68284837dffe92fd363cc6eb7dcd1422806b5fe6`; its required endpoint modes, fingerprints and semantic revisions match the merged Host. Retain the frozen compatible Host and companion releases and stopped private backups. Their exercised service recovery does not establish general Session data downgrade support.

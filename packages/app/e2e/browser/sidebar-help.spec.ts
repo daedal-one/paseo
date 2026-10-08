@@ -3,14 +3,14 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { openSettingsSection } from "../support/helpers/settings";
 import { openWhatsNew, release, serveChangelog } from "../support/helpers/changelog";
 
-const DISCORD_DESTINATION =
-  /^https:\/\/(?:discord\.gg\/jz8T2uahpH|discord\.com\/invite\/jz8T2uahpH)(?:[/?#]|$)/;
+const HELP_DESTINATION =
+  /^https:\/\/github\.com\/daedal-one\/paseo\/blob\/main\/docs\/dsh-companion\.md(?:[?#]|$)/;
 const GITHUB_ISSUE_DESTINATION =
-  /^https:\/\/github\.com\/(?:getpaseo\/paseo\/issues\/new(?:\/choose)?(?:[/?#]|$)|login\?return_to=https%3A%2F%2Fgithub\.com%2Fgetpaseo%2Fpaseo%2Fissues%2Fnew$)/;
-const CHANGELOG_DESTINATION = /^https:\/\/paseo\.sh\/changelog(?:[/?#]|$)/;
+  /^https:\/\/github\.com\/(?:daedal-one\/paseo\/issues\/new(?:\/choose)?(?:[/?#]|$)|login\?return_to=https%3A%2F%2Fgithub\.com%2Fdaedal-one%2Fpaseo%2Fissues%2Fnew$)/;
+const CHANGELOG_DESTINATION = /^https:\/\/github\.com\/daedal-one\/paseo\/releases(?:[/?#]|$)/;
 // The name and the version are separate cells of a key/value row, so they meet with no space
 // between them in the row's text content.
-const APP_VERSION = /^Paseo\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const APP_VERSION = /^Daedal DSH\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 async function openHelpMenu(page: Page): Promise<void> {
   await page.getByTestId("sidebar-help").click();
@@ -48,9 +48,15 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
 
   await test.step("opens diagnostics and keyboard shortcuts", async () => {
     await openHelpMenu(page);
-    await expect(page.getByText("Help", { exact: true })).toBeVisible();
-    await expect(page.getByText("Report an issue", { exact: true })).toBeVisible();
-    await expect(page.getByText("What's new", { exact: true })).toBeVisible();
+    await expect(
+      page.getByTestId("sidebar-help-menu").getByText("Help", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("sidebar-help-menu").getByText("Report an issue", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("sidebar-help-menu").getByText("What's new", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByTestId("sidebar-help-version")).toHaveText(APP_VERSION);
 
     await page.getByTestId("sidebar-help-diagnostics").click();
@@ -65,7 +71,7 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
 
   await test.step("opens support pages", async () => {
     await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-discord", DISCORD_DESTINATION);
+    await expectExternalPage(page, "sidebar-help-docs", HELP_DESTINATION);
 
     await openHelpMenu(page);
     await expectExternalPage(page, "sidebar-help-github", GITHUB_ISSUE_DESTINATION);

@@ -21,6 +21,9 @@ export function resolveDraftKey(input: {
 export function buildDraftAgentControls(input: {
   formState: UseAgentFormStateResult;
   features?: DraftAgentControlsProps["features"];
+  featuresLoading?: boolean;
+  featureError?: string;
+  onRetryFeatures?: () => void;
   onSetFeature?: DraftAgentControlsProps["onSetFeature"];
   onApplyAgentProfile: DraftAgentControlsProps["onApplyAgentProfile"];
   onDropdownClose?: DraftAgentControlsProps["onDropdownClose"];
@@ -44,6 +47,9 @@ export function buildDraftAgentControls(input: {
     onSelectThinkingOption: formState.setThinkingOptionFromUser,
     onApplyAgentProfile,
     features,
+    featuresLoading: input.featuresLoading,
+    featureError: input.featureError,
+    onRetryFeatures: input.onRetryFeatures,
     onSetFeature,
     onDropdownClose,
     onModelSelectorOpen: formState.refetchProviderModelsIfStale,

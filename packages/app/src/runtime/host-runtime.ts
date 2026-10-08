@@ -1470,6 +1470,10 @@ export class HostRuntimeStore {
       }
     }
 
+    if (getDesktopHost()?.managesDaemon === false) {
+      return;
+    }
+
     if (override) {
       this.bootstrapConfiguredOverride(override);
     } else {

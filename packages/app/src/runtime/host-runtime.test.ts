@@ -3588,6 +3588,33 @@ describe("HostRuntimeStore", () => {
 });
 
 describe("readInitialDaemonConnectionHint", () => {
+  it("does not probe the generic localhost daemon when the Daedal companion is unavailable", async () => {
+    const seenProbes: string[] = [];
+    const previousWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = { paseoDesktop: { managesDaemon: false } };
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => new FakeDaemonClient() as unknown as DaemonClient,
+        connectToDaemon: async ({ connection }) => {
+          if (connection.type === "directTcp") seenProbes.push(connection.endpoint);
+          throw new Error("companion unavailable");
+        },
+        getClientId: async () => "cid_daedal_external",
+        readInitialConnectionHint: () => ({ listen: "127.0.0.1:6769", useTls: false }),
+      },
+      storage: createMemoryHostRuntimeStorage(),
+    });
+
+    try {
+      await store.boot();
+      expect(seenProbes).toEqual(["localhost:6769"]);
+      expect(store.getHosts()).toHaveLength(0);
+    } finally {
+      store.syncHosts([]);
+      (globalThis as { window?: unknown }).window = previousWindow;
+    }
+  });
+
   it("returns null when no hint is present", () => {
     expect(readInitialDaemonConnectionHint({ isWebRuntime: true })).toBeNull();
   });

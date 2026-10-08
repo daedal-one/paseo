@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, ScrollView } from "react-native";
@@ -26,6 +27,7 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { isFdroidBuild } from "@/constants/build-profile";
 import { isWeb, isNative } from "@/constants/platform";
 import { isElectronRuntime } from "@/desktop/host";
+import { CompanionDiscoverySection } from "./companion-discovery-section";
 
 interface WelcomeAction {
   key: "scan-qr" | "direct-connection" | "remote-ssh" | "paste-pairing-link";
@@ -188,8 +190,8 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     router.replace(buildOpenProjectRoute());
   }, [router]);
 
-  const handleOpenPaseoSite = useCallback(() => {
-    void openExternalUrl("https://paseo.sh");
+  const handleOpenHelp = useCallback(() => {
+    void openExternalUrl(PRODUCT_LINKS.help);
   }, []);
 
   const handleOpenSettings = useCallback(() => {
@@ -212,6 +214,10 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
       finishOnboarding();
     },
     [onHostAdded, finishOnboarding],
+  );
+  const handleDiscoveredHost = useCallback(
+    (profile: HostProfile) => handleHostSaved({ profile, serverId: profile.serverId }),
+    [handleHostSaved],
   );
 
   const actions: WelcomeAction[] =
@@ -291,14 +297,17 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
             <Text style={styles.title}>{t("onboarding.title")}</Text>
             <Text style={styles.subtitle}>{t("onboarding.subtitle")}</Text>
             {isNative ? (
-              <Pressable style={styles.setupLink} onPress={handleOpenPaseoSite}>
-                <Text style={styles.setupLinkText}>paseo.sh</Text>
+              <Pressable style={styles.setupLink} onPress={handleOpenHelp}>
+                <Text style={styles.setupLinkText}>{t("productLinks.help")}</Text>
                 <ExternalLink size={14} color={theme.colors.accent} />
               </Pressable>
             ) : null}
           </View>
 
           <View style={styles.actions}>
+            {isElectronRuntime() ? (
+              <CompanionDiscoverySection onConnected={handleDiscoveredHost} />
+            ) : null}
             {actions.map((action) => (
               <WelcomeActionButton key={action.key} action={action} />
             ))}

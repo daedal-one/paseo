@@ -1,3 +1,4 @@
+import { hasAppUpdateConfiguration } from "./app-update-availability.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -224,7 +225,8 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
 
 const appUpdateService = createAppUpdateService({
   runtime: new ElectronAppUpdateRuntime(),
-  isPackaged: () => app.isPackaged,
+  canUpdate: async () =>
+    app.isPackaged && hasAppUpdateConfiguration(path.join(process.resourcesPath, "app-update.yml")),
   now: () => Date.now(),
   bucket: async () => bucketFromStagingUserId(await getStagingUserId()),
   reportCheckError: (error) => {

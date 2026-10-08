@@ -1,3 +1,8 @@
+import type {
+  DesktopDshCommand,
+  DesktopDshSocketEvent,
+  DesktopDshReply,
+} from "@getpaseo/protocol/dsh-access";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { BrowserKeyboardPolicy } from "./features/browser-keyboard/index.js";
 import type { DesktopWindowChromeMode } from "./window/chrome.js";
@@ -29,8 +34,14 @@ interface AttachedBrowserRegistration {
   webContentsId: number;
 }
 
+contextBridge.exposeInMainWorld("__PASEO_INITIAL_DAEMON_CONNECTION__", {
+  listen: "127.0.0.1:6769",
+  useTls: false,
+});
+
 contextBridge.exposeInMainWorld("paseoDesktop", {
   platform: process.platform,
+  managesDaemon: false,
   windowChromeMode: readWindowChromeMode(),
   invoke: (command: string, args?: Record<string, unknown>) =>
     ipcRenderer.invoke("paseo:invoke", command, args),
@@ -136,5 +147,16 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     ) => ipcRenderer.invoke("paseo:browser:capture-element", browserId, rect),
     copyElement: (payload: { text?: string; imageDataUrl?: string }) =>
       ipcRenderer.invoke("paseo:browser:copy-element", payload),
+  },
+});
+
+contextBridge.exposeInMainWorld("daedalDsh", {
+  request: (command: DesktopDshCommand) =>
+    ipcRenderer.invoke("daedal:dsh:request", command) as Promise<DesktopDshReply>,
+  onSocket: (handler: (event: DesktopDshSocketEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: DesktopDshSocketEvent) =>
+      handler(payload);
+    ipcRenderer.on("daedal:dsh:socket", listener);
+    return () => ipcRenderer.removeListener("daedal:dsh:socket", listener);
   },
 });

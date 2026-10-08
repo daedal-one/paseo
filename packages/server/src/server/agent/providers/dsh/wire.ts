@@ -117,3 +117,21 @@ export const QuestionSchema = z.object({
   options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(),
 });
 export const QuestionsSchema = z.object({ questions: z.array(QuestionSchema).min(1) });
+
+export const AgentPresetRosterSchema = z.object({
+  presets: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      isDefault: z.boolean(),
+      broken: z.string().optional(),
+    }),
+  ),
+});
+export const PermissionSelectSchema = z.object({
+  options: z.array(
+    z.object({ value: z.string(), name: z.string(), description: z.string().optional() }),
+  ),
+  currentValue: z.string(),
+});

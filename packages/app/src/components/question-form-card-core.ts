@@ -147,11 +147,12 @@ export function buildStructuredQuestionFormAnswers(
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const selected = selections[i];
+    const labels = Array.from(selected ?? []).map((index) => q.options[index].label);
     const otherText = otherTexts[i]?.trim();
 
     if (questionShowsTextInput(q)) {
       if (otherText && otherText.length > 0) {
-        answers[q.header] = { selected: [], custom: otherText };
+        answers[q.header] = { selected: q.multiSelect ? labels : [], custom: otherText };
         continue;
       }
       if (q.allowEmpty && q.options.length === 0) {
@@ -161,7 +162,6 @@ export function buildStructuredQuestionFormAnswers(
     }
 
     if (selected && selected.size > 0) {
-      const labels = Array.from(selected).map((idx) => q.options[idx].label);
       answers[q.header] = { selected: labels };
     }
   }

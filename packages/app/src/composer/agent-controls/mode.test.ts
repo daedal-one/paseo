@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMode } from "@getpaseo/protocol/agent-types";
-import { resolveAgentControlsMode, resolveNextAgentModeId } from "./mode";
+import {
+  resolveAgentControlsMode,
+  resolveNextAgentModeId,
+  resolveDisplayedAgentMode,
+} from "./mode";
 
 const PLAN_MODE = { id: "plan", label: "Plan" } satisfies AgentMode;
 
@@ -66,4 +70,13 @@ describe("resolveNextAgentModeId", () => {
     expect(resolveNextAgentModeId({ modeOptions: [], selectedMode: "" })).toBeNull();
     expect(resolveNextAgentModeId({ modeOptions: [PLAN_MODE], selectedMode: "plan" })).toBeNull();
   });
+});
+
+it("shows a derived DSH Custom mode instead of claiming the first switchable policy", () => {
+  expect(
+    resolveDisplayedAgentMode({ provider: "dsh", modeOptions: MODES, selectedModeId: "custom" }),
+  ).toEqual({ id: "custom", label: "custom" });
+  expect(
+    resolveDisplayedAgentMode({ provider: "dsh", modeOptions: [], selectedModeId: "custom" }),
+  ).toBeNull();
 });

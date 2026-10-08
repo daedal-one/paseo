@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Paseo",
-  "short_name": "Paseo",
-  "description": "Monitor and control local AI coding agents from anywhere.",
+  "name": "Daedal DSH",
+  "short_name": "Daedal DSH",
+  "description": "Connect to your DeepSeek Harness sessions from anywhere.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

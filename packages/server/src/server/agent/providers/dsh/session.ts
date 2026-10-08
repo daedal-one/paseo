@@ -1,7 +1,9 @@
+import { DSH_AGENT_PRESET } from "@getpaseo/protocol/dsh-profiles";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
   AgentCapabilityFlags,
+  AgentFeature,
   AgentPermissionResponse,
   AgentPromptInput,
   AgentRunOptions,
@@ -20,6 +22,7 @@ import {
 import { DshInteractions } from "./interactions.js";
 import { DshProjection } from "./projection.js";
 import {
+  PermissionSelectSchema,
   PageSchema,
   RecordSchema,
   SelectionSchema,
@@ -33,7 +36,7 @@ export const DSH_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
   supportsSessionPersistence: true,
   supportsSessionListing: true,
-  supportsDynamicModes: false,
+  supportsDynamicModes: true,
   supportsMcpServers: false,
   supportsReasoningStream: true,
   supportsToolInvocations: true,
@@ -58,12 +61,17 @@ export class DshSession implements AgentSession {
   private subscription: DshSubscription | null = null;
   private unregisterInteractions: (() => void) | null = null;
   private cursor = -1;
+  private followGeneration = 0;
+  private reconnectAttempt = 0;
   private snapshot: DshSnapshot | null = null;
   private serial: Promise<void> = Promise.resolve();
   private retry: ReturnType<typeof setTimeout> | null = null;
   private receipt: TurnReceipt | null = null;
   private connectionError: Error | null = null;
   private opening: Promise<void> | null = null;
+  private agentPreset: string | null = null;
+  private controlCursor = -1;
+  private permissions: z.infer<typeof PermissionSelectSchema> | null = null;
   private selection: z.infer<typeof SelectionSchema> | null = null;
 
   constructor(
@@ -73,7 +81,7 @@ export class DshSession implements AgentSession {
     private readonly interactions: DshInteractions,
     private readonly config: DshConfig,
   ) {
-    this.projection = new DshProjection(id);
+    this.projection = new DshProjection(id, config.maxToolTextChars);
   }
 
   async initialize(): Promise<void> {
@@ -195,24 +203,136 @@ export class DshSession implements AgentSession {
         ? JSON.stringify([this.selection.provider, this.selection.model])
         : null,
       thinkingOptionId: this.selection?.reasoningEffort ?? null,
-      modeId: null,
+      modeId: this.permissions?.currentValue ?? null,
       extra: { connection: this.connectionError ? "disconnected" : "connected" },
     };
   }
+  get features(): AgentFeature[] {
+    return this.agentPreset === null
+      ? []
+      : [
+          {
+            type: "select",
+            id: DSH_AGENT_PRESET,
+            label: "DSH profile",
+            value: this.agentPreset,
+            options: [{ id: this.agentPreset, label: this.agentPreset }],
+          },
+        ];
+  }
   async getAvailableModes() {
-    return [];
+    return (this.permissions?.options ?? [])
+      .filter((option) => option.value !== "custom")
+      .map((option) => ({
+        id: option.value,
+        label: option.name,
+        description: option.description,
+      }));
   }
   async getCurrentMode() {
-    return null;
+    return this.permissions?.currentValue ?? null;
   }
-  async setMode(_modeId: string): Promise<void> {
-    throw new Error("Change DSH permissions in the existing DSH session.");
+  async setMode(modeId: string): Promise<void> {
+    this.assertConnected();
+    if (!(await this.getAvailableModes()).some((mode) => mode.id === modeId)) {
+      throw new Error("This DSH session does not offer that permission mode.");
+    }
+    const value = await this.transport.request(
+      "commands/execute",
+      {
+        agentId: this.id,
+        line: `/permission ${modeId}`,
+        submittedAttachments: [],
+      },
+      this.lifetime.signal,
+    );
+    const response = z
+      .object({ result: z.object({ kind: z.string(), text: z.string().optional() }) })
+      .parse(value);
+    if (response.result.kind !== "success")
+      throw new Error(response.result.text ?? "DSH refused the permission change.");
+    await this.refreshControls();
   }
+
+  /** Read one authoritative projection cut, then detach the temporary reader. */
+  private async refreshControls(): Promise<void> {
+    this.lifetime.signal.throwIfAborted();
+    let subscription: DshSubscription | undefined;
+    let release = () => {};
+    try {
+      const snapshot = await new Promise<DshSnapshot>((resolve, reject) => {
+        const abort = () => reject(new Error("DSH companion detached"));
+        const timeout = setTimeout(
+          () => reject(new Error("DSH control refresh timed out")),
+          this.config.requestTimeoutMs,
+        );
+        this.lifetime.signal.addEventListener("abort", abort, { once: true });
+        let settled = false;
+        release = () => {
+          settled = true;
+          clearTimeout(timeout);
+          this.lifetime.signal.removeEventListener("abort", abort);
+        };
+        void this.transport
+          .open(
+            "session/follow",
+            {
+              request: { address: { kind: "session", sessionId: this.id }, maxMessages: 1 },
+            },
+            {
+              value: (value) => {
+                if (settled) return;
+                const parsed = SnapshotSchema.safeParse(value);
+                if (parsed.success) resolve(parsed.data);
+                else reject(new Error("Invalid DSH control snapshot"));
+                release();
+              },
+              error: reject,
+            },
+          )
+          .then((reader) => {
+            if (settled) reader.close();
+            else subscription = reader;
+            return undefined;
+          }, reject);
+      });
+      this.lifetime.signal.throwIfAborted();
+      if (snapshot.header.id !== this.id) throw new Error("DSH control snapshot identity changed");
+      this.acceptControls(snapshot);
+      this.emit({
+        type: "model_changed",
+        provider: "dsh",
+        runtimeInfo: await this.getRuntimeInfo(),
+      });
+      this.emit({
+        type: "mode_changed",
+        provider: "dsh",
+        currentModeId: this.permissions?.currentValue ?? null,
+        availableModes: await this.getAvailableModes(),
+      });
+    } finally {
+      release();
+      subscription?.close();
+    }
+  }
+
+  private acceptControls(snapshot: DshSnapshot): void {
+    if (snapshot.cursor < this.controlCursor) return;
+    this.controlCursor = snapshot.cursor;
+    const permissions = PermissionSelectSchema.safeParse(snapshot.projections.values.permissions);
+    this.permissions = permissions.success ? permissions.data : null;
+    const selection = z
+      .object({ next: SelectionSchema.nullable() })
+      .safeParse(snapshot.projections.values.modelSelection);
+    if (selection.success) this.selection = selection.data.next;
+  }
+
   getPendingPermissions() {
     return this.interactions.list(this.id);
   }
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
-    this.assertConnected();
+    this.lifetime.signal.throwIfAborted();
+    // The interaction stream owns request validity independently of transcript catch-up.
     await this.interactions.respond(this.id, requestId, response);
   }
   describePersistence() {
@@ -286,15 +406,33 @@ export class DshSession implements AgentSession {
     this.emit({ type: "model_changed", provider: "dsh", runtimeInfo: await this.getRuntimeInfo() });
   }
 
+  private isCurrentFollow(generation: number): boolean {
+    return generation === this.followGeneration && !this.lifetime.signal.aborted;
+  }
+
   private follow(): Promise<void> {
     if (this.opening) return this.opening;
+    const generation = ++this.followGeneration;
+    const current = () => this.isCurrentFollow(generation);
+    let releaseAbort = () => {};
     this.opening = new Promise<void>((resolve, reject) => {
       let opened = false;
       const timeout = setTimeout(() => {
+        if (!current()) return;
         const error = new Error("DSH session snapshot timed out");
         reject(error);
         this.disconnected(error);
       }, this.config.requestTimeoutMs);
+      const abort = () => {
+        clearTimeout(timeout);
+        reject(new Error("DSH companion detached"));
+      };
+      this.lifetime.signal.addEventListener("abort", abort, { once: true });
+      releaseAbort = () => this.lifetime.signal.removeEventListener("abort", abort);
+      if (this.lifetime.signal.aborted) {
+        abort();
+        return;
+      }
       void this.transport
         .open(
           "session/follow",
@@ -309,10 +447,12 @@ export class DshSession implements AgentSession {
             value: (value) => {
               this.serial = this.serial
                 .then(async () => {
-                  if (this.lifetime.signal.aborted) return undefined;
+                  if (!current()) return undefined;
                   if (!opened) {
-                    await this.acceptSnapshot(SnapshotSchema.parse(value));
+                    await this.acceptSnapshot(SnapshotSchema.parse(value), generation);
+                    if (!current()) return undefined;
                     opened = true;
+                    this.reconnectAttempt = 0;
                     this.connectionError = null;
                     clearTimeout(timeout);
                     resolve();
@@ -325,11 +465,12 @@ export class DshSession implements AgentSession {
                         this.history.push(event);
                         this.emit(event);
                       }
-                    } else await this.acceptRecord(RecordSchema.parse(value));
+                    } else await this.acceptRecord(RecordSchema.parse(value), false, generation);
                   }
                   return undefined;
                 })
                 .catch((error: unknown) => {
+                  if (!current()) return;
                   const failure =
                     error instanceof Error ? error : new Error("Invalid DSH session update");
                   clearTimeout(timeout);
@@ -338,6 +479,7 @@ export class DshSession implements AgentSession {
                 });
             },
             error: (error) => {
+              if (!current()) return;
               clearTimeout(timeout);
               reject(error);
               this.disconnected(error);
@@ -346,7 +488,7 @@ export class DshSession implements AgentSession {
         )
         .then(
           (subscription) => {
-            if (this.lifetime.signal.aborted) subscription.close();
+            if (!current()) subscription.close();
             else this.subscription = subscription;
             return undefined;
           },
@@ -356,12 +498,13 @@ export class DshSession implements AgentSession {
           },
         );
     }).finally(() => {
+      releaseAbort();
       this.opening = null;
     });
     return this.opening;
   }
 
-  private async acceptSnapshot(snapshot: DshSnapshot): Promise<void> {
+  private async acceptSnapshot(snapshot: DshSnapshot, generation: number): Promise<void> {
     if (
       snapshot.header.id !== this.id ||
       (snapshot.header.cwd && snapshot.header.cwd !== this.cwd)
@@ -392,6 +535,7 @@ export class DshSession implements AgentSession {
           this.lifetime.signal,
         ),
       );
+      if (!this.isCurrentFollow(generation)) return;
       if (page.records.length === 0 || page.records.at(-1)!.event.seq >= beforeSeq) {
         throw new DshConnectionError("DSH history pagination did not advance", "protocol");
       }
@@ -399,15 +543,21 @@ export class DshSession implements AgentSession {
       records = page.records;
       hasMore = page.hasMore;
     }
-    for (const record of pages.toReversed().flat()) await this.acceptRecord(record, initial);
+    for (const record of pages.toReversed().flat()) {
+      await this.acceptRecord(record, initial, generation);
+      if (!this.isCurrentFollow(generation)) return;
+    }
     if (this.cursor !== snapshot.cursor)
       throw new DshConnectionError("DSH snapshot has a history gap", "protocol");
-    const selection = z
-      .object({ next: SelectionSchema.nullable() })
-      .safeParse(snapshot.projections.values.modelSelection);
-    if (selection.success) this.selection = selection.data.next;
+    const preset = z.string().nullable().safeParse(snapshot.projections.values.agentPreset);
+    this.agentPreset = preset.success ? preset.data : null;
+    this.acceptControls(snapshot);
     this.snapshot = snapshot;
     this.flushInteractions();
+    this.restoreAssistant(snapshot, initial);
+  }
+
+  private restoreAssistant(snapshot: DshSnapshot, initial: boolean): void {
     if (snapshot.assistantStream) {
       for (const event of this.projection.restoreStream(snapshot.assistantStream)) {
         this.history.push(event);
@@ -419,7 +569,12 @@ export class DshSession implements AgentSession {
     }
   }
 
-  private async acceptRecord(record: z.infer<typeof RecordSchema>, initial = false): Promise<void> {
+  private async acceptRecord(
+    record: z.infer<typeof RecordSchema>,
+    initial: boolean,
+    generation: number,
+  ): Promise<void> {
+    if (!this.isCurrentFollow(generation)) return;
     if (record.event.seq <= this.cursor) return;
     if (record.event.seq !== this.cursor + 1)
       throw new DshConnectionError("DSH live history has a sequence gap", "protocol");
@@ -434,6 +589,7 @@ export class DshSession implements AgentSession {
           this.lifetime.signal,
         ),
       );
+      if (!this.isCurrentFollow(generation)) return;
       if (complete.event.seq !== event.seq)
         throw new DshConnectionError("DSH tool detail identity mismatch", "protocol");
       event = complete.event;
@@ -443,6 +599,18 @@ export class DshSession implements AgentSession {
     this.history.push(...events);
     this.acceptReceipt(event);
     if (initial) return;
+    if (
+      [
+        "permission/preset",
+        "sandbox/mode",
+        "approval/policy",
+        "model/selection",
+        "request/header",
+      ].includes(event.type) &&
+      event.seq > this.controlCursor
+    ) {
+      await this.refreshControls();
+    }
     for (const projected of events) this.emit(projected);
   }
 
@@ -479,6 +647,7 @@ export class DshSession implements AgentSession {
   }
 
   private disconnected(error: Error): void {
+    this.followGeneration++;
     this.subscription?.close();
     this.subscription = null;
     const firstFailure = this.connectionError === null;
@@ -495,10 +664,14 @@ export class DshSession implements AgentSession {
         },
       });
     }
+    const delay = Math.min(
+      this.config.reconnectDelayMs * 2 ** Math.min(this.reconnectAttempt++, 16),
+      this.config.reconnectMaxDelayMs,
+    );
     this.retry = setTimeout(() => {
       this.retry = null;
       void this.reconnect();
-    }, this.config.reconnectDelayMs);
+    }, delay);
     this.retry.unref();
   }
 

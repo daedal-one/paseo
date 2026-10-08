@@ -10,7 +10,6 @@ import { CommunityLinks } from "@/components/community-links";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useImportSession } from "@/hooks/use-import-session";
-import { useHostChooser } from "@/hosts/host-chooser";
 import { usePanelStore } from "@/stores/panel-store";
 import {
   useIsCompactFormFactor,
@@ -21,7 +20,7 @@ import {
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
-import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { buildSettingsAddHostRoute } from "@/utils/host-routes";
 
 export function OpenProjectScreen() {
   const { t } = useTranslation();
@@ -30,7 +29,6 @@ export function OpenProjectScreen() {
   const openDesktopAgentList = usePanelStore((s) => s.openDesktopAgentList);
   const openProjectPicker = useOpenAddProject();
   const importSession = useImportSession();
-  const chooseHost = useHostChooser();
   const localServerId = useLocalDaemonServerId();
   const [isPairDeviceOpen, setIsPairDeviceOpen] = useState(false);
 
@@ -49,14 +47,9 @@ export function OpenProjectScreen() {
   const handleOpenPairDevice = useCallback(() => setIsPairDeviceOpen(true), []);
   const handleClosePairDevice = useCallback(() => setIsPairDeviceOpen(false), []);
 
-  const handleOpenProviders = useCallback(() => {
-    chooseHost({
-      title: "Choose host",
-      onChooseHost: (serverId) => {
-        router.push(buildSettingsHostSectionRoute(serverId, "providers"));
-      },
-    });
-  }, [chooseHost, router]);
+  const handleConnectHost = useCallback(() => {
+    router.push(buildSettingsAddHostRoute(Date.now()));
+  }, [router]);
 
   return (
     <View style={styles.container}>
@@ -87,10 +80,10 @@ export function OpenProjectScreen() {
           />
           <HomeTile
             icon={Plug}
-            title={t("openProject.tiles.setupProviders.title")}
-            description={t("openProject.tiles.setupProviders.description")}
-            onPress={handleOpenProviders}
-            testID="open-project-setup-providers"
+            title={t("openProject.tiles.connectHost.title")}
+            description={t("openProject.tiles.connectHost.description")}
+            onPress={handleConnectHost}
+            testID="open-project-connect-host"
           />
           {localServerId ? (
             <HomeTile

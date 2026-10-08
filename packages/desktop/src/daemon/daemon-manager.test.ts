@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   logError: vi.fn(),
   appLogPath: "",
   getElectronLogFile: vi.fn(),
+  downloadAndInstallUpdate: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -77,6 +78,11 @@ vi.mock("./cli/external.js", () => ({
   runExternalCliTextCommand: mocks.runExternalCliTextCommand,
 }));
 
+vi.mock("../features/auto-updater.js", () => ({
+  checkForAppUpdate: vi.fn(),
+  downloadAndInstallUpdate: mocks.downloadAndInstallUpdate,
+}));
+
 describe("daemon-manager commands", () => {
   let fixtureRoot: string;
 
@@ -90,6 +96,7 @@ describe("daemon-manager commands", () => {
     mocks.createNodeEntrypointInvocation.mockReset();
     mocks.createNodeEntrypointInvocation.mockReturnValue({ command: "node", args: [], env: {} });
     mocks.spawnProcess.mockReset();
+    mocks.downloadAndInstallUpdate.mockReset();
     mocks.logInfo.mockReset();
     mocks.logError.mockReset();
     mocks.getElectronLogFile.mockReset();
@@ -98,6 +105,32 @@ describe("daemon-manager commands", () => {
 
   afterEach(() => {
     rmSync(fixtureRoot, { recursive: true, force: true });
+  });
+
+  it.each(["start_desktop_daemon", "stop_desktop_daemon", "restart_desktop_daemon"])(
+    "rejects %s in an external-host desktop without invoking a host process",
+    (command) => {
+      const handler = createDaemonCommandHandlers({ allowDaemonManagement: false })[command];
+
+      expect(() => handler()).toThrow("DESKTOP_DAEMON_MANAGEMENT_DISABLED");
+      expect(mocks.spawnProcess).not.toHaveBeenCalled();
+      expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
+      expect(mocks.runExternalCliTextCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it("installs client updates without stopping the external host", async () => {
+    mocks.downloadAndInstallUpdate.mockImplementation(async (_options, beforeInstall) => {
+      await beforeInstall();
+      return { installed: true };
+    });
+    const handlers = createDaemonCommandHandlers({ allowDaemonManagement: false });
+
+    await expect(handlers.install_app_update()).resolves.toEqual({ installed: true });
+    expect(mocks.downloadAndInstallUpdate).toHaveBeenCalledOnce();
+    expect(mocks.spawnProcess).not.toHaveBeenCalled();
+    expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
+    expect(mocks.runExternalCliTextCommand).not.toHaveBeenCalled();
   });
 
   it("returns the Electron main-process log tail from electron-log", () => {

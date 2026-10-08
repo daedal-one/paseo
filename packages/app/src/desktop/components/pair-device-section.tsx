@@ -1,3 +1,4 @@
+import { PRODUCT_LINKS } from "@/constants/product-links";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -21,7 +22,6 @@ import {
   type EditingTextInputHandle,
 } from "@/components/ui/text-input";
 
-const RELAY_DOCS_URL = "https://paseo.sh/docs/security";
 const FLEX_ONE_STYLE = { flex: 1 } as const;
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedShieldCheck = withUnistyles(ShieldCheck);
@@ -192,7 +192,7 @@ function RelayConsent(props: PairDeviceBodyProps) {
         <Text style={styles.consentTitle}>{t("pairing.device.enableTitle")}</Text>
         <Text style={styles.consentDescription}>{t("pairing.device.enableDescription")}</Text>
         <ExternalLink
-          href={RELAY_DOCS_URL}
+          href={PRODUCT_LINKS.security}
           label={t("pairing.device.relayDocs")}
           accessibilityLabel={t("pairing.device.relayDocsAccessibility")}
         />

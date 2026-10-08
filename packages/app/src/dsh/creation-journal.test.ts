@@ -1,0 +1,313 @@
+import { DshForkJournal } from "./fork-journal";
+import { DshRegistrationJournal, type RegistrationAttemptId } from "./registration-journal";
+import type { WorkspaceId } from "@deepseek-ai/dsh-client";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { brandString } from "@deepseek-ai/dsh-brand";
+import type { ConnectionHostId, SessionId } from "@deepseek-ai/dsh-client";
+import { DshCreationJournal, type CreationAttempt } from "./creation-journal";
+import { createSqliteCreationStorage } from "./creation-storage-sqlite";
+const host = brandString<ConnectionHostId>("host-a");
+const request: CreationAttempt = {
+  sessionId: brandString<SessionId>("attempt-a"),
+  cwd: "/host/project",
+};
+describe("durable SQLite creation records", () => {
+  it("survives connection replacement and protects terminal/replacement identities", async () => {
+    const home = await mkdtemp(join(tmpdir(), "dsh-creation-"));
+    const openStore = () =>
+      createSqliteCreationStorage(async () => {
+        const db = new DatabaseSync(join(home, "attempts.db"));
+        return {
+          async exec(sql) {
+            db.exec(sql);
+          },
+          async run(sql, params) {
+            db.prepare(sql).run(...params);
+          },
+          async get(sql, params) {
+            return (db.prepare(sql).get(...params) as { payload: string } | undefined) ?? null;
+          },
+          async close() {
+            db.close();
+          },
+        };
+      });
+    try {
+      const store = openStore();
+      const first = new DshCreationJournal(host, store);
+      expect(await first.read()).toBeNull();
+      expect((await first.claim(request)).claimed).toBe(true);
+      const cold = new DshCreationJournal(host, openStore());
+      expect(await cold.read()).toEqual({ kind: "unknown", request, published: false });
+      expect((await cold.claim({ sessionId: brandString<SessionId>("other") })).claimed).toBe(
+        false,
+      );
+      expect(await cold.clear(request.sessionId)).not.toBeNull();
+      await cold.settle({ kind: "unknown", request, published: true });
+      await first.settle({ kind: "unknown", request, published: false });
+      expect(await cold.read()).toMatchObject({ kind: "unknown", published: true });
+      await cold.settle({ kind: "attachment-failed", request });
+      await first.settle({ kind: "unknown", request, published: false });
+      expect((await cold.read())?.kind).toBe("attachment-failed");
+      await cold.settle({ kind: "accepted", request });
+      await first.settle({ kind: "unknown", request, published: false });
+      expect((await cold.read())?.kind).toBe("accepted");
+      await cold.clear(request.sessionId);
+      const next = { sessionId: brandString<SessionId>("next") };
+      await cold.claim(next);
+      await first.clear(request.sessionId);
+      await first.settle({ kind: "rejected", request, code: "late" });
+      expect((await cold.read())?.request).toEqual(next);
+      expect(
+        await new DshCreationJournal(brandString<ConnectionHostId>("host-b"), store).read(),
+      ).toBeNull();
+      for (const corrupt of [
+        "{",
+        JSON.stringify({ version: 2 }),
+        JSON.stringify({
+          version: 1,
+          hostId: "wrong",
+          outcome: { kind: "unknown", request, published: false },
+        }),
+      ]) {
+        await store.transact(host, () => corrupt);
+        await expect(cold.read()).rejects.toThrow();
+        await expect(cold.claim(request)).rejects.toThrow();
+        expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
+      }
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+});
+
+it("keeps Workspace registration separate and protects durable identity through fresh SQLite connections", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dsh-registration-"));
+  function storage(name: string) {
+    return createSqliteCreationStorage(async () => {
+      const db = new DatabaseSync(join(home, name));
+      return {
+        async exec(sql) {
+          db.exec(sql);
+        },
+        async run(sql, params) {
+          db.prepare(sql).run(...params);
+        },
+        async get(sql, params) {
+          return (db.prepare(sql).get(...params) as { payload: string } | undefined) ?? null;
+        },
+        async close() {
+          db.close();
+        },
+      };
+    });
+  }
+  const registrationRequest = {
+    attemptId: brandString<RegistrationAttemptId>("one"),
+    path: "/host/alias",
+  };
+  const workspace = {
+    workspaceId: brandString<WorkspaceId>("workspace"),
+    path: "/host/project",
+    title: "Project",
+  };
+  try {
+    const session = new DshCreationJournal(host, storage("session.db"));
+    await session.claim({ sessionId: brandString<SessionId>("session") });
+    const one = new DshRegistrationJournal(host, storage("registration.db"));
+    expect((await one.claim(registrationRequest)).claimed).toBe(true);
+    const cold = new DshRegistrationJournal(host, storage("registration.db"));
+    expect(await cold.read()).toEqual({ kind: "unknown", request: registrationRequest });
+    expect(
+      (
+        await cold.claim({
+          ...registrationRequest,
+          attemptId: brandString<RegistrationAttemptId>("two"),
+        })
+      ).claimed,
+    ).toBe(false);
+    expect((await cold.clear(registrationRequest.attemptId))?.kind).toBe("unknown");
+    await cold.settle({ kind: "adopted", request: registrationRequest, workspace });
+    await one.settle({ kind: "unknown", request: registrationRequest });
+    expect((await cold.read())?.kind).toBe("adopted");
+    await cold.clear(registrationRequest.attemptId);
+    const next = { ...registrationRequest, attemptId: brandString<RegistrationAttemptId>("next") };
+    await cold.claim(next);
+    await one.clear(registrationRequest.attemptId);
+    await one.settle({ kind: "confirmed", request: registrationRequest, workspace });
+    expect((await cold.read())?.request).toEqual(next);
+    expect((await session.read())?.request.sessionId).toBe("session");
+    expect(
+      await new DshRegistrationJournal(
+        brandString<ConnectionHostId>("host-b"),
+        storage("registration.db"),
+      ).read(),
+    ).toBeNull();
+    const store = storage("registration.db");
+    const rejected = {
+      kind: "rejected" as const,
+      request: next,
+      message: "Directory does not exist",
+    };
+    await cold.settle(rejected);
+    const restored = new DshRegistrationJournal(host, storage("registration.db"));
+    expect(await restored.read()).toEqual(rejected);
+    await cold.settle({ kind: "unknown", request: next });
+    await cold.settle({ kind: "confirmed", request: next, workspace });
+    expect(await restored.read()).toEqual(rejected);
+    expect(JSON.parse((await store.transact(host, (text) => text)).after!).version).toBe(2);
+    await restored.clear(next.attemptId);
+    await restored.claim(registrationRequest);
+    await cold.settle(rejected);
+    await cold.clear(next.attemptId);
+    expect((await restored.read())?.request).toEqual(registrationRequest);
+    for (const outcome of [
+      { kind: "unknown", request: registrationRequest },
+      { kind: "not-dispatched", request: registrationRequest },
+      { kind: "confirmed", request: registrationRequest, workspace },
+      { kind: "adopted", request: registrationRequest, workspace },
+    ]) {
+      const legacy = JSON.stringify({ version: 1, hostId: host, outcome });
+      await store.transact(host, () => legacy);
+      expect(await restored.read()).toEqual(outcome);
+      expect((await store.transact(host, (text) => text)).after).toBe(legacy);
+      if (outcome.kind !== "unknown") {
+        await restored.settle({ kind: "rejected", request: registrationRequest, message: "late" });
+        expect(await restored.read()).toEqual(outcome);
+      }
+    }
+
+    for (const corrupt of [
+      "{",
+      JSON.stringify({ version: 2 }),
+      JSON.stringify({ version: 3, hostId: host, outcome: rejected }),
+      JSON.stringify({ version: 1, hostId: host, outcome: rejected }),
+      JSON.stringify({ version: 2, hostId: host, outcome: { ...rejected, message: undefined } }),
+      JSON.stringify({
+        version: 1,
+        hostId: "wrong",
+        outcome: { kind: "unknown", request: registrationRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { kind: "confirmed", request: registrationRequest },
+      }),
+    ]) {
+      await store.transact(host, () => corrupt);
+      await expect(cold.read()).rejects.toThrow();
+      await expect(cold.claim(registrationRequest)).rejects.toThrow();
+      await expect(
+        cold.settle({ kind: "confirmed", request: registrationRequest, workspace }),
+      ).rejects.toThrow();
+      expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+it("retains fork identity and monotone outcomes across fresh SQLite connections", async () => {
+  const home = await mkdtemp(join(tmpdir(), "dsh-fork-"));
+  function storage() {
+    return createSqliteCreationStorage(async () => {
+      const db = new DatabaseSync(join(home, "fork.db"));
+      return {
+        async exec(sql) {
+          db.exec(sql);
+        },
+        async run(sql, params) {
+          db.prepare(sql).run(...params);
+        },
+        async get(sql, params) {
+          return (db.prepare(sql).get(...params) as { payload: string } | undefined) ?? null;
+        },
+        async close() {
+          db.close();
+        },
+      };
+    });
+  }
+  const forkRequest = {
+    sessionId: brandString<SessionId>("source"),
+    childSessionId: brandString<SessionId>("child"),
+    atSeq: 7,
+  };
+  try {
+    const one = new DshForkJournal(host, storage());
+    expect((await one.claim(forkRequest)).claimed).toBe(true);
+    const cold = new DshForkJournal(host, storage());
+    expect(await cold.read()).toEqual({ kind: "unknown", request: forkRequest });
+    expect(
+      (await cold.claim({ ...forkRequest, childSessionId: brandString<SessionId>("other") }))
+        .claimed,
+    ).toBe(false);
+    expect((await cold.clear(forkRequest.childSessionId))?.kind).toBe("unknown");
+    const partial = {
+      kind: "attachment-failed" as const,
+      request: forkRequest,
+      workspaceId: brandString<WorkspaceId>("workspace"),
+    };
+    await cold.settle(partial);
+    await one.settle({ kind: "unknown", request: forkRequest });
+    await one.settle({ kind: "confirmed", request: forkRequest });
+    expect(await cold.read()).toEqual(partial);
+    const adopted = {
+      kind: "adopted" as const,
+      request: forkRequest,
+      child: {
+        id: forkRequest.childSessionId,
+        parentId: forkRequest.sessionId,
+        displayTitle: "Child",
+        workspaceIds: null,
+      },
+    };
+    await cold.settle(adopted);
+    await one.settle(partial);
+    expect(await cold.read()).toEqual(adopted);
+    await cold.clear(forkRequest.childSessionId);
+    const next = { ...forkRequest, childSessionId: brandString<SessionId>("next") };
+    await cold.claim(next);
+    await one.clear(forkRequest.childSessionId);
+    await one.settle({ kind: "confirmed", request: forkRequest });
+    expect((await cold.read())?.request).toEqual(next);
+    expect(
+      await new DshForkJournal(brandString<ConnectionHostId>("other-host"), storage()).read(),
+    ).toBeNull();
+    const store = storage();
+    for (const corrupt of [
+      "{",
+      JSON.stringify({
+        version: 2,
+        hostId: host,
+        outcome: { kind: "unknown", request: forkRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: "other",
+        outcome: { kind: "unknown", request: forkRequest },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { ...adopted, child: { ...adopted.child, id: "foreign" } },
+      }),
+      JSON.stringify({
+        version: 1,
+        hostId: host,
+        outcome: { kind: "unknown", request: { ...forkRequest, atSeq: 1.5 } },
+      }),
+    ]) {
+      await store.transact(host, () => corrupt);
+      await expect(cold.read()).rejects.toThrow();
+      await expect(cold.claim(forkRequest)).rejects.toThrow();
+      expect((await store.transact(host, (value) => value)).after).toBe(corrupt);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

@@ -2,10 +2,13 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Text } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
-import type {
-  CompanionHost,
-  CompanionDiscoveryResult,
+import {
+  CompanionDiscoveryResultSchema,
+  type CompanionHost,
+  type CompanionDiscoveryResult,
 } from "@getpaseo/protocol/companion-discovery";
+import { isElectronRuntime } from "@/desktop/host";
+import { desktopDshRequest } from "@/dsh/desktop/bridge";
 import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 import type { HostProfile } from "@/types/host-connection";
 import { useFetchQuery } from "@/data/query";
@@ -19,6 +22,7 @@ export function CompanionDiscoverySection({
   onConnected: (profile: HostProfile) => void;
 }) {
   const { t } = useTranslation();
+  const desktop = isElectronRuntime();
   const hosts = useHosts();
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const store = getHostRuntimeStore();
@@ -46,13 +50,19 @@ export function CompanionDiscoverySection({
     () => "[]",
   );
   const sourceIds = useMemo(() => JSON.parse(sourceSnapshot) as string[], [sourceSnapshot]);
+  const hasSource = desktop || sourceIds.length > 0;
   const query = useFetchQuery({
-    queryKey: ["companion-discovery", ...sourceIds],
+    queryKey: ["companion-discovery", ...(desktop ? ["desktop"] : sourceIds)],
     dataShape: "value",
     staleTimeMs: 15_000,
-    enabled: sourceIds.length > 0,
+    enabled: hasSource,
     retry: false,
     queryFn: async (): Promise<CompanionDiscoveryResult> => {
+      if (desktop) {
+        return CompanionDiscoveryResultSchema.parse(
+          await desktopDshRequest({ type: "discover-companions" }),
+        );
+      }
       const results = await Promise.allSettled(
         sourceIds.map(async (id) => {
           const client = store.getClient(id);
@@ -96,7 +106,7 @@ export function CompanionDiscoverySection({
   const state = query.data?.status;
   return (
     <SettingsSection title={t("pairing.discovery.title")} testID="companion-discovery" flush>
-      {sourceIds.length === 0 ? (
+      {!hasSource ? (
         <Text style={styles.helper}>
           {t(hosts.length === 0 ? "pairing.discovery.pairFirst" : "pairing.discovery.connectHost")}
         </Text>
