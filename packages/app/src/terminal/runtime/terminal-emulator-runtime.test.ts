@@ -78,11 +78,8 @@ vi.mock("@xterm/xterm", () => ({
   },
 }));
 
-import {
-  createTerminalResizeEvent,
-  encodeTerminalOutput,
-  TerminalEmulatorRuntime,
-} from "./terminal-emulator-runtime";
+import { createTerminalResizeEvent, TerminalEmulatorRuntime } from "./terminal-emulator-runtime";
+import { encodeTerminalOutput } from "./terminal-output";
 
 interface StubTerminal {
   write: (data: string | Uint8Array, callback?: () => void) => void;

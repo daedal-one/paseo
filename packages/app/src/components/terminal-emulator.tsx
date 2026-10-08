@@ -19,10 +19,8 @@ import type { ITheme } from "@xterm/xterm";
 import type { TerminalState } from "@getpaseo/protocol/messages";
 import type { TerminalInputModeState } from "@getpaseo/protocol/terminal-input-mode";
 import type { PendingTerminalModifiers } from "../utils/terminal-keys";
-import {
-  TerminalEmulatorRuntime,
-  type TerminalOutputData,
-} from "../terminal/runtime/terminal-emulator-runtime";
+import { TerminalEmulatorRuntime } from "../terminal/runtime/terminal-emulator-runtime";
+import type { TerminalOutputData } from "../terminal/runtime/terminal-output";
 import { encodeTerminalPaste } from "../terminal/runtime/terminal-paste";
 import type {
   TerminalLocalFileLinkSource,

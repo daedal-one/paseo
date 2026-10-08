@@ -224,6 +224,8 @@ The directory opens one generated DSH runtime at a time. Switching Hosts, forget
 
 The continuum checks in `packages/app/e2e/browser/mounted-dsh-client.spec.ts` exercise the mounted native Client at phone and desktop widths against an isolated built Host with recorded model responses. They cover Host settings, a shared conversation on a second device, local draft restoration after reload, recorded commands, and actual terminal input. Focused cache and directory tests cover bounded storage, Host isolation, offline selection, forgetting and exclusion of uncertain submissions. These checks establish browser behavior; iOS exports and packaged desktop identity checks retain their own platform limits.
 
+iPhone release qualification also requires a native Release build on a dedicated simulator: cold-launch the companion, verify the Conversations screen, background and resume it, and inspect startup logs for fatal exceptions. A successful iOS export proves bundling, without executing Hermes. Shared terminal encoding lives in `terminal/runtime/terminal-output.ts`; native controls must not import the DOM renderer or its WebAssembly addons. `terminal-startup.test.ts` guards that dependency, and the native headless terminal tests exercise UTF-8 output. Record the simulator runtime separately from TestFlight processing and physical-device confirmation.
+
 Focused tests live alongside the adapter in `packages/server/src/server/agent/providers/dsh/`. From `packages/server`:
 
 ```sh

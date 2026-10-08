@@ -3,10 +3,8 @@ import xtermCss from "@xterm/xterm/css/xterm.css";
 import type { TerminalState } from "@getpaseo/protocol/messages";
 import type { TerminalInputModeState } from "@getpaseo/protocol/terminal-input-mode";
 import type { PendingTerminalModifiers } from "@/utils/terminal-keys";
-import {
-  encodeTerminalOutput,
-  TerminalEmulatorRuntime,
-} from "../runtime/terminal-emulator-runtime";
+import { TerminalEmulatorRuntime } from "../runtime/terminal-emulator-runtime";
+import { encodeTerminalOutput } from "../runtime/terminal-output";
 import type {
   TerminalLocalFileLinkSource,
   TerminalLocalFileLinkTarget,

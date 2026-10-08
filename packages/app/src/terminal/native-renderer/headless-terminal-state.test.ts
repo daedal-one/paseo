@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { createNativeHeadlessTerminal, type TerminalCellRow } from "./headless-terminal-state";
 import { createNativeTerminalBenchmarkPayload } from "./native-terminal-benchmark-payload";
+import { encodeTerminalOutput } from "../runtime/terminal-output";
 
 const COLS = 80;
 
@@ -19,6 +20,17 @@ function expectedBenchmarkLine(index: number): string {
 }
 
 describe("native headless terminal state", () => {
+  test("renders shared UTF-8 output with ANSI controls and multibyte text", async () => {
+    const terminal = createNativeHeadlessTerminal({ rows: 5, cols: COLS });
+    try {
+      await terminal.write(encodeTerminalOutput("\x1b[31m你好 café 🚀\x1b[0m"));
+      const row = terminal.getBufferWindow({ startRow: 0, rowCount: 1 }).rows[0]!;
+      expect(rowText(row.filter((cell) => cell.width !== 0))).toBe("你好 café 🚀");
+    } finally {
+      terminal.dispose();
+    }
+  });
+
   test("exposes application cursor key mode from headless xterm", async () => {
     const terminal = createNativeHeadlessTerminal({ rows: 5, cols: COLS });
 

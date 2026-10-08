@@ -29,8 +29,7 @@ import {
   type TerminalLocalFileLinkTarget,
 } from "../local-links/terminal-local-link-provider";
 import { resolveTerminalFontFamily, resolveTerminalFontSize } from "./terminal-font";
-
-export type TerminalOutputData = Uint8Array;
+import { encodeTerminalOutput, type TerminalOutputData } from "./terminal-output";
 
 export interface TerminalEmulatorRuntimeMountInput {
   root: HTMLDivElement;
@@ -141,11 +140,6 @@ const FIT_TIMEOUT_DELAYS_MS = [0, 16, 48, 120, 250, 500, 1_000, 2_000];
 const OUTPUT_OPERATION_TIMEOUT_MS = 5_000;
 const EMPTY_TERMINAL_OUTPUT = new Uint8Array(0);
 const RESET_TERMINAL_OUTPUT = new Uint8Array([0x1b, 0x63]);
-const terminalOutputEncoder = new TextEncoder();
-
-export function encodeTerminalOutput(text: string): TerminalOutputData {
-  return terminalOutputEncoder.encode(text);
-}
 
 function prependTerminalOutput(
   prefix: TerminalOutputData,

@@ -69,7 +69,7 @@ import {
   type NativeTerminalSizeClaimAction,
 } from "../terminal/native-renderer/terminal-input-resize-policy";
 import { encodeTerminalPaste } from "../terminal/runtime/terminal-paste";
-import type { TerminalOutputData } from "../terminal/runtime/terminal-emulator-runtime";
+import type { TerminalOutputData } from "../terminal/runtime/terminal-output";
 import {
   createTerminalResizePolicy,
   updateTerminalResizePolicy,

@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { randomUUID } from "expo-crypto";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { encodeTerminalOutput } from "@/terminal/runtime/terminal-emulator-runtime";
+import { encodeTerminalOutput } from "@/terminal/runtime/terminal-output";
 import TerminalEmulator from "@/components/terminal-emulator";
 import type { TerminalEmulatorHandle } from "@/components/terminal-emulator-contract";
 import { Button } from "@/components/ui/button";

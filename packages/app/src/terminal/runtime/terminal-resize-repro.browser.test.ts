@@ -1,7 +1,8 @@
 import { page } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TerminalState } from "@getpaseo/protocol/messages";
-import { encodeTerminalOutput, TerminalEmulatorRuntime } from "./terminal-emulator-runtime";
+import { TerminalEmulatorRuntime } from "./terminal-emulator-runtime";
+import { encodeTerminalOutput } from "./terminal-output";
 
 // Regression: "streaming pino log, resized the Paseo terminal, old logs stayed
 // narrow and new logs drew on top of the old ones."

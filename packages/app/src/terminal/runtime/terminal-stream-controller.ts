@@ -1,6 +1,6 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SubscribeTerminalRequest, TerminalState } from "@getpaseo/protocol/messages";
-import type { TerminalOutputData } from "./terminal-emulator-runtime";
+import type { TerminalOutputData } from "./terminal-output";
 import { i18n } from "@/i18n/i18next";
 
 export type TerminalStreamControllerClient = Pick<
