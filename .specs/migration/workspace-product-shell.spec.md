@@ -18,6 +18,8 @@ Replace the inherited agent-oriented entry page with the direct DSH workspace ex
 
 Keep the router and connection owner mounted across viewport changes. Preserve selected Workspace, conversation, draft and inspector state when resizing. Make every inspector tab discoverable on phones with visible overflow controls. Reuse the existing six-tab inspector, recorded data projections, pending interactions, creation, registration and search.
 
+Packaged desktop validation loads the desktop Host entry and its transitive dependencies alongside the direct DSH runtime before interactive startup.
+
 ## Acceptance
 
 The primary route reaches the direct workspace client without waiting for a Paseo daemon. All platform entry points use the shared product header and workspace navigation. Desktop navigation becomes compact on mobile without remounting the active route. Real recorded-session browser checks cover six inspector tabs, draft retention and desktop-to-phone-to-desktop resizing. Web and iPhone exports and desktop entry compilation must pass; Android direct access remains unavailable pending transport qualification; physical device and packaged desktop runtime checks remain separately recorded release gates. Production cutover remains separate; iPhone preview delivery follows the existing migration release policy.

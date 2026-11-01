@@ -156,7 +156,7 @@ Desktop grants stay in Electron's main process, encrypted with the operating sys
 
 The macOS package check uses an ad-hoc-signed app and a real isolated DSH profile with recorded model responses. It covers enrollment, Session reading, a prompt, an approved file operation, multi-select answers, offline draft retention, reconnection, cold restart with protected access, and Host-side revocation. Focused tests cover storage failures, cancellation, IPC sender isolation, and ownership teardown. This evidence does not qualify Windows, Linux, notarization, automatic updates, or physical-iPhone behavior.
 
-After packaging, run `npm run verify:dsh-desktop -- "/absolute/path/Daedal DSH.app"`. This loads the packaged main-process access modules and checks the pinned DSH Client and Cordis identities. The source dependency check alone cannot establish that these dependencies are present in the shipped app.
+After packaging, run `npm run verify:dsh-desktop -- "/absolute/path/Daedal DSH.app"`. This loads the packaged desktop Host entry and main-process access modules, including their transitive dependencies, and checks the pinned DSH Client and Cordis identities. The source dependency check alone cannot establish that these dependencies are present in the shipped app.
 
 ### Native host discovery
 

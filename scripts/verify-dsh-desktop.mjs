@@ -20,6 +20,8 @@ const source = `
   const requireApp = createRequire(process.argv[1]);
   const protocol = requireApp("@getpaseo/protocol/dsh-access");
   const client = requireApp("@deepseek-ai/dsh-client");
+  const desktopHost = requireApp("@getpaseo/server");
+  assert.equal(typeof desktopHost.startDaemonInstance, "function");
   const { Context } = requireApp("@deepseek-ai/cordis");
   assert.equal(typeof Context, "function");
   assert.equal(client.selectRemoteCapabilities(protocol.dshSessionEndpoints).length, 7);
@@ -28,7 +30,7 @@ const source = `
   assert.equal(requireProtocol("@deepseek-ai/dsh-client"), client);
   assert.equal(typeof requireApp("./dsh/access.js").DesktopDshAccess, "function");
   assert.equal(typeof requireApp("./dsh/device-store.js").DesktopDshDeviceStore, "function");
-  console.log("Packaged DSH runtime and shared module identity verified");
+  console.log("Packaged desktop Host, DSH runtime and shared module identity verified");
 `;
 const result = spawnSync(executable, ["-e", source, main], {
   env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
