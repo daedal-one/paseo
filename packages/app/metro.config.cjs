@@ -18,10 +18,20 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
+// Linked worktrees can share cached third-party packages while owning their workspace links.
+const dependencyRoots = Object.keys(require("./package.json").dependencies).flatMap((name) => {
+  const candidate = [appNodeModulesRoot, path.resolve(projectRoot, "../../node_modules")]
+    .map((root) => path.join(root, name))
+    .find((entry) => fs.existsSync(entry));
+  if (!candidate) return [];
+  const physical = fs.realpathSync(candidate);
+  return [name.startsWith("@") ? path.dirname(path.dirname(physical)) : path.dirname(physical)];
+});
 // Metro must see physical dependency targets outside the workspace, including exports.
 config.watchFolders = [
   ...new Set([
     ...config.watchFolders,
+    ...dependencyRoots,
     ...config.resolver.nodeModulesPaths
       .filter((root) => fs.existsSync(root))
       .map((root) => fs.realpathSync(root)),

@@ -2,6 +2,8 @@ import { trajectoryEnglish } from "@deepseek-ai/dsh-client";
 export const nativeDsh = {
   trajectory: trajectoryEnglish,
   inspect: {
+    previousTabs: "Show previous inspection tabs",
+    moreTabs: "Show more inspection tabs",
     open: "Inspect execution",
     back: "Conversation",
     latest: "Latest request",
@@ -139,7 +141,20 @@ export const nativeDsh = {
       error: "Error",
     },
   },
+  product: {
+    name: "daedal",
+    workspace: "Workspace",
+    connections: "Connections",
+    execution: "Execution",
+    inspecting: "Inspecting execution",
+  },
   workspaceOverview: {
+    descriptions: {
+      overview: "Your work and the decisions that need you.",
+      work: "Active and recent executions in this workspace.",
+      files: "Working files and their execution origin.",
+      memory: "Shared knowledge and its availability.",
+    },
     all: "All workspaces",
     select: "Workspace",
     search: "Find a workspace",
@@ -308,7 +323,7 @@ export const nativeDsh = {
   },
   creation: {
     title: "New session",
-    review: "Review session creation",
+    review: "Review creation",
     submit: "Create session",
     close: "Close",
     reset: "Start another session",

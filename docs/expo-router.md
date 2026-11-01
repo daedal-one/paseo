@@ -28,24 +28,9 @@ render a blank screen.
 
 ## Startup
 
-The root `/` route chooses a host boundary. It does not jump directly into a host
-leaf.
+The root `/` route opens `/workspace`, the direct DSH client. Its platform owner supplies authenticated browser access, desktop enrollment or iPhone enrollment without waiting for the companion daemon. `/dsh-hosts` remains an alias for existing links. The two routes use a stable shell outside the companion's adaptive panel hosts; changing width must not remount the navigator or its DSH connection.
 
-- Good: `/` -> `/h/[serverId]`
-- Bad: `/` -> `/h/[serverId]/workspace/[workspaceId]`
-
-`/h/[serverId]` is the host home route. The host index restores the last
-remembered workspace for that host after the remembered selection has hydrated
-and the workspace has not been proven missing. If there is no restorable
-workspace, it goes to global `/open-project`.
-
-This restore is based on the last navigated workspace, not current connection
-status. Do not redirect to another online host just because the remembered host
-is still connecting or offline; the workspace screen owns that offline/loading
-state.
-
-This split is deliberate. The host layout must mount first so native local
-dynamic params exist before any nested workspace leaf is selected.
+Legacy `/h/[serverId]` routes retain their host layout and workspace restore. Deep links still mount that host boundary before its leaves, and reconnecting hosts retain their remembered selection. Legacy entry and settings routes remain available directly.
 
 ## Error Recovery
 
@@ -176,9 +161,9 @@ state:
 3. Assert a real screen is visible, not the blank tree.
 4. Assert no `[Layout children]` warning appears.
 
-The pure policy tests should still enforce the boundary split:
+Route checks should enforce the entry-point split:
 
-- root startup with a saved workspace returns `/h/[serverId]`;
+- root startup opens `/workspace` independently of saved companion host state;
 - host index with the same saved workspace returns
   `/h/[serverId]/workspace/[workspaceId]`;
 - host index with no restorable workspace returns `/open-project`.
@@ -188,7 +173,7 @@ The pure policy tests should still enforce the boundary split:
 Before landing route changes:
 
 - [ ] Did you change `packages/app/src/app`? Re-read this file.
-- [ ] Did you touch remembered workspace restore? Keep root on `/h/[serverId]`.
+- [ ] Did you touch remembered companion workspace restore? Keep its host entry on `/h/[serverId]`.
 - [ ] Did a route return to a workspace? Use `navigateToWorkspace()` and pass a
       `target` when the action names a specific tab.
 - [ ] Did you add a route? Register it in the layout that directly owns it.

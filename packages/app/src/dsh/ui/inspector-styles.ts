@@ -19,8 +19,6 @@ export const inspectorStyles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   picker: { width: 220, maxWidth: "45%" },
-  tabs: { flexGrow: 0, height: 40, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  tabContent: { alignItems: "center", paddingHorizontal: theme.spacing[2], gap: theme.spacing[1] },
   canvas: { flex: 1, minHeight: 0, padding: theme.spacing[3] },
   content: { gap: theme.spacing[3], paddingBottom: theme.spacing[4] },
   section: { gap: theme.spacing[2] },

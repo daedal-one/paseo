@@ -1,6 +1,7 @@
 import { StyleSheet } from "react-native-unistyles";
-export const styles = StyleSheet.create((theme) => ({
+export const styles = StyleSheet.create((theme, rt) => ({
   fill: { flex: 1, minHeight: 0 },
+  hidden: { display: "none" },
   workspace: { width: "100%", gap: theme.spacing[3] },
   workspaceToolbar: {
     flexDirection: "row",
@@ -17,14 +18,26 @@ export const styles = StyleSheet.create((theme) => ({
     maxWidth: "100%",
   },
   workspacePicker: { flexGrow: 1, flexBasis: 240, maxWidth: 420 },
+  workspaceBody: {
+    flexDirection: rt.screen.width >= 800 ? "row" : "column",
+    gap: theme.spacing[6],
+  },
   workspaceTabs: {
-    flexDirection: "row",
+    flexDirection: rt.screen.width >= 800 ? "column" : "row",
+    width: rt.screen.width >= 800 ? 168 : "100%",
+    flexShrink: 0,
     flexWrap: "wrap",
     gap: theme.spacing[1],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     paddingBottom: theme.spacing[2],
   },
+  workspaceCanvas: { flex: 1, minWidth: 0, gap: theme.spacing[4] },
+  workspaceHeading: { gap: theme.spacing[1] },
+  workspaceTitle: {
+    fontSize: theme.fontSize["2xl"],
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+  },
+  sectionHeading: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   workspaceColumns: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[8] },
   workspaceMain: {
     flexGrow: 2,
@@ -75,9 +88,9 @@ export const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   overviewContent: {
-    padding: theme.spacing[4],
+    padding: rt.screen.width >= 800 ? theme.spacing[6] : theme.spacing[4],
     gap: theme.spacing[3],
-    maxWidth: 1200,
+    maxWidth: 1400,
     width: "100%",
     alignSelf: "center",
   },
@@ -89,9 +102,12 @@ export const styles = StyleSheet.create((theme) => ({
   },
   conversationHeader: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 1100,
     alignSelf: "center",
-    paddingHorizontal: theme.spacing[6],
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[2],
     gap: theme.spacing[2],
   },

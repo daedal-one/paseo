@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { Button } from "@/components/ui/button";
-import { BackHeader } from "@/components/headers/back-header";
+import { ProductHeader } from "./product-header";
 import { getIsElectron } from "@/constants/platform";
 import { openBrowserDshDirectory } from "../browser/directory";
 import type { DshDirectory } from "../directory";
 import { WebConversation } from "./web-conversation";
 import { HostDiscovery } from "./host-discovery";
-import { WorkspaceScreen } from "./workspace-screen";
+import { DirectoryView } from "./workspace-screen";
 import { styles } from "./styles";
 
 async function connectPageHost(model: DshDirectory): Promise<void> {
@@ -22,59 +21,42 @@ async function connectPageHost(model: DshDirectory): Promise<void> {
 }
 
 function BrowserContent({ model }: { model: DshDirectory }) {
-  const [hostsVisible, setHostsVisible] = useState(false);
-  const showHosts = useCallback(() => setHostsVisible(true), []);
-  const hideHosts = useCallback(() => setHostsVisible(false), []);
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const retry = useCallback(() => connectPageHost(model), [model]);
-  if (state.runtime !== null && state.conversation !== null) {
-    return <WebConversation model={model} state={state} />;
-  }
   const error = state.error ?? (state.directory.status === "failed" ? state.directory.error : null);
-  if (state.runtime !== null && state.pairing.status === "idle" && !hostsVisible) {
-    return (
-      <WorkspaceScreen
-        model={model}
-        state={state}
-        runtime={state.runtime}
-        onManageHosts={showHosts}
-      />
-    );
-  }
+  const conversation = useMemo(
+    () =>
+      state.runtime !== null && state.conversation !== null ? (
+        <WebConversation model={model} state={state} />
+      ) : null,
+    [model, state],
+  );
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      {state.runtime !== null && (
-        <Button size="sm" variant="ghost" onPress={hideHosts}>
-          {t("nativeDsh.workspaceOverview.back")}
-        </Button>
-      )}
-      <Text style={styles.muted}>{t("nativeDsh.browserAccess")}</Text>
-      {error !== null && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {t(`nativeDsh.errors.${error}`)}
-        </Text>
-      )}
-      {state.busy && <Text style={styles.text}>{t("common.loading")}</Text>}
-      {state.discovery !== null && (
-        <HostDiscovery model={model} discovery={state.discovery} pairing="browser" />
-      )}
-      {state.runtime === null && (
-        <Button onPress={retry} disabled={state.busy}>
-          {t("nativeDsh.reloadBrowser")}
-        </Button>
-      )}
-    </ScrollView>
+    <DirectoryView model={model} state={state} conversation={conversation}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.muted}>{t("nativeDsh.browserAccess")}</Text>
+        {error !== null && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {t(`nativeDsh.errors.${error}`)}
+          </Text>
+        )}
+        {state.busy && <Text style={styles.text}>{t("common.loading")}</Text>}
+        {state.discovery !== null && (
+          <HostDiscovery model={model} discovery={state.discovery} pairing="browser" />
+        )}
+        {state.runtime === null && (
+          <Button onPress={retry} disabled={state.busy}>
+            {t("nativeDsh.reloadBrowser")}
+          </Button>
+        )}
+      </ScrollView>
+    </DirectoryView>
   );
 }
 
 export default function BrowserDshDirectoryScreen() {
   const { t } = useTranslation();
-  const router = useRouter();
-  const back = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/settings");
-  }, [router]);
   const focused = useIsFocused();
   const electron = getIsElectron();
   const [model, setModel] = useState<DshDirectory | null>(null);
@@ -105,7 +87,7 @@ export default function BrowserDshDirectoryScreen() {
   }, [focused, electron]);
   return (
     <View style={styles.screen}>
-      <BackHeader title={t("nativeDsh.title")} onBack={back} />
+      <ProductHeader model={model} />
       {electron && <Text style={styles.text}>{t("nativeDsh.desktopPending")}</Text>}
       {failed && (
         <Text accessibilityRole="alert" style={styles.error}>

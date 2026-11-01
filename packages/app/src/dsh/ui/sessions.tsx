@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type {
@@ -11,7 +11,7 @@ import { SelectField } from "@/components/ui/select-field";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { workspaceOverview } from "../workspace-overview";
 import { Button } from "@/components/ui/button";
-import type { DshDirectory } from "../directory";
+import type { DshDirectory, WorkspaceSection } from "../directory";
 import type { DshHostRuntime } from "../runtime";
 import { SearchControl } from "./search-sheet";
 import { RegistrationControl } from "./registration-sheet";
@@ -67,17 +67,17 @@ interface SessionsProps {
   runtime: DshHostRuntime;
   model: DshDirectory;
   busy: boolean;
-  onManageHosts?: () => void;
 }
-export function Sessions({ runtime, model, busy, onManageHosts }: SessionsProps) {
+export function Sessions({ runtime, model, busy }: SessionsProps) {
   const openCreated = useCallback(
     (id: SessionId) => {
       void model.openConversation(id, conversationScheduler);
     },
     [model],
   );
-  const [tab, setTab] = useState<"overview" | "work" | "files" | "memory">("overview");
+  const setTab = useCallback((tab: WorkspaceSection) => model.selectWorkspaceSection(tab), [model]);
   const directory = useSnapshot(model);
+  const tab = directory.workspaceSection;
   const workspaces = useSnapshot(runtime.workspaces.list);
   const pending = useSnapshot(runtime.pending);
   const { t } = useTranslation();
@@ -119,8 +119,8 @@ export function Sessions({ runtime, model, busy, onManageHosts }: SessionsProps)
     () => ({ label: overview.workspace?.title ?? t("nativeDsh.workspaceOverview.all") }),
     [overview.workspace, t],
   );
-  const showWork = useCallback(() => setTab("work"), []);
-  const showFiles = useCallback(() => setTab("files"), []);
+  const showWork = useCallback(() => setTab("work"), [setTab]);
+  const showFiles = useCallback(() => setTab("files"), [setTab]);
   const empty = useMemo(
     () =>
       ready &&
@@ -153,43 +153,48 @@ export function Sessions({ runtime, model, busy, onManageHosts }: SessionsProps)
         <View style={styles.workspaceActions}>
           <SearchControl runtime={runtime} busy={busy} onOpenSession={openCreated} />
           <CreationControl runtime={runtime} onOpenSession={openCreated} busy={busy} />
-          {onManageHosts !== undefined && (
-            <Button size="sm" variant="ghost" onPress={onManageHosts}>
-              {t("nativeDsh.workspaceOverview.hosts")}
-            </Button>
-          )}
         </View>
       </View>
-      <View style={styles.workspaceTabs} accessibilityRole="tablist">
-        {(["overview", "work", "files", "memory"] as const).map((item) => (
-          <ChoiceTab
-            key={item}
-            value={item}
-            selected={tab}
-            label={t(`nativeDsh.workspaceOverview.tabs.${item}`)}
-            onSelect={setTab}
-            testID={`dsh-workspace-tab-${item}`}
+      <View style={styles.workspaceBody}>
+        <View style={styles.workspaceTabs} accessibilityRole="tablist">
+          {(["overview", "work", "files", "memory"] as const).map((item) => (
+            <ChoiceTab
+              key={item}
+              value={item}
+              selected={tab}
+              label={t(`nativeDsh.workspaceOverview.tabs.${item}`)}
+              onSelect={setTab}
+              testID={`dsh-workspace-tab-${item}`}
+            />
+          ))}
+        </View>
+        <View style={styles.workspaceCanvas}>
+          <View style={styles.workspaceHeading}>
+            <Text accessibilityRole="header" style={styles.workspaceTitle}>
+              {overview.workspace?.title ?? t("nativeDsh.workspaceOverview.all")}
+            </Text>
+            <Text style={styles.muted}>{t(`nativeDsh.workspaceOverview.descriptions.${tab}`)}</Text>
+          </View>
+          <WorkspaceNotices
+            connected={connected}
+            status={status}
+            failed={readFailed || workspaces.error !== null}
+            waiting={!ready || workspaces.phase !== "ready"}
+            removed={overview.removed}
+            busy={busy}
+            onReconnect={reconnect}
           />
-        ))}
+          <WorkspacePanels
+            overview={overview}
+            tab={tab}
+            model={model}
+            busy={busy}
+            empty={empty}
+            showWork={showWork}
+            showFiles={showFiles}
+          />
+        </View>
       </View>
-      <WorkspaceNotices
-        connected={connected}
-        status={status}
-        failed={readFailed || workspaces.error !== null}
-        waiting={!ready || workspaces.phase !== "ready"}
-        removed={overview.removed}
-        busy={busy}
-        onReconnect={reconnect}
-      />
-      <WorkspacePanels
-        overview={overview}
-        tab={tab}
-        model={model}
-        busy={busy}
-        empty={empty}
-        showWork={showWork}
-        showFiles={showFiles}
-      />
       <View style={styles.workspaceFooter}>
         <RegistrationControl runtime={runtime} busy={busy} />
         {connected && (
@@ -351,7 +356,12 @@ function WorkspaceActivity({
       {groups.map((group) =>
         group.rows.length === 0 ? null : (
           <View key={group.key} style={styles.workspaceSection}>
-            <Text style={styles.sectionTitle}>{t(`nativeDsh.workspaceOverview.${group.key}`)}</Text>
+            <View style={styles.sectionHeading}>
+              <Text style={styles.sectionTitle}>
+                {t(`nativeDsh.workspaceOverview.${group.key}`)}
+              </Text>
+              <Text style={styles.muted}>{group.rows.length}</Text>
+            </View>
             {(group.key === "recent" && !all ? group.rows.slice(0, 8) : group.rows).map((item) => (
               <SessionRow
                 key={item.session.id}

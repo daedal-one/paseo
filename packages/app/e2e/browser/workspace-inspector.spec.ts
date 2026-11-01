@@ -16,7 +16,8 @@ for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 800 });
       await page.emulateMedia({ colorScheme: "dark" });
       await attachDshSession(context, host.config);
-      await page.goto(host.companionUrl);
+      await page.goto(new URL("./", host.companionUrl).href);
+      await expect(page).toHaveURL(/\/daedal\/workspace$/);
       await expect(page.getByTestId("dsh-session-list")).toBeVisible({ timeout: 60_000 });
       await page.screenshot({ path: testInfo.outputPath(`workspace-${width}.png`) });
       await createHostSession(page, host.workspaceDir);
@@ -40,6 +41,13 @@ for (const width of [1280, 390]) {
       }
       await expect(page.getByText("Next request context", { exact: true })).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`context-${width}.png`) });
+      if (width === 390) {
+        await expect(page.getByTestId("dsh-inspector-tabs-next")).toBeEnabled();
+        await page.getByTestId("dsh-inspector-tabs-next").click();
+        await expect(page.getByRole("tab", { name: "Events", exact: true })).toBeInViewport();
+        await page.getByTestId("dsh-inspector-tabs-previous").click();
+        await expect(page.getByRole("tab", { name: "Context", exact: true })).toBeInViewport();
+      }
       for (const label of ["Trajectory", "Prompt & tools", "Usage", "Info", "Events"]) {
         await page.getByRole("tab", { name: label, exact: true }).click();
         await expect(page.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
@@ -64,6 +72,24 @@ for (const width of [1280, 390]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,
       );
+      if (width === 1280) {
+        for (const resizeWidth of [390, 1280]) {
+          await page.setViewportSize({ width: resizeWidth, height: 800 });
+          await expect(page.getByTestId("dsh-session-inspector")).toBeVisible();
+          await expect(page.getByRole("tab", { name: "Events", exact: true })).toHaveAttribute(
+            "aria-selected",
+            "true",
+          );
+          await page.screenshot({ path: testInfo.outputPath(`resize-${resizeWidth}.png`) });
+        }
+      }
+      await page.getByTestId("dsh-connections").click();
+      await expect(page.getByTestId("dsh-session-inspector")).toBeHidden();
+      await page.getByTestId("dsh-connections").click();
+      await expect(page.getByRole("tab", { name: "Events", exact: true })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
       await page.getByRole("button", { name: "Conversation", exact: true }).click();
       await expect(page.getByTestId("dsh-prompt-text")).toHaveValue("Keep this draft");
       await expect(page.getByTestId("dsh-history-scroll")).toContainText("PONG");
@@ -77,8 +103,23 @@ for (const width of [1280, 390]) {
           expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width - 16);
         }
       }
+      await page.getByTestId("dsh-workspace-tab-memory").click();
+      if (width === 1280) {
+        await page.setViewportSize({ width: 390, height: 800 });
+        await expect(page.getByTestId("dsh-workspace-tab-memory")).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        await page.setViewportSize({ width, height: 800 });
+      }
+      await page.getByTestId("dsh-workspace-tab-overview").click();
       await page.screenshot({ path: testInfo.outputPath(`workspace-populated-${width}.png`) });
     } finally {
+      if (testInfo.status !== testInfo.expectedStatus)
+        await testInfo.attach("host-output", {
+          body: host.outputTail(),
+          contentType: "text/plain",
+        });
       await host.close();
     }
   });

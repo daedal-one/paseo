@@ -26,13 +26,17 @@ export type DshPairingState =
   | { status: "claiming" }
   | { status: "wrong-host" }
   | { status: "failed"; error: DshAccessErrorCode };
+export type WorkspaceSection = "overview" | "work" | "files" | "memory";
+
 export interface DshDirectorySnapshot {
   directory: DshDirectoryLoad;
   pairing: DshPairingState;
   runtime: DshHostRuntime | null;
   conversation: DshConversation | null;
   inspecting: boolean;
+  managingHosts: boolean;
   selectedWorkspaceId: WorkspaceId | null;
+  workspaceSection: WorkspaceSection;
   discovery: DshDiscovery | null;
   busy: boolean;
   error: DshAccessErrorCode | null;
@@ -61,7 +65,9 @@ export class DshDirectory {
     runtime: null,
     conversation: null,
     inspecting: false,
+    managingHosts: false,
     selectedWorkspaceId: null,
+    workspaceSection: "overview",
     discovery: null,
     busy: false,
     error: null,
@@ -185,8 +191,10 @@ export class DshDirectory {
           runtime: null,
           conversation: null,
           inspecting: false,
+          managingHosts: false,
           discovery: null,
           selectedWorkspaceId: null,
+          workspaceSection: "overview",
         });
         return;
       })
@@ -267,6 +275,14 @@ export class DshDirectory {
     this.publish({ selectedWorkspaceId: id });
   }
 
+  manageHosts(managingHosts: boolean): void {
+    this.publish({ managingHosts });
+  }
+
+  selectWorkspaceSection(workspaceSection: WorkspaceSection): void {
+    this.publish({ workspaceSection });
+  }
+
   inspectConversation(inspecting: boolean): void {
     if (this.closed || this.snapshot.conversation === null) return;
     this.publish({ inspecting });
@@ -329,7 +345,9 @@ export class DshDirectory {
       runtime: null,
       conversation: null,
       inspecting: false,
+      managingHosts: false,
       selectedWorkspaceId: null,
+      workspaceSection: "overview",
       discovery: null,
       busy: false,
       error: null,

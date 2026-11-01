@@ -874,6 +874,17 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
       pathname === "/schedules" ||
       routeHasKnownHost);
 
+  if (pathname === "/" || pathname === "/workspace" || pathname === "/dsh-hosts") {
+    return (
+      <View style={layoutStyles.surfaceFill}>
+        <WindowChromeRegion corners="both">
+          <View style={flexStyle}>{children}</View>
+        </WindowChromeRegion>
+        <DesktopWindowControls />
+        <FloatingPanelPortalHost />
+      </View>
+    );
+  }
   return <AppContainer chromeEnabled={shouldShowAppChrome}>{children}</AppContainer>;
 }
 
@@ -897,6 +908,7 @@ function RootStack() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="dsh-hosts" />
+      <Stack.Screen name="workspace" />
       <Stack.Protected guard={storeReady}>
         <Stack.Screen name="welcome" />
         <Stack.Screen name="settings/index" />

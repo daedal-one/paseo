@@ -1,6 +1,5 @@
-import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { ScrollView } from "react-native";
+import type { ReactNode } from "react";
+import { ScrollView, View } from "react-native";
 import type { DshDirectory, DshDirectorySnapshot } from "../directory";
 import type { DshHostRuntime } from "../runtime";
 import { Sessions } from "./sessions";
@@ -11,27 +10,40 @@ export function WorkspaceScreen({
   model,
   state,
   runtime,
-  onManageHosts,
 }: {
   model: DshDirectory;
   state: DshDirectorySnapshot;
   runtime: DshHostRuntime;
-  onManageHosts: () => void;
 }) {
   return (
     <ScrollView contentContainerStyle={styles.overviewContent}>
       {state.error !== null && <AccessError code={state.error} />}
-      <Sessions model={model} runtime={runtime} busy={state.busy} onManageHosts={onManageHosts} />
+      <Sessions model={model} runtime={runtime} busy={state.busy} />
     </ScrollView>
   );
 }
 
-export function WorkspaceReturn({ active, onPress }: { active: boolean; onPress: () => void }) {
-  const { t } = useTranslation();
-  if (!active) return null;
+/** Keep an active execution mounted while its connection details are visible. */
+export function DirectoryView({
+  model,
+  state,
+  conversation,
+  children,
+}: {
+  model: DshDirectory;
+  state: DshDirectorySnapshot;
+  conversation: ReactNode;
+  children: ReactNode;
+}) {
+  const active = state.runtime !== null && state.pairing.status === "idle";
   return (
-    <Button size="sm" variant="ghost" onPress={onPress}>
-      {t("nativeDsh.workspaceOverview.back")}
-    </Button>
+    <View style={styles.fill}>
+      {active && state.runtime !== null && (
+        <View style={[styles.fill, state.managingHosts && styles.hidden]}>
+          {conversation ?? <WorkspaceScreen model={model} state={state} runtime={state.runtime} />}
+        </View>
+      )}
+      {(!active || state.managingHosts) && children}
+    </View>
   );
 }

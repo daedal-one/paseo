@@ -376,6 +376,18 @@ describe("native DSH Host directory", () => {
     await original();
     expect(opened).toBe(true);
   });
+  it("retains workspace navigation through connection management and clears it on host replacement", async () => {
+    const runtime = await offlineRuntime();
+    vi.mocked(openSavedDshHost).mockResolvedValue(runtime);
+    const model = directory();
+    await model.connect(hostId);
+    model.selectWorkspaceSection("memory");
+    model.manageHosts(true);
+    model.manageHosts(false);
+    expect(model.getSnapshot()).toMatchObject({ workspaceSection: "memory", managingHosts: false });
+    await model.forget(hostId);
+    expect(model.getSnapshot()).toMatchObject({ workspaceSection: "overview", runtime: null });
+  });
   it("does not open or claim after disposal", async () => {
     const model = directory();
     await model.dispose();

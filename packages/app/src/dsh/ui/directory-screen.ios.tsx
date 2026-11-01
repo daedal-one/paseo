@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Linking, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import {
@@ -11,7 +10,7 @@ import {
   type BarcodeSettings,
 } from "expo-camera";
 import { Button } from "@/components/ui/button";
-import { BackHeader } from "@/components/headers/back-header";
+import { ProductHeader } from "./product-header";
 import { DshDirectory, openDshDirectory } from "../native/directory";
 import type { DshDirectorySnapshot } from "../directory";
 import type { DshConversation, DshHostRuntime } from "../runtime";
@@ -19,7 +18,7 @@ import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
 import { SessionInspector } from "./session-inspector";
 import { Conversation } from "./conversation";
 import { HostDiscovery } from "./host-discovery";
-import { WorkspaceScreen, WorkspaceReturn } from "./workspace-screen";
+import { DirectoryView } from "./workspace-screen";
 import { SessionComposer } from "./interactions";
 import type { DshInteractionForm } from "../interaction-form";
 import { KeyboardDock } from "@/components/keyboard-dock";
@@ -75,83 +74,69 @@ function Scanner({ model }: { model: DshDirectory }) {
 
 function DirectoryContent({ model }: { model: DshDirectory }) {
   const { t } = useTranslation();
-  const [hostsVisible, setHostsVisible] = useState(false);
-  const showHosts = useCallback(() => setHostsVisible(true), []);
-  const hideHosts = useCallback(() => setHostsVisible(false), []);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const idle = state.pairing.status === "idle";
   const scan = useCallback(() => model.scan(), [model]);
   const reload = useCallback(() => model.reload(), [model]);
-  if (state.runtime !== null && state.conversation !== null)
-    return (
-      <NativeConversation
-        model={model}
-        state={state}
-        runtime={state.runtime}
-        view={state.conversation}
-      />
-    );
-
-  if (state.runtime !== null && state.pairing.status === "idle" && !hostsVisible) {
-    return (
-      <WorkspaceScreen
-        model={model}
-        state={state}
-        runtime={state.runtime}
-        onManageHosts={showHosts}
-      />
-    );
-  }
+  const conversation = useMemo(
+    () =>
+      state.runtime !== null && state.conversation !== null ? (
+        <NativeConversation
+          model={model}
+          state={state}
+          runtime={state.runtime}
+          view={state.conversation}
+        />
+      ) : null,
+    [model, state],
+  );
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <WorkspaceReturn active={state.runtime !== null} onPress={hideHosts} />
-      <Text style={styles.muted}>{t("nativeDsh.preview")}</Text>
-      {state.error !== null && <AccessError code={state.error} />}
-      <Pairing
-        model={model}
-        pairing={state.pairing}
-        Entry={Scanner}
-        deviceLabel={t("nativeDsh.deviceLabel")}
-        retryLabel={t("nativeDsh.scanAgain")}
-      />
-      {idle && (
-        <Button variant="default" disabled={state.busy} testID="dsh-scan-pairing" onPress={scan}>
-          {t("nativeDsh.scan")}
-        </Button>
-      )}
-      {idle && state.directory.status === "loading" && (
-        <Text style={styles.text}>{t("common.loading")}</Text>
-      )}
-      {idle && state.directory.status === "failed" && <AccessError code={state.directory.error} />}
-      {idle && state.directory.status === "ready" && state.directory.hosts.length === 0 && (
-        <Text style={styles.text}>{t("nativeDsh.emptyHosts")}</Text>
-      )}
-      {idle &&
-        state.directory.status === "ready" &&
-        state.directory.hosts.map((host) => (
-          <HostRow key={host.hostId} host={host} model={model} busy={state.busy} />
-        ))}
-      {idle && (
-        <Button variant="ghost" disabled={state.busy} onPress={reload}>
-          {t("nativeDsh.reload")}
-        </Button>
-      )}
-      {idle && state.discovery !== null && (
-        <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
-      )}
-    </ScrollView>
+    <DirectoryView model={model} state={state} conversation={conversation}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.muted}>{t("nativeDsh.preview")}</Text>
+        {state.error !== null && <AccessError code={state.error} />}
+        <Pairing
+          model={model}
+          pairing={state.pairing}
+          Entry={Scanner}
+          deviceLabel={t("nativeDsh.deviceLabel")}
+          retryLabel={t("nativeDsh.scanAgain")}
+        />
+        {idle && (
+          <Button variant="default" disabled={state.busy} testID="dsh-scan-pairing" onPress={scan}>
+            {t("nativeDsh.scan")}
+          </Button>
+        )}
+        {idle && state.directory.status === "loading" && (
+          <Text style={styles.text}>{t("common.loading")}</Text>
+        )}
+        {idle && state.directory.status === "failed" && (
+          <AccessError code={state.directory.error} />
+        )}
+        {idle && state.directory.status === "ready" && state.directory.hosts.length === 0 && (
+          <Text style={styles.text}>{t("nativeDsh.emptyHosts")}</Text>
+        )}
+        {idle &&
+          state.directory.status === "ready" &&
+          state.directory.hosts.map((host) => (
+            <HostRow key={host.hostId} host={host} model={model} busy={state.busy} />
+          ))}
+        {idle && (
+          <Button variant="ghost" disabled={state.busy} onPress={reload}>
+            {t("nativeDsh.reload")}
+          </Button>
+        )}
+        {idle && state.discovery !== null && (
+          <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
+        )}
+      </ScrollView>
+    </DirectoryView>
   );
 }
 
 export default function DshDirectoryScreen() {
   const insets = useSafeAreaInsets();
   const safeArea = useMemo(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
-  const { t } = useTranslation();
-  const router = useRouter();
-  const back = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/settings");
-  }, [router]);
   const focused = useIsFocused();
   const [model, setModel] = useState<DshDirectory | null>(null);
   const [disposeFailed, setDisposeFailed] = useState(false);
@@ -181,7 +166,7 @@ export default function DshDirectoryScreen() {
   }, [focused]);
   return (
     <View style={[styles.screen, safeArea]}>
-      <BackHeader title={t("nativeDsh.title")} onBack={back} />
+      <ProductHeader model={model} />
       {disposeFailed && <AccessError code="runtime-unavailable" />}
       {focused && model !== null && <DirectoryContent model={model} />}
     </View>

@@ -10,7 +10,7 @@ test.describe("Startup loading presentation", () => {
         label: "Dev",
         endpoint: "127.0.0.1:45678",
       })
-      .openRoot();
+      .openHostWorkspace({ serverId: "srv_unreachable_mobile", workspaceId: "workspace-1" });
 
     await startup.expectsSavedHostShell({ serverId: "srv_unreachable_mobile", label: "Dev" });
     await startup.expectsNoSavedHostErrorStatus();

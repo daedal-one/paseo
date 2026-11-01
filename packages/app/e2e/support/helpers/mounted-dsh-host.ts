@@ -378,7 +378,7 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       "      config:",
       `        distIndex: ${dist}`,
       "        mountPath: /daedal",
-      "        indexPaths: [/dsh-hosts]",
+      "        indexPaths: [/dsh-hosts, /workspace]",
     ];
     if (options.requireMarkerApproval) {
       overlayRows.push(

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import * as dsh from "@deepseek-ai/dsh-client";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import { ChoiceTab } from "./choice-tab";
+import { InspectorTabs } from "./inspector-tabs";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -481,17 +482,7 @@ export function SessionInspector({
           />
         </View>
       </View>
-      <ScrollView horizontal style={s.tabs} contentContainerStyle={s.tabContent}>
-        {tabs.map((value) => (
-          <ChoiceTab
-            key={value}
-            value={value}
-            selected={tab}
-            label={t(`nativeDsh.inspect.tabs.${value}`)}
-            onSelect={setTab}
-          />
-        ))}
-      </ScrollView>
+      <InspectorTabs tabs={tabs} selected={tab} onSelect={setTab} />
       <View style={s.canvas} testID="dsh-inspector-data">
         {session.hasMore && (
           <View style={s.inline}>
