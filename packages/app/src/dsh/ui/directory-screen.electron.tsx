@@ -10,7 +10,7 @@ import { openDesktopDshDirectory } from "../desktop/directory";
 import type { DshDirectory } from "../directory";
 import { AccessError, HostRow, Pairing } from "./host-pairing";
 import { HostDiscovery } from "./host-discovery";
-import { Sessions } from "./sessions";
+import { WorkspaceScreen, WorkspaceReturn } from "./workspace-screen";
 import { WebConversation } from "./web-conversation";
 import { styles } from "./styles";
 
@@ -47,6 +47,9 @@ function EnrollmentEntry({ model }: { model: DshDirectory }) {
 }
 
 function DesktopContent({ model }: { model: DshDirectory }) {
+  const [hostsVisible, setHostsVisible] = useState(false);
+  const showHosts = useCallback(() => setHostsVisible(true), []);
+  const hideHosts = useCallback(() => setHostsVisible(false), []);
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const scan = useCallback(() => model.scan(), [model]);
@@ -54,8 +57,19 @@ function DesktopContent({ model }: { model: DshDirectory }) {
   if (state.runtime !== null && state.conversation !== null)
     return <WebConversation model={model} state={state} />;
   const idle = state.pairing.status === "idle";
+  if (state.runtime !== null && state.pairing.status === "idle" && !hostsVisible) {
+    return (
+      <WorkspaceScreen
+        model={model}
+        state={state}
+        runtime={state.runtime}
+        onManageHosts={showHosts}
+      />
+    );
+  }
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <WorkspaceReturn active={state.runtime !== null} onPress={hideHosts} />
       <Text style={styles.muted}>{t("nativeDsh.desktopAccess")}</Text>
       {state.error !== null && <AccessError code={state.error} />}
       <Pairing
@@ -89,9 +103,6 @@ function DesktopContent({ model }: { model: DshDirectory }) {
       )}
       {idle && state.discovery !== null && (
         <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
-      )}
-      {idle && state.runtime !== null && (
-        <Sessions runtime={state.runtime} model={model} busy={state.busy} />
       )}
     </ScrollView>
   );

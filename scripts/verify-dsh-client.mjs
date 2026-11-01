@@ -51,6 +51,7 @@ for (const archive of manifest.archives) {
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-trajectory",
         "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-approval",
         "@deepseek-ai/dsh-client-ui-user-questions",
@@ -103,6 +104,10 @@ for (const name of [
   "registerQuestionRequests",
   "planReviewOf",
   "HistoryDetailLimitError",
+  "registerTrajectoryConversation",
+  "deriveTrajectoryLayout",
+  "deriveTrajectoryTimeline",
+  "contextOccupancy",
 ]) {
   assert.equal(typeof client[name], "function", `installed Client export: ${name}`);
 }
@@ -121,6 +126,20 @@ client.registerChatConversation({
   inspectRequestPrompt: client.inspectRequestPrompt,
   inspectSystemPrompt: client.inspectSystemPrompt,
 });
+client.registerTrajectoryConversation({
+  events,
+  views,
+  inspectRequestPrompt: client.inspectRequestPrompt,
+  inspectSystemPrompt: client.inspectSystemPrompt,
+});
+assert.equal(
+  client.selectRemoteCapabilities([
+    "sessionInfo/read",
+    "sessionInfo/readPrompt",
+    "openrouterSpend/read",
+  ]).length,
+  3,
+);
 const feed = new client.MutableSessionEventSource();
 const binding = new client.ConversationBindingModel(
   feed,

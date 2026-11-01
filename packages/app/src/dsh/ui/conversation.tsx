@@ -23,7 +23,7 @@ function nodeIs<K extends dsh.ChatNodeKind>(
 }
 
 /* eslint-disable react/no-array-index-key -- DSH message blocks are ordered slots; streamed text changes within a slot. */
-function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
+export function DetailControl({ history, seq }: { history: DshHistory; seq: number }) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(history.subscribe, history.getSnapshot);
   const status = state.details.get(seq);
@@ -279,6 +279,7 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
     runtime.connection.generation.subscribe,
     runtime.connection.generation.getSnapshot,
   );
+  const inspect = useCallback(() => model.inspectConversation(true), [model]);
   const back = useCallback(() => model.closeConversation(), [model]);
   const retry = useCallback(() => model.retryConversation(), [model]);
   const reconnect = useCallback(() => model.reconnect(), [model]);
@@ -292,6 +293,9 @@ export function Conversation({ model, runtime, view, busy }: ConversationProps) 
           {t("nativeDsh.conversation.back")}
         </Button>
         <Text style={styles.title}>{title}</Text>
+        <Button size="sm" variant="outline" onPress={inspect} testID="dsh-inspect-execution">
+          {t("nativeDsh.inspect.open")}
+        </Button>
         <ForkControl runtime={runtime} sessionId={view.sessionId} busy={busy} />
         <Queue
           queue={state.queue}

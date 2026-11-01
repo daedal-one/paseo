@@ -13,10 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { BackHeader } from "@/components/headers/back-header";
 import { DshDirectory, openDshDirectory } from "../native/directory";
+import type { DshDirectorySnapshot } from "../directory";
+import type { DshConversation, DshHostRuntime } from "../runtime";
 import type { SessionPendingInteraction } from "@deepseek-ai/dsh-client";
+import { SessionInspector } from "./session-inspector";
 import { Conversation } from "./conversation";
 import { HostDiscovery } from "./host-discovery";
-import { Sessions } from "./sessions";
+import { WorkspaceScreen, WorkspaceReturn } from "./workspace-screen";
 import { SessionComposer } from "./interactions";
 import type { DshInteractionForm } from "../interaction-form";
 import { KeyboardDock } from "@/components/keyboard-dock";
@@ -71,38 +74,37 @@ function Scanner({ model }: { model: DshDirectory }) {
 }
 
 function DirectoryContent({ model }: { model: DshDirectory }) {
-  const [forms] = useState(() => new WeakMap<SessionPendingInteraction, DshInteractionForm>());
   const { t } = useTranslation();
-  const keyboardShift = useSettledKeyboardShift();
-  const historyInset = useMemo(() => ({ height: keyboardShift }), [keyboardShift]);
+  const [hostsVisible, setHostsVisible] = useState(false);
+  const showHosts = useCallback(() => setHostsVisible(true), []);
+  const hideHosts = useCallback(() => setHostsVisible(false), []);
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const idle = state.pairing.status === "idle";
   const scan = useCallback(() => model.scan(), [model]);
   const reload = useCallback(() => model.reload(), [model]);
   if (state.runtime !== null && state.conversation !== null)
     return (
-      <ComposerViewport key={state.conversation.sessionId} style={layoutStyles.viewport}>
-        <KeyboardDock style={layoutStyles.fill}>
-          <View style={layoutStyles.fill}>
-            <View style={historyInset} />
-            <View style={layoutStyles.fill}>
-              {state.error !== null && <AccessError code={state.error} />}
-              <Conversation
-                model={model}
-                runtime={state.runtime}
-                view={state.conversation}
-                busy={state.busy}
-              />
-            </View>
-          </View>
-          <ComposerViewportContent style={layoutStyles.composer}>
-            <SessionComposer runtime={state.runtime} view={state.conversation} forms={forms} />
-          </ComposerViewportContent>
-        </KeyboardDock>
-      </ComposerViewport>
+      <NativeConversation
+        model={model}
+        state={state}
+        runtime={state.runtime}
+        view={state.conversation}
+      />
     );
+
+  if (state.runtime !== null && state.pairing.status === "idle" && !hostsVisible) {
+    return (
+      <WorkspaceScreen
+        model={model}
+        state={state}
+        runtime={state.runtime}
+        onManageHosts={showHosts}
+      />
+    );
+  }
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <WorkspaceReturn active={state.runtime !== null} onPress={hideHosts} />
       <Text style={styles.muted}>{t("nativeDsh.preview")}</Text>
       {state.error !== null && <AccessError code={state.error} />}
       <Pairing
@@ -136,9 +138,6 @@ function DirectoryContent({ model }: { model: DshDirectory }) {
       )}
       {idle && state.discovery !== null && (
         <HostDiscovery model={model} discovery={state.discovery} pairing="device" />
-      )}
-      {idle && state.runtime !== null && (
-        <Sessions runtime={state.runtime} model={model} busy={state.busy} />
       )}
     </ScrollView>
   );
@@ -194,3 +193,39 @@ const layoutStyles = RNStyleSheet.create({
   fill: { flex: 1 },
   composer: { width: "100%", flexShrink: 1 },
 });
+
+function NativeConversation({
+  model,
+  state,
+  runtime,
+  view,
+}: {
+  model: DshDirectory;
+  state: DshDirectorySnapshot;
+  runtime: DshHostRuntime;
+  view: DshConversation;
+}) {
+  const closeInspector = useCallback(() => model.inspectConversation(false), [model]);
+  const [forms] = useState(() => new WeakMap<SessionPendingInteraction, DshInteractionForm>());
+  const keyboardShift = useSettledKeyboardShift();
+  const historyInset = useMemo(() => ({ height: keyboardShift }), [keyboardShift]);
+  return (
+    <ComposerViewport key={view.sessionId} style={layoutStyles.viewport}>
+      <KeyboardDock style={[layoutStyles.fill, state.inspecting && { display: "none" }]}>
+        <View style={layoutStyles.fill}>
+          <View style={historyInset} />
+          <View style={layoutStyles.fill}>
+            {state.error !== null && <AccessError code={state.error} />}
+            <Conversation model={model} runtime={runtime} view={view} busy={state.busy} />
+          </View>
+        </View>
+        <ComposerViewportContent style={layoutStyles.composer}>
+          <SessionComposer runtime={runtime} view={view} forms={forms} />
+        </ComposerViewportContent>
+      </KeyboardDock>
+      {state.inspecting && (
+        <SessionInspector runtime={runtime} view={view} onClose={closeInspector} />
+      )}
+    </ComposerViewport>
+  );
+}

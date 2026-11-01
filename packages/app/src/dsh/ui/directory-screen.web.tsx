@@ -10,7 +10,7 @@ import { openBrowserDshDirectory } from "../browser/directory";
 import type { DshDirectory } from "../directory";
 import { WebConversation } from "./web-conversation";
 import { HostDiscovery } from "./host-discovery";
-import { Sessions } from "./sessions";
+import { WorkspaceScreen } from "./workspace-screen";
 import { styles } from "./styles";
 
 async function connectPageHost(model: DshDirectory): Promise<void> {
@@ -22,6 +22,9 @@ async function connectPageHost(model: DshDirectory): Promise<void> {
 }
 
 function BrowserContent({ model }: { model: DshDirectory }) {
+  const [hostsVisible, setHostsVisible] = useState(false);
+  const showHosts = useCallback(() => setHostsVisible(true), []);
+  const hideHosts = useCallback(() => setHostsVisible(false), []);
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const retry = useCallback(() => connectPageHost(model), [model]);
@@ -29,8 +32,23 @@ function BrowserContent({ model }: { model: DshDirectory }) {
     return <WebConversation model={model} state={state} />;
   }
   const error = state.error ?? (state.directory.status === "failed" ? state.directory.error : null);
+  if (state.runtime !== null && state.pairing.status === "idle" && !hostsVisible) {
+    return (
+      <WorkspaceScreen
+        model={model}
+        state={state}
+        runtime={state.runtime}
+        onManageHosts={showHosts}
+      />
+    );
+  }
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      {state.runtime !== null && (
+        <Button size="sm" variant="ghost" onPress={hideHosts}>
+          {t("nativeDsh.workspaceOverview.back")}
+        </Button>
+      )}
       <Text style={styles.muted}>{t("nativeDsh.browserAccess")}</Text>
       {error !== null && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -40,9 +58,6 @@ function BrowserContent({ model }: { model: DshDirectory }) {
       {state.busy && <Text style={styles.text}>{t("common.loading")}</Text>}
       {state.discovery !== null && (
         <HostDiscovery model={model} discovery={state.discovery} pairing="browser" />
-      )}
-      {state.runtime !== null && (
-        <Sessions model={model} runtime={state.runtime} busy={state.busy} />
       )}
       {state.runtime === null && (
         <Button onPress={retry} disabled={state.busy}>

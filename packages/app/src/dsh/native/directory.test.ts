@@ -1,5 +1,5 @@
 import { brandString } from "@deepseek-ai/dsh-brand";
-import type { SessionId } from "@deepseek-ai/dsh-client";
+import type { SessionId, WorkspaceId } from "@deepseek-ai/dsh-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionDeviceGrantSchema, connectionHostIdSchema } from "@deepseek-ai/dsh-client";
 import { DshDirectory, openDshDirectory } from "./directory";
@@ -84,6 +84,38 @@ afterEach(async () => {
 });
 
 describe("native DSH Host directory", () => {
+  it("browses explicit Workspace membership without opening an execution and clears selection on Host disposal", async () => {
+    const runtime = await offlineRuntime();
+    vi.mocked(openSavedDshHost).mockResolvedValue(runtime);
+    const workspaceId = brandString<WorkspaceId>("workspace-navigation");
+    const baseline = runtime.workspaces.list.getSnapshot();
+    vi.spyOn(runtime.workspaces.list, "getSnapshot").mockReturnValue({
+      ...baseline,
+      items: [
+        {
+          workspaceId,
+          path: "/workspace",
+          title: "Workspace",
+          sessionIds: [],
+          createdAt: "2026-11-01",
+          updatedAt: "2026-11-01",
+        },
+      ],
+    });
+    const open = vi.spyOn(runtime, "openConversation");
+    const model = directory();
+    await model.connect(hostId);
+    model.selectWorkspace(workspaceId);
+    expect(model.getSnapshot().selectedWorkspaceId).toBe(workspaceId);
+    expect(open).not.toHaveBeenCalled();
+    expect(model.getSnapshot().conversation).toBeNull();
+    model.closeConversation();
+    expect(model.getSnapshot().selectedWorkspaceId).toBe(workspaceId);
+    model.selectWorkspace(brandString<WorkspaceId>("unknown"));
+    expect(model.getSnapshot().selectedWorkspaceId).toBe(workspaceId);
+    await model.dispose();
+    expect(model.getSnapshot().selectedWorkspaceId).toBeNull();
+  });
   it("keeps unavailable Session selection visible without inventing a connection", async () => {
     const model = directory();
     await model.openConversation(brandString<SessionId>("missing"), null);

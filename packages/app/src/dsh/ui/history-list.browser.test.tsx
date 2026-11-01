@@ -146,3 +146,28 @@ it("keeps a reader through changing row heights, follows the end only on request
   await expect.poll(atEnd).toBeLessThan(2);
   expect(container.querySelectorAll("[data-history-key]").length).toBeLessThan(40);
 });
+
+it("retains the reading position while the mounted conversation is hidden for inspection", async () => {
+  container = document.createElement("div");
+  container.style.cssText = "height:400px;width:390px;display:flex;flex-direction:column";
+  document.body.append(container);
+  root = createRoot(container);
+  const keys = Array.from({ length: 1000 }, (_, index) => `row-${index}`);
+  act(() => root.render(<HistoryList keys={keys} renderItem={renderRow} latestLabel="Latest" />));
+  const scroller = container.querySelector<HTMLElement>("[data-testid=dsh-history-scroll]")!;
+  await expect
+    .poll(() => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
+    .toBeLessThan(2);
+  scroller.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+  scroller.scrollTop -= 1600;
+  scroller.dispatchEvent(new Event("scroll"));
+  await expect.poll(() => container.querySelector('[data-history-key="row-975"]')).not.toBeNull();
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  const before = scroller.scrollTop;
+  container.style.display = "none";
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  container.style.display = "flex";
+  await expect.poll(() => Math.abs(scroller.scrollTop - before)).toBeLessThan(2);
+});

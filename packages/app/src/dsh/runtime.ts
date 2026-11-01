@@ -11,6 +11,7 @@ import { DshRegistrationJournal, type RegistrationAttemptId } from "./registrati
 import { DshFork } from "./fork";
 import { DshForkJournal } from "./fork-journal";
 import { DshSearch } from "./search";
+import { InspectionRead } from "./inspection-read";
 import { DshHistory } from "./history";
 import { DshImages, DshImageReads } from "./images";
 import { DshFileUploads } from "./files";
@@ -42,6 +43,10 @@ export interface DshConversation {
   readonly prompt: DshPrompt;
   readonly history: DshHistory;
   readonly images: DshImages;
+  readonly events: dsh.SessionEventSource;
+  readonly info: InspectionRead<dsh.SessionInfoReadResult>;
+  readonly spend: InspectionRead<dsh.OpenRouterSpendReadResult>;
+  readonly latestPrompt: InspectionRead<dsh.SessionPromptReadResult>;
 }
 
 export interface DshHostRuntime {
@@ -169,6 +174,12 @@ export async function createDshHostRuntime(
       inspectRequestPrompt: dsh.inspectRequestPrompt,
       inspectSystemPrompt: dsh.inspectSystemPrompt,
     });
+    dsh.registerTrajectoryConversation({
+      events,
+      views,
+      inspectRequestPrompt: dsh.inspectRequestPrompt,
+      inspectSystemPrompt: dsh.inspectSystemPrompt,
+    });
     const imageReads = new DshImageReads(context.remote.session);
     context.effect(() => () => imageReads.close());
     const fileUploads = new DshFileUploads(context.remote.fileUploads);
@@ -178,8 +189,13 @@ export async function createDshHostRuntime(
     const retiringHistory = new Set<Promise<void>>();
     function releaseConversation() {
       if (current === null) return;
-      const retiring = current.view.history
-        .dispose()
+      const retiring = Promise.all([
+        current.view.history.dispose(),
+        current.view.info.dispose(),
+        current.view.spend.dispose(),
+        current.view.latestPrompt.dispose(),
+      ])
+        .then(() => undefined)
         .finally(() => retiringHistory.delete(retiring));
       retiringHistory.add(retiring);
       current.view.images.dispose();
@@ -214,6 +230,27 @@ export async function createDshHostRuntime(
         const view: DshConversation = {
           sessionId: id,
           session: source.session,
+          events: source.eventSource,
+          info: new InspectionRead(
+            "sessionInfo/read",
+            connection,
+            () => context.remote.$host.capabilities,
+            (signal) => readingValue(context.remote.sessionInfo.read({ sessionId: id }, signal)),
+          ),
+          spend: new InspectionRead(
+            "openrouterSpend/read",
+            connection,
+            () => context.remote.$host.capabilities,
+            (signal) =>
+              readingValue(context.remote.openrouterSpend.read({ sessionId: id }, signal)),
+          ),
+          latestPrompt: new InspectionRead(
+            "sessionInfo/readPrompt",
+            connection,
+            () => context.remote.$host.capabilities,
+            (signal) =>
+              readingValue(context.remote.sessionInfo.readPrompt({ sessionId: id }, signal)),
+          ),
           conversation: binding,
           history: new DshHistory(
             source.session,
@@ -269,4 +306,10 @@ export async function createDshHostRuntime(
     ]);
     throw error;
   }
+}
+
+async function readingValue<T>(reading: Promise<dsh.RemoteResult<T>>): Promise<T> {
+  const result = await reading;
+  if (!result.ok) throw new DshAccessError("session-unavailable");
+  return result.value;
 }

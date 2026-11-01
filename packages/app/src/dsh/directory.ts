@@ -4,6 +4,7 @@ import type {
   SessionId,
   SessionSelection,
   SessionSelectionStore,
+  WorkspaceId,
 } from "@deepseek-ai/dsh-client";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 import { DshDiscovery } from "./discovery";
@@ -30,6 +31,8 @@ export interface DshDirectorySnapshot {
   pairing: DshPairingState;
   runtime: DshHostRuntime | null;
   conversation: DshConversation | null;
+  inspecting: boolean;
+  selectedWorkspaceId: WorkspaceId | null;
   discovery: DshDiscovery | null;
   busy: boolean;
   error: DshAccessErrorCode | null;
@@ -57,6 +60,8 @@ export class DshDirectory {
     pairing: { status: "idle" },
     runtime: null,
     conversation: null,
+    inspecting: false,
+    selectedWorkspaceId: null,
     discovery: null,
     busy: false,
     error: null,
@@ -176,7 +181,13 @@ export class DshDirectory {
         if (results.some((result) => result.status === "rejected"))
           throw new DshAccessError("runtime-unavailable");
         this.ownedRuntime = null;
-        this.publish({ runtime: null, conversation: null, discovery: null });
+        this.publish({
+          runtime: null,
+          conversation: null,
+          inspecting: false,
+          discovery: null,
+          selectedWorkspaceId: null,
+        });
         return;
       })
       .catch(() => {
@@ -241,14 +252,30 @@ export class DshDirectory {
       const runtime = this.ownedRuntime;
       if (runtime === null) throw new DshAccessError("session-unavailable");
       const conversation = runtime.openConversation(id, scheduler);
-      this.publish({ conversation });
+      this.publish({ conversation, inspecting: false });
     }, "session-unavailable");
+  }
+
+  /** Browsing a registration changes navigation only; it never opens an execution. */
+  selectWorkspace(id: WorkspaceId | null): void {
+    if (this.closed || this.snapshot.busy || this.ownedRuntime === null) return;
+    if (
+      id !== null &&
+      !this.ownedRuntime.workspaces.list.getSnapshot().items.some((item) => item.workspaceId === id)
+    )
+      return;
+    this.publish({ selectedWorkspaceId: id });
+  }
+
+  inspectConversation(inspecting: boolean): void {
+    if (this.closed || this.snapshot.conversation === null) return;
+    this.publish({ inspecting });
   }
 
   closeConversation(): void {
     if (this.closed) return;
     this.ownedRuntime?.closeConversation();
-    this.publish({ conversation: null });
+    this.publish({ conversation: null, inspecting: false });
   }
 
   retryConversation(): Promise<void> {
@@ -301,6 +328,8 @@ export class DshDirectory {
       pairing: { status: "idle" },
       runtime: null,
       conversation: null,
+      inspecting: false,
+      selectedWorkspaceId: null,
       discovery: null,
       busy: false,
       error: null,

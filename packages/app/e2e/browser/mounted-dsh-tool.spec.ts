@@ -50,6 +50,20 @@ test.describe("mounted native DSH tool presentation", () => {
         await expect(page.getByTestId("dsh-block-reasoning").first()).toBeVisible();
         // The tool call still renders in the assistant step as a structured block.
         await expect(page.getByTestId("dsh-block-tool-call").first()).toBeVisible();
+        await page.getByTestId("dsh-inspect-execution").click();
+        const inspector = page.getByTestId("dsh-session-inspector");
+        await inspector.getByRole("tab", { name: "Trajectory", exact: true }).click();
+        await inspector
+          .getByRole("button", { name: /\d+ · tool.*bash/ })
+          .click({ timeout: 10_000 });
+        await expect(inspector.getByText(/echo TERMINAL_OK/).first()).toBeVisible();
+        await expect(inspector.getByRole("button", { name: /Tool schema/ })).toBeVisible();
+        await inspector.getByRole("button", { name: "Back to records", exact: true }).click();
+        await inspector.getByRole("tab", { name: "Prompt & tools", exact: true }).click();
+        await expect(inspector.getByRole("button", { name: "+ bash", exact: true })).toBeVisible();
+        await inspector.getByRole("tab", { name: "Events", exact: true }).click();
+        await inspector.getByLabel("Search raw events").fill("tool/result");
+        await expect(inspector.getByTestId("dsh-history-scroll")).toContainText("tool/result");
         expect(errors).toEqual([]);
       } finally {
         await host.close();
