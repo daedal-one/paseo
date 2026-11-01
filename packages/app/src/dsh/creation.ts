@@ -7,12 +7,22 @@ import {
   type ISessions,
   type IWorkspaces,
   type SessionId,
+  type WorkspaceId,
 } from "@deepseek-ai/dsh-client";
+import type { DshWorkId } from "./workspace-data";
 import type { DshCreationJournal, StoredCreationOutcome } from "./creation-journal";
 import { dshCreationEndpoints } from "@getpaseo/protocol/dsh-access";
 
 type Request = NonNullable<Parameters<ISessions["create"]>[0]>;
-export type DshCreationSelection = Omit<Request, "sessionId">;
+/** Client-local launch attribution, retained with the exact Session creation attempt. */
+export interface DshWorkCreationTarget {
+  readonly id: DshWorkId;
+  readonly workspaceId: WorkspaceId;
+  readonly expectedRevision: number;
+}
+export type DshCreationSelection = Omit<Request, "sessionId"> & {
+  readonly workTarget?: DshWorkCreationTarget;
+};
 type Attempt = DshCreationSelection & { readonly sessionId: SessionId };
 type RosterResult = Awaited<ReturnType<Context["remote"]["agentPresets"]["list"]>>;
 type Roster = Extract<RosterResult, { ok: true }>["value"];
@@ -195,6 +205,11 @@ export class DshCreation {
     if (selection.cwd !== undefined && selection.workspaceId !== undefined)
       selectionError = "ambiguous-target";
     else if (
+      selection.workTarget !== undefined &&
+      selection.workTarget.workspaceId !== selection.workspaceId
+    )
+      selectionError = "ambiguous-target";
+    else if (
       selection.workspaceId !== undefined &&
       (workspace.phase !== "ready" ||
         workspace.error !== null ||
@@ -215,6 +230,9 @@ export class DshCreation {
     const generation = this.generation;
     const request: Attempt = Object.freeze({
       ...selection,
+      ...(selection.workTarget === undefined
+        ? {}
+        : { workTarget: Object.freeze({ ...selection.workTarget }) }),
       sessionId: this.createId(),
     });
     // Defer dispatch so observers of sending cannot start a second request reentrantly.
@@ -241,7 +259,12 @@ export class DshCreation {
           return;
         }
         try {
-          const id = await this.sessions.create(request);
+          const id = await this.sessions.create({
+            sessionId: request.sessionId,
+            ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+            ...(request.workspaceId === undefined ? {} : { workspaceId: request.workspaceId }),
+            ...(request.agentPreset === undefined ? {} : { agentPreset: request.agentPreset }),
+          });
           await this.saveOutcome(
             id === request.sessionId
               ? { kind: "accepted", request }

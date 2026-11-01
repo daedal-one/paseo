@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "sourceCommit": "9831d9565a9916e979adf5b4d0023e58454a07fc",
+  "sourceCommit": "2ee4f1af144720c0e638ebdef39009a25f771e93",
   "entry": "@deepseek-ai/dsh-client",
   "archives": [
     {
       "name": "@deepseek-ai/cordis",
       "version": "4.0.2",
       "file": "deepseek-ai-cordis-4.0.2.tgz",
-      "sha256": "02fd258a5e644c906202d0c783f53a8857eeb963e2bb1ecffc110705242c39c3"
+      "sha256": "c6024f94c92a83933b9f7cb99d2abf43401016194f40246934af1f82eb634eee"
     },
     {
       "name": "@deepseek-ai/cosmokit",
       "version": "1.8.3",
       "file": "deepseek-ai-cosmokit-1.8.3.tgz",
-      "sha256": "69647a14229708b2c168294c8daec07884c74d95c1a8f03efecfcfa97150d3b4"
+      "sha256": "6642644c5a70b48867d7c01d175bd5598a39181646315cc8d265ca4f6af58c77"
     },
     {
       "name": "@deepseek-ai/dsh-brand",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-brand-0.1.5-alpha.2.tgz",
-      "sha256": "c8100a065446f66f3c887086e437004c05bf7856ee0c872af1b30af4f1786625"
+      "sha256": "fc99a209a6e7ba80fb43ca7a49a3f7ada3302a5b8c7fa05688780c6efaf921ff"
     },
     {
       "name": "@deepseek-ai/dsh-typert-protocol",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-typert-protocol-0.1.5-alpha.2.tgz",
-      "sha256": "ccefa528ef97b4fc5f149df13e0ecde86ce9f2e172be2186b139e8c335fbd858"
+      "sha256": "8c407b5e1abbdd9d7c2bc48ab6079856f4a60c43e3712458663011cffb045f52"
     },
     {
       "name": "@deepseek-ai/dsh-util-values",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-util-values-0.1.5-alpha.2.tgz",
-      "sha256": "540cf2eb5036325840681efd32c613446c3fdbdfc7f3c3b20e3ff6b300ef9c81"
+      "sha256": "64d72f8f12092c611f94f55156d2aa61b19131a4637755439401e7627f87d177"
     },
     {
       "name": "@deepseek-ai/dsh-client",
       "version": "0.1.5-alpha.2",
       "file": "deepseek-ai-dsh-client-0.1.5-alpha.2.tgz",
-      "sha256": "c185b6b1b76fca2b49861f70804630e3ecbbeb0cf6e8937ae38b3cb0b51a9e05"
+      "sha256": "6ce52766a3f95d094a289c596ff7f522c245df70edef53190602653fae12a083"
     }
   ]
 }

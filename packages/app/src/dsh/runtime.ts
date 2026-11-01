@@ -15,6 +15,7 @@ import { InspectionRead } from "./inspection-read";
 import { DshHistory } from "./history";
 import { DshImages, DshImageReads } from "./images";
 import { DshFileUploads } from "./files";
+import { DshWorkspace } from "./workspace-data";
 import { createDshAbortController } from "../runtime/dsh-abort-controller";
 
 export interface DshHostRuntimeOptions {
@@ -55,6 +56,7 @@ export interface DshHostRuntime {
   readonly remote: Context["remote"];
   readonly sessions: dsh.ISessions;
   readonly workspaces: dsh.IWorkspaces;
+  readonly workspaceData: DshWorkspace;
   readonly creation: DshCreation;
   readonly registration: DshRegistration;
   readonly search: DshSearch;
@@ -89,6 +91,7 @@ export async function createDshHostRuntime(
   let registration: DshRegistration | undefined;
   let search: DshSearch | undefined;
   let fork: DshFork | undefined;
+  let workspaceData: DshWorkspace | undefined;
   try {
     context.provide("connection", connection);
     await context.plugin({ apply: dsh.applyRegistry, inject: dsh.registryInject });
@@ -154,6 +157,13 @@ export async function createDshHostRuntime(
     const ownedFork = fork;
     search = new DshSearch(context.sessions, connection, () => context.remote.$host.capabilities);
     const ownedSearch = search;
+    workspaceData = new DshWorkspace(
+      context.remote,
+      connection,
+      () => context.remote.$host.capabilities,
+      options.randomId,
+    );
+    const ownedWorkspaceData = workspaceData;
     const pending = new dsh.PendingInteractions();
     await context.plugin({
       inject: ["remote", "sessions"],
@@ -210,6 +220,7 @@ export async function createDshHostRuntime(
       remote: context.remote,
       sessions: context.sessions,
       workspaces: context.workspaces,
+      workspaceData: ownedWorkspaceData,
       pending: pending.source,
       creation: ownedCreation,
       registration: ownedRegistration,
@@ -291,6 +302,7 @@ export async function createDshHostRuntime(
           ownedSearch.dispose(),
           ownedRegistration.dispose(),
           ownedCreation.dispose(),
+          ownedWorkspaceData.dispose(),
           context.fiber.dispose(),
           ...retiringHistory,
         ]);
@@ -302,6 +314,7 @@ export async function createDshHostRuntime(
       search?.dispose(),
       registration?.dispose(),
       creation?.dispose(),
+      workspaceData?.dispose(),
       context.fiber.dispose(),
     ]);
     throw error;

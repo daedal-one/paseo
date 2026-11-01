@@ -17,9 +17,20 @@ const requestSchema = z
     cwd: z.string().optional(),
     workspaceId: z.string().min(1).optional(),
     agentPreset: z.string().min(1).optional(),
+    workTarget: z
+      .object({
+        id: z.string().min(1),
+        workspaceId: z.string().min(1),
+        expectedRevision: z.number().int().positive(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
-  .refine((value) => value.cwd === undefined || value.workspaceId === undefined);
+  .refine((value) => value.cwd === undefined || value.workspaceId === undefined)
+  .refine(
+    (value) => value.workTarget === undefined || value.workTarget.workspaceId === value.workspaceId,
+  );
 const recordSchema = z
   .object({
     version: z.literal(1),
@@ -85,7 +96,7 @@ export class DshCreationJournal {
           (current.kind === "unknown" && current.published && !outcome.published))
       )
         return text;
-      return this.encode(outcome);
+      return this.encode({ ...outcome, request: current.request });
     });
     return this.decode(after);
   }

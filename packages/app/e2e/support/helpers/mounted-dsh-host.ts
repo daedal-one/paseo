@@ -140,6 +140,10 @@ interface MountedDshHostOptions {
   requireMarkerApproval?: boolean;
   /** Required workspace events from the committed outcome fixture and real naming helper. */
   workspaceProvenance?: boolean;
+  /** Durable Work and Memory owners plus a registered source directory, without a Session. */
+  durableWorkspace?: boolean;
+  /** An unbound existing Work collection requires the user's explicit connection action. */
+  existingWorkspaceWork?: boolean;
 }
 
 function hostFailure(message: string, cause: unknown, failures: unknown[]): AggregateError {
@@ -322,6 +326,27 @@ async function protectedHostIdentity(origin: string, cookie: string): Promise<Co
   return result.value;
 }
 
+/** Load the Host-owned fixture without publishing its provider composition in the app. */
+async function durableWorkspaceOverlay(
+  home: string,
+  cwd: string,
+  enabled = false,
+  existingWork = false,
+): Promise<string[]> {
+  if (!enabled) return [];
+  const url = pathToFileURL(
+    path.join(repository, "packages/api/workspace-controller/tests/fixtures/workspace-browser.mjs"),
+  );
+  const fixture = (await import(url.href)) as {
+    prepareWorkspaceTest(
+      home: string,
+      cwd: string,
+      options?: { existingWork: boolean },
+    ): Promise<string[]>;
+  };
+  return fixture.prepareWorkspaceTest(home, cwd, { existingWork });
+}
+
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
@@ -394,6 +419,14 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
         `      name: ${workspacePlugin}`,
       );
     }
+    overlayRows.push(
+      ...(await durableWorkspaceOverlay(
+        home,
+        cwd,
+        options.durableWorkspace,
+        options.existingWorkspaceWork,
+      )),
+    );
     overlayRows.push("");
     await writeFile(overlay, overlayRows.join("\n"));
     if (process.env.DAEDAL_E2E_DEBUG === "1") {

@@ -1,5 +1,5 @@
 import type { IWorkspaces, SessionId, WorkspaceId } from "@deepseek-ai/dsh-client";
-import type { DshCreation, DshCreationSnapshot } from "./creation";
+import type { DshCreation, DshCreationSnapshot, DshWorkCreationTarget } from "./creation";
 
 interface Display {
   readonly label: string;
@@ -27,6 +27,7 @@ export interface DshCreationFormState {
   readonly workspaceMissing: boolean;
   readonly working: boolean;
   readonly openSession: SessionId | null;
+  readonly openWorkTarget: DshWorkCreationTarget | null;
 }
 
 function publishedSession(outcome: DshCreationSnapshot["outcome"]): SessionId | null {
@@ -50,20 +51,33 @@ export class DshCreationForm {
   constructor(
     private readonly creation: CreationPort,
     private readonly workspaces: Pick<IWorkspaces, "list">,
+    private readonly fixedWorkspaceId?: WorkspaceId,
+    private readonly workTarget?: DshWorkCreationTarget,
   ) {
+    const registered = workspaces.list
+      .getSnapshot()
+      .items.find((item) => item.workspaceId === fixedWorkspaceId);
+    const workspace =
+      fixedWorkspaceId === undefined
+        ? null
+        : {
+            value: fixedWorkspaceId,
+            display: { label: registered?.title ?? fixedWorkspaceId },
+          };
     this.state = {
       creation: creation.getSnapshot(),
       workspaces: workspaces.list.getSnapshot(),
-      target: "directory",
+      target: fixedWorkspaceId === undefined ? "directory" : "workspace",
       cwd: "",
       profile: null,
-      workspace: null,
+      workspace,
       editable: false,
       canSubmit: false,
       profileMissing: false,
       workspaceMissing: false,
       working: false,
       openSession: null,
+      openWorkTarget: null,
     };
     this.sync();
   }
@@ -88,6 +102,20 @@ export class DshCreationForm {
       this.subscriptions = [];
     };
   };
+  private publishedWorkTarget(
+    outcome: DshCreationSnapshot["outcome"],
+  ): DshWorkCreationTarget | null {
+    if (outcome.kind !== "accepted" || this.workTarget === undefined) return null;
+    const retained = outcome.request.workTarget;
+    if (
+      retained === undefined ||
+      retained.id !== this.workTarget.id ||
+      retained.workspaceId !== this.fixedWorkspaceId ||
+      retained.workspaceId !== this.workTarget.workspaceId
+    )
+      return null;
+    return retained;
+  }
   private sync = (): void => {
     if (this.closed) return;
     const creation = this.creation.getSnapshot(),
@@ -106,6 +134,7 @@ export class DshCreationForm {
       workspace !== null &&
       workspaces.items.some((w) => w.workspaceId === workspace.value);
     const openSession = publishedSession(creation.outcome);
+    const openWorkTarget = this.publishedWorkTarget(creation.outcome);
     this.state = {
       ...this.state,
       creation,
@@ -120,11 +149,12 @@ export class DshCreationForm {
       workspaceMissing: workspace !== null && workspaceReady && !workspaceValid,
       working: this.pending !== null,
       openSession,
+      openWorkTarget,
     };
     for (const listener of this.listeners) listener();
   };
   chooseTarget = (target: "directory" | "workspace"): void => {
-    if (this.state.editable) {
+    if (this.state.editable && this.fixedWorkspaceId === undefined) {
       this.state = { ...this.state, target };
       this.sync();
     }
@@ -142,7 +172,10 @@ export class DshCreationForm {
     }
   };
   chooseWorkspace = (value: WorkspaceId, display: Display): void => {
-    if (this.state.editable) {
+    if (
+      this.state.editable &&
+      (this.fixedWorkspaceId === undefined || value === this.fixedWorkspaceId)
+    ) {
       this.state = { ...this.state, workspace: { value, display } };
       this.sync();
     }
@@ -169,6 +202,7 @@ export class DshCreationForm {
       this.creation.create({
         agentPreset: profile!.value,
         ...(target === "directory" ? { cwd } : { workspaceId: workspace!.value }),
+        ...(this.workTarget === undefined ? {} : { workTarget: this.workTarget }),
       }),
     );
   };

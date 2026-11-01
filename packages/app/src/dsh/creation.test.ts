@@ -14,7 +14,7 @@ import {
 import { dshCreationEndpoints } from "@getpaseo/protocol/dsh-access";
 import { DshCreationJournal, type DshCreationStorage } from "./creation-journal";
 import { DshCreationForm } from "./creation-form";
-import { DshCreation, type DshCreationSelection } from "./creation";
+import { DshCreation, type DshCreationSelection, type DshWorkCreationTarget } from "./creation";
 const id = brandString<SessionId>("candidate");
 const workspaceId = brandString<NonNullable<DshCreationSelection["workspaceId"]>>("workspace");
 const identity = {
@@ -693,6 +693,115 @@ it("retains confirmed identity when durable reset fails", async () => {
 });
 
 describe("native creation form", () => {
+  it("retains the exact Work launch across cold recovery without attributing it to another Work item", async () => {
+    const storage = memoryStorage();
+    const workA: DshWorkCreationTarget = {
+      id: brandString<DshWorkCreationTarget["id"]>("work-a"),
+      workspaceId,
+      expectedRevision: 3,
+    };
+    const workB: DshWorkCreationTarget = {
+      ...workA,
+      id: brandString<DshWorkCreationTarget["id"]>("work-b"),
+    };
+    const f = await fixture(storage);
+    const form = new DshCreationForm(f.creation, f.workspaces, workspaceId, workA);
+    const close = form.connect();
+    try {
+      await form.refreshProfiles();
+      form.chooseProfile("minimal", { label: "Minimal" });
+      await form.submit();
+      expect(form.getSnapshot()).toMatchObject({ openSession: id, openWorkTarget: workA });
+      expect(f.sessions.create).toHaveBeenCalledWith({
+        sessionId: id,
+        workspaceId,
+        agentPreset: "minimal",
+      });
+    } finally {
+      close();
+      await f.creation.dispose();
+    }
+    const restored = await fixture(storage);
+    try {
+      const otherWork = new DshCreationForm(
+        restored.creation,
+        restored.workspaces,
+        workspaceId,
+        workB,
+      );
+      expect(otherWork.getSnapshot()).toMatchObject({ openSession: id, openWorkTarget: null });
+      const sameWork = new DshCreationForm(restored.creation, restored.workspaces, workspaceId, {
+        ...workA,
+        expectedRevision: 9,
+      });
+      expect(sameWork.getSnapshot()).toMatchObject({ openSession: id, openWorkTarget: workA });
+      const generic = new DshCreationForm(restored.creation, restored.workspaces);
+      expect(generic.getSnapshot()).toMatchObject({ openSession: id, openWorkTarget: null });
+      expect(restored.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await restored.creation.dispose();
+    }
+  });
+
+  it("opens a generic retained creation without manufacturing a Work launch target", async () => {
+    const f = await fixture();
+    try {
+      await f.creation.create({ workspaceId });
+      const workTarget: DshWorkCreationTarget = {
+        id: brandString<DshWorkCreationTarget["id"]>("work"),
+        workspaceId,
+        expectedRevision: 1,
+      };
+      const form = new DshCreationForm(f.creation, f.workspaces, workspaceId, workTarget);
+      expect(form.getSnapshot()).toMatchObject({ openSession: id, openWorkTarget: null });
+    } finally {
+      await f.creation.dispose();
+    }
+  });
+
+  it("refuses Work launch attribution whose Workspace differs from the creation request", async () => {
+    const f = await fixture();
+    try {
+      await f.creation.create({
+        workspaceId,
+        workTarget: {
+          id: brandString<DshWorkCreationTarget["id"]>("work"),
+          workspaceId: brandString<typeof workspaceId>("different"),
+          expectedRevision: 1,
+        },
+      });
+      expect(f.creation.getSnapshot().selectionError).toBe("ambiguous-target");
+      expect(f.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await f.creation.dispose();
+    }
+  });
+
+  it("keeps Work execution creation in its explicit Workspace and refuses a removed registration", async () => {
+    const f = await fixture();
+    const form = new DshCreationForm(f.creation, f.workspaces, workspaceId);
+    const close = form.connect();
+    try {
+      await form.refreshProfiles();
+      form.chooseProfile("minimal", { label: "Minimal" });
+      form.chooseTarget("directory");
+      form.chooseWorkspace(brandString<typeof workspaceId>("unrelated"), { label: "Unrelated" });
+      form.setDirectory("/unrelated");
+      expect(form.getSnapshot()).toMatchObject({
+        target: "workspace",
+        workspace: { value: workspaceId },
+        canSubmit: true,
+      });
+      f.workspaces.list.set({ ...f.workspaces.list.getSnapshot(), items: [] });
+      expect(form.getSnapshot()).toMatchObject({ workspaceMissing: true, canSubmit: false });
+      await form.submit();
+      expect(f.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      close();
+      await f.creation.dispose();
+    }
+  });
+
   it("captures explicit displays and forwards one immutable selection while closing only its readers", async () => {
     const f = await fixture();
     const form = new DshCreationForm(f.creation, f.workspaces);

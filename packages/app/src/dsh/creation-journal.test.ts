@@ -8,13 +8,50 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { brandString } from "@deepseek-ai/dsh-brand";
 import type { ConnectionHostId, SessionId } from "@deepseek-ai/dsh-client";
-import { DshCreationJournal, type CreationAttempt } from "./creation-journal";
+import {
+  DshCreationJournal,
+  type CreationAttempt,
+  type DshCreationStorage,
+} from "./creation-journal";
 import { createSqliteCreationStorage } from "./creation-storage-sqlite";
 const host = brandString<ConnectionHostId>("host-a");
 const request: CreationAttempt = {
   sessionId: brandString<SessionId>("attempt-a"),
   cwd: "/host/project",
 };
+
+it("keeps claimed Work attribution immutable when settling the same Session identity", async () => {
+  let saved: string | null = null;
+  const storage: DshCreationStorage = {
+    async transact(_hostId, update) {
+      const before = saved;
+      saved = update(saved);
+      return { before, after: saved };
+    },
+  };
+  const workspaceId = brandString<WorkspaceId>("workspace");
+  const target = {
+    id: brandString<NonNullable<CreationAttempt["workTarget"]>["id"]>("work-a"),
+    workspaceId,
+    expectedRevision: 4,
+  };
+  const attempt: CreationAttempt = {
+    sessionId: request.sessionId,
+    workspaceId,
+    workTarget: target,
+  };
+  const journal = new DshCreationJournal(host, storage);
+  await journal.claim(attempt);
+  await journal.settle({
+    kind: "accepted",
+    request: {
+      ...attempt,
+      workTarget: { ...target, id: brandString<typeof target.id>("work-b"), expectedRevision: 8 },
+    },
+  });
+  const cold = new DshCreationJournal(host, storage);
+  expect(await cold.read()).toEqual({ kind: "accepted", request: attempt });
+});
 describe("durable SQLite creation records", () => {
   it("survives connection replacement and protects terminal/replacement identities", async () => {
     const home = await mkdtemp(join(tmpdir(), "dsh-creation-"));

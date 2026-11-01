@@ -156,6 +156,7 @@ function admittedPrompt(requestId: string, seq = 1) {
   return {
     type: "event",
     event: {
+      actor: "session:implicit-author",
       type: "user/message",
       seq,
       time: seq + 1,
@@ -230,6 +231,7 @@ function workspaceBranchNameEvent(seq: number) {
   return {
     type: "event",
     event: {
+      actor: "session:implicit-author",
       type: "workspace/branch-name-request",
       seq,
       time: 0,
@@ -242,6 +244,7 @@ function workspaceProvenanceEvent(sessionId: string, seq = 15) {
   return {
     type: "event",
     event: {
+      actor: "session:implicit-author",
       type: "workspace/provenance",
       seq,
       time: 0,
@@ -277,13 +280,17 @@ function workspaceProvenanceEvent(sessionId: string, seq = 15) {
 }
 
 function workspaceStateEvent(seq: number, data: typeof workspaceSaving | typeof workspaceReturned) {
-  return { type: "event", event: { type: "workspace/state", seq, time: 0, data } };
+  return {
+    type: "event",
+    event: { actor: "session:implicit-author", type: "workspace/state", seq, time: 0, data },
+  };
 }
 
 function fixtureUserMessage(seq: number, text: string) {
   return {
     type: "event",
     event: {
+      actor: "session:implicit-author",
       type: "user/message",
       seq,
       time: 0,
@@ -302,6 +309,7 @@ function futureWorkspaceEvent(seq: number, ignorable = false) {
   return {
     type: "event",
     event: {
+      actor: "session:implicit-author",
       type: "workspace/future-required",
       seq,
       time: 0,
@@ -582,7 +590,7 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
             value = {
               type: "snapshot",
               header: {
-                version: 3,
+                version: 4,
                 id: request.payload.args.request.address.sessionId,
                 createdAt: 0,
                 isSeeded: false,
@@ -592,6 +600,7 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
                 {
                   type: "event",
                   event: {
+                    actor: "session:implicit-author",
                     type: "user/message",
                     seq: 0,
                     time: 1,
@@ -666,7 +675,16 @@ function conversationHost(fixture: ConversationFixtureOptions = {}) {
 describe("native DSH Conversation ownership", () => {
   it("decodes merged workspace events from the follow baseline and live stream without another outcome projection", async () => {
     const baseline = [
-      { type: "event", event: { type: "turn/start", seq: 12, time: 0, data: { turn: 1 } } },
+      {
+        type: "event",
+        event: {
+          actor: "session:implicit-author",
+          type: "turn/start",
+          seq: 12,
+          time: 0,
+          data: { turn: 1 },
+        },
+      },
       workspaceStateEvent(13, workspaceSaving),
       workspaceBranchNameEvent(14),
       workspaceProvenanceEvent("first"),
@@ -714,7 +732,16 @@ describe("native DSH Conversation ownership", () => {
 
   it("decodes merged workspace events from one explicit older page without draining more history", async () => {
     const page = [
-      { type: "event", event: { type: "turn/start", seq: 12, time: 0, data: { turn: 1 } } },
+      {
+        type: "event",
+        event: {
+          actor: "session:implicit-author",
+          type: "turn/start",
+          seq: 12,
+          time: 0,
+          data: { turn: 1 },
+        },
+      },
       workspaceStateEvent(13, workspaceSaving),
       workspaceBranchNameEvent(14),
       workspaceProvenanceEvent("first"),
@@ -896,7 +923,13 @@ describe("native DSH Conversation ownership", () => {
         await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
         host.push({
           type: "event",
-          event: { type: "turn/start", seq: 1, time: 2, data: { turn: 1 } },
+          event: {
+            actor: "session:implicit-author",
+            type: "turn/start",
+            seq: 1,
+            time: 2,
+            data: { turn: 1 },
+          },
         });
         const receipt = {
           workspaceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -909,7 +942,13 @@ describe("native DSH Conversation ownership", () => {
         };
         host.push({
           type: "event",
-          event: { type: "workspace/state", seq: 2, time: 3, data: receipt },
+          event: {
+            actor: "session:implicit-author",
+            type: "workspace/state",
+            seq: 2,
+            time: 3,
+            data: receipt,
+          },
         });
         await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
         const outcomes = () =>
@@ -925,7 +964,13 @@ describe("native DSH Conversation ownership", () => {
         };
         host.push({
           type: "event",
-          event: { type: "workspace/state", seq: 3, time: 4, data: pending },
+          event: {
+            actor: "session:implicit-author",
+            type: "workspace/state",
+            seq: 3,
+            time: 4,
+            data: pending,
+          },
         });
         await vi.waitFor(() => expect(outcomes()).toHaveLength(1));
         const first = outcomes()[0];
@@ -939,7 +984,13 @@ describe("native DSH Conversation ownership", () => {
         };
         host.push({
           type: "event",
-          event: { type: "workspace/state", seq: 4, time: 5, data: returned },
+          event: {
+            actor: "session:implicit-author",
+            type: "workspace/state",
+            seq: 4,
+            time: 5,
+            data: returned,
+          },
         });
         await vi.waitFor(() => expect(outcomes()[0].data).toEqual(returned));
         expect(outcomes()).toHaveLength(1);
@@ -1049,11 +1100,23 @@ describe("native DSH Conversation ownership", () => {
         await vi.waitFor(() => expect(view.session.getSnapshot().openState).toBe("open"));
         host.push({
           type: "event",
-          event: { type: "turn/start", seq: 1, time: 2, data: { turn: 1 } },
+          event: {
+            actor: "session:implicit-author",
+            type: "turn/start",
+            seq: 1,
+            time: 2,
+            data: { turn: 1 },
+          },
         });
         host.push({
           type: "event",
-          event: { type: "step/start", seq: 2, time: 3, data: { turn: 1, step: 1 } },
+          event: {
+            actor: "session:implicit-author",
+            type: "step/start",
+            seq: 2,
+            time: 3,
+            data: { turn: 1, step: 1 },
+          },
         });
         host.push({
           type: "assistant-stream",

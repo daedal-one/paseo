@@ -7,28 +7,34 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SelectField } from "@/components/ui/select-field";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { DshCreationForm, type DshCreationFormState } from "../creation-form";
+import type { DshWorkCreationTarget } from "../creation";
 import type { DshHostRuntime } from "../runtime";
-import type { SessionId } from "@deepseek-ai/dsh-client";
+import type { SessionId, WorkspaceId } from "@deepseek-ai/dsh-client";
 import { styles } from "./styles";
 
 interface Props {
   runtime: DshHostRuntime;
+  workspaceId?: WorkspaceId;
+  workTarget?: DshWorkCreationTarget;
   onClose(): void;
-  onOpenSession(id: SessionId): void;
+  onOpenSession(id: SessionId, workTarget?: DshWorkCreationTarget): void;
 }
 
-export function CreationSheet({ runtime, onClose, onOpenSession }: Props) {
+export function CreationSheet({ runtime, workspaceId, workTarget, onClose, onOpenSession }: Props) {
   const { t } = useTranslation();
   const compact = useIsCompactFormFactor();
   const size = compact ? "md" : "sm";
-  const [form] = useState(() => new DshCreationForm(runtime.creation, runtime.workspaces));
+  const [form] = useState(
+    () => new DshCreationForm(runtime.creation, runtime.workspaces, workspaceId, workTarget),
+  );
   useEffect(() => form.connect(), [form]);
   const state = useSyncExternalStore(form.subscribe, form.getSnapshot);
   const { creation } = state;
   const outcome = creation.outcome;
   const open = useCallback(() => {
-    if (state.openSession !== null) onOpenSession(state.openSession);
-  }, [onOpenSession, state.openSession]);
+    if (state.openSession !== null)
+      onOpenSession(state.openSession, state.openWorkTarget ?? undefined);
+  }, [onOpenSession, state.openSession, state.openWorkTarget]);
   const canReset =
     creation.storage === "ready" && (outcome.kind === "accepted" || outcome.kind === "rejected");
   const footer = useMemo(
@@ -98,7 +104,7 @@ export function CreationSheet({ runtime, onClose, onOpenSession }: Props) {
           </Text>
         )}
         {outcome.kind === "idle" ? (
-          <CreationFields form={form} state={state} />
+          <CreationFields form={form} state={state} fixedWorkspace={workspaceId !== undefined} />
         ) : (
           <View style={styles.group} testID={`dsh-create-outcome-${outcome.kind}`}>
             <Text accessibilityLiveRegion="polite" style={styles.text}>
@@ -141,7 +147,15 @@ export function CreationSheet({ runtime, onClose, onOpenSession }: Props) {
   );
 }
 
-function CreationFields({ form, state }: { form: DshCreationForm; state: DshCreationFormState }) {
+function CreationFields({
+  form,
+  state,
+  fixedWorkspace,
+}: {
+  form: DshCreationForm;
+  state: DshCreationFormState;
+  fixedWorkspace: boolean;
+}) {
   const { t } = useTranslation();
   const size = useIsCompactFormFactor() ? "md" : "sm";
   const { creation } = state;
@@ -159,7 +173,7 @@ function CreationFields({ form, state }: { form: DshCreationForm; state: DshCrea
   }));
   return (
     <>
-      <CreationTarget form={form} state={state} />
+      <CreationTarget form={form} state={state} fixedWorkspace={fixedWorkspace} />
       {creation.catalog === "unavailable" ? (
         <Text style={styles.error}>{t("nativeDsh.creation.catalogUnavailable")}</Text>
       ) : (
@@ -200,10 +214,14 @@ function CreationFields({ form, state }: { form: DshCreationForm; state: DshCrea
 
 export function CreationControl({
   runtime,
+  workspaceId,
+  workTarget,
   onOpenSession,
   busy,
-}: Omit<Props, "onClose"> & { busy: boolean }) {
+  label,
+}: Omit<Props, "onClose"> & { busy: boolean; label?: string }) {
   const { t } = useTranslation();
+  const controlSize = useIsCompactFormFactor() ? "md" : "sm";
   const [opened, setOpened] = useState<DshHostRuntime | null>(null);
   const creation = useSyncExternalStore(runtime.creation.subscribe, runtime.creation.getSnapshot);
   const show = useCallback(() => {
@@ -213,27 +231,41 @@ export function CreationControl({
   }, [runtime]);
   const close = useCallback(() => setOpened(null), []);
   const open = useCallback(
-    (id: SessionId) => {
+    (id: SessionId, target?: DshWorkCreationTarget) => {
       setOpened(null);
-      onOpenSession(id);
+      onOpenSession(id, target);
     },
     [onOpenSession],
   );
   return (
     <>
-      <Button size="sm" testID="dsh-create-session" disabled={busy} onPress={show}>
+      <Button size={controlSize} testID="dsh-create-session" disabled={busy} onPress={show}>
         {creation.outcome.kind === "idle"
-          ? t("nativeDsh.creation.title")
+          ? (label ?? t("nativeDsh.creation.title"))
           : t("nativeDsh.creation.review")}
       </Button>
       {opened === runtime && (
-        <CreationSheet runtime={runtime} onClose={close} onOpenSession={open} />
+        <CreationSheet
+          runtime={runtime}
+          workspaceId={workspaceId}
+          workTarget={workTarget}
+          onClose={close}
+          onOpenSession={open}
+        />
       )}
     </>
   );
 }
 
-function CreationTarget({ form, state }: { form: DshCreationForm; state: DshCreationFormState }) {
+function CreationTarget({
+  form,
+  state,
+  fixedWorkspace,
+}: {
+  form: DshCreationForm;
+  state: DshCreationFormState;
+  fixedWorkspace: boolean;
+}) {
   const { t } = useTranslation();
   const size = useIsCompactFormFactor() ? "md" : "sm";
   const { workspaces } = state;
@@ -259,18 +291,20 @@ function CreationTarget({ form, state }: { form: DshCreationForm; state: DshCrea
   }));
   return (
     <>
-      <SelectField
-        label={t("nativeDsh.creation.target")}
-        value={state.target}
-        selectedDisplay={targetDisplay}
-        options={targetOptions}
-        onChange={form.chooseTarget}
-        placeholder={t("nativeDsh.creation.target")}
-        emptyText={t("nativeDsh.creation.empty")}
-        disabled={!state.editable}
-        size={size}
-        triggerTestID="dsh-create-target"
-      />
+      {!fixedWorkspace && (
+        <SelectField
+          label={t("nativeDsh.creation.target")}
+          value={state.target}
+          selectedDisplay={targetDisplay}
+          options={targetOptions}
+          onChange={form.chooseTarget}
+          placeholder={t("nativeDsh.creation.target")}
+          emptyText={t("nativeDsh.creation.empty")}
+          disabled={!state.editable}
+          size={size}
+          triggerTestID="dsh-create-target"
+        />
+      )}
       {state.target === "directory" ? (
         <Field label={t("nativeDsh.creation.directory")}>
           <FormTextInput
@@ -293,7 +327,12 @@ function CreationTarget({ form, state }: { form: DshCreationForm; state: DshCrea
           onChange={form.chooseWorkspace}
           placeholder={t("nativeDsh.creation.chooseWorkspace")}
           emptyText={t("nativeDsh.creation.emptyWorkspaces")}
-          disabled={!state.editable || workspaces.phase !== "ready" || workspaces.error !== null}
+          disabled={
+            fixedWorkspace ||
+            !state.editable ||
+            workspaces.phase !== "ready" ||
+            workspaces.error !== null
+          }
           loading={workspaces.phase !== "ready"}
           error={workspaceError}
           size={size}

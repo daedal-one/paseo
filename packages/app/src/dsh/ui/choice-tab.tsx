@@ -7,18 +7,20 @@ export function ChoiceTab<T extends string>({
   label,
   onSelect,
   testID,
+  size = "sm",
 }: {
   value: T;
   selected: T;
   label: string;
   onSelect: (value: T) => void;
   testID?: string;
+  size?: "sm" | "md";
 }) {
   const choose = useCallback(() => onSelect(value), [onSelect, value]);
   const state = useMemo(() => ({ selected: selected === value }), [selected, value]);
   return (
     <Button
-      size="sm"
+      size={size}
       variant={selected === value ? "secondary" : "ghost"}
       accessibilityRole="tab"
       accessibilityState={state}

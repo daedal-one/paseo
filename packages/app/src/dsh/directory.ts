@@ -11,6 +11,8 @@ import { DshDiscovery } from "./discovery";
 import { DshAccessError, type DshAccessErrorCode } from "./access-error";
 import { decodeDshPairing, type DshPairing } from "./pairing";
 import type { DshConversation, DshHostRuntime } from "./runtime";
+import type { DshWorkId } from "./workspace-data";
+import { brandString } from "@deepseek-ai/dsh-brand";
 
 export type DshDirectoryHost =
   | { hostId: ConnectionHostId; status: "paired"; origin: string; label: string }
@@ -36,6 +38,7 @@ export interface DshDirectorySnapshot {
   inspecting: boolean;
   managingHosts: boolean;
   selectedWorkspaceId: WorkspaceId | null;
+  selectedWorkId: DshWorkId | null;
   workspaceSection: WorkspaceSection;
   discovery: DshDiscovery | null;
   busy: boolean;
@@ -67,6 +70,7 @@ export class DshDirectory {
     inspecting: false,
     managingHosts: false,
     selectedWorkspaceId: null,
+    selectedWorkId: null,
     workspaceSection: "overview",
     discovery: null,
     busy: false,
@@ -194,6 +198,7 @@ export class DshDirectory {
           managingHosts: false,
           discovery: null,
           selectedWorkspaceId: null,
+          selectedWorkId: null,
           workspaceSection: "overview",
         });
         return;
@@ -272,7 +277,40 @@ export class DshDirectory {
       !this.ownedRuntime.workspaces.list.getSnapshot().items.some((item) => item.workspaceId === id)
     )
       return;
-    this.publish({ selectedWorkspaceId: id });
+    void this.ownedRuntime.workspaceData.selectWorkspace(id);
+    this.publish({ selectedWorkspaceId: id, selectedWorkId: null });
+  }
+
+  selectWork(id: DshWorkId | null): void {
+    if (this.closed || this.ownedRuntime === null || this.snapshot.busy) return;
+    void this.ownedRuntime.workspaceData.selectWork(id);
+    this.publish({ selectedWorkId: id, workspaceSection: "work" });
+  }
+
+  /** Linked executions may be outside the loaded Session page; resolve their exact identity. */
+  openWorkExecution(
+    executionId: string,
+    scheduler: ConversationScheduler | null,
+    initialBrief?: string,
+  ): Promise<void> {
+    return this.run(async () => {
+      const runtime = this.ownedRuntime;
+      if (runtime === null) throw new DshAccessError("session-unavailable");
+      const id = brandString<SessionId>(executionId);
+      const result = await runtime.sessions.loadSummary(id, this.lifetime.signal);
+      if (!result.ok || !result.value) throw new DshAccessError("session-unavailable");
+      if (this.closed || runtime !== this.ownedRuntime) return;
+      const conversation = runtime.openConversation(id, scheduler);
+      const draft = conversation.prompt.getSnapshot();
+      const emptyDraft =
+        draft.text.length === 0 &&
+        draft.images.length === 0 &&
+        draft.files.length === 0 &&
+        draft.selectedFiles.length === 0 &&
+        !draft.draftLocked;
+      if (initialBrief !== undefined && emptyDraft) conversation.prompt.setText(initialBrief);
+      this.publish({ conversation, inspecting: false });
+    }, "session-unavailable");
   }
 
   manageHosts(managingHosts: boolean): void {
@@ -347,6 +385,7 @@ export class DshDirectory {
       inspecting: false,
       managingHosts: false,
       selectedWorkspaceId: null,
+      selectedWorkId: null,
       workspaceSection: "overview",
       discovery: null,
       busy: false,

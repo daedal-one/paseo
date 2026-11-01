@@ -37,7 +37,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface3,
+    backgroundColor: theme.colors.surface1,
     paddingHorizontal: theme.spacing[2],
     paddingVertical: 3,
   },
