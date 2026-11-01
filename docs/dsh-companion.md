@@ -88,11 +88,11 @@ For hosts outside this tailnet, use Paseo's existing [encrypted relay and pairin
 
 ### Preview 0.8.0
 
-TestFlight build **7003004** is available to the existing **Team (Expo)** internal tester group. It updates the installed companion to **Daedal DSH** and retains its application identity. Open TestFlight, select the companion app, and choose **Update**. Keep Tailscale connected and the Mac awake; existing saved companion connections remain usable.
+TestFlight build **7003011**, from frontend commit `5128825d`, is available to the existing **Team (Expo)** internal tester group. It retains the installed companion's application identity. Open TestFlight, select **Daedal DSH**, and choose **Update**. Keep Tailscale connected and the selected DSH Host available; saved connections remain usable.
 
-Open an existing DSH session, send a short message, answer an approval or question, and reconnect after changing networks. The default conversation screens use the existing companion bridge. **Settings → DSH hosts** is a separate opt-in native preview requiring a compatible enrolled host; long-plan scrolling, text-composer keyboard behavior and physical-device qualification remain in progress. The current DSH interface remains available throughout migration.
+The default workspace uses direct DSH access. Choose a Workspace, create durable Work, browse its Files, and review its Memory. Creating Work does not start a Session or send a model prompt. Executions remain available underneath the Work item with the complete compact inspector. Hosts without these optional Workspace APIs retain Session access and show capability availability explicitly. Existing companion routes remain available during migration. Browser workflows and platform builds are qualified separately from physical-iPhone behavior.
 
-The macOS app is a local ad-hoc-signed preview with manual updates. Its earlier working copy is retained for recovery. This release does not install or manage the DSH host. The default desktop screens use the existing companion; direct device access requires a compatible DSH Host.
+The macOS app is a local ad-hoc-signed preview with manual updates; it is not a notarized distribution. Its earlier working copy is retained for recovery. It opens the same workspace experience and connects to an enrolled DSH Host. This release does not install or manage the DSH Host.
 
 ### Native TestFlight build
 
@@ -155,6 +155,8 @@ Choose **View sessions**, then **Read conversation**. The direct preview reads D
 Desktop grants stay in Electron's main process, encrypted with the operating system's protected storage. Missing encryption or Linux's plaintext backend refuses access. Ordinary renderer storage contains no grant. Window-bound IPC permits only the preview's DSH operations, pins each request to the saved origin, and refuses redirects and browser-cookie authentication. Closing the window releases its connections and leaves the external Host running. **Forget on this device** removes local access; revoke the device in the Host's Devices settings to withdraw its server-side grant.
 
 The macOS package check uses an ad-hoc-signed app and a real isolated DSH profile with recorded model responses. It covers enrollment, Session reading, a prompt, an approved file operation, multi-select answers, offline draft retention, reconnection, cold restart with protected access, and Host-side revocation. Focused tests cover storage failures, cancellation, IPC sender isolation, and ownership teardown. This evidence does not qualify Windows, Linux, notarization, automatic updates, or physical-iPhone behavior.
+
+Build a local Apple Silicon preview with `CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --mac --arm64 --dir --config.mac.identity=- --config.mac.hardenedRuntime=false --config.mac.notarize=false --publish never`. These command-line overrides use [Electron Builder's ad-hoc signing configuration](https://www.electron.build/v26/docs/mac/) for a local preview.
 
 After packaging, run `npm run verify:dsh-desktop -- "/absolute/path/Daedal DSH.app"`. This loads the packaged desktop Host entry and main-process access modules, including their transitive dependencies, and checks the pinned DSH Client and Cordis identities. The source dependency check alone cannot establish that these dependencies are present in the shipped app.
 
