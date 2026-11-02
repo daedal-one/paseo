@@ -1212,6 +1212,35 @@ describe("native DSH Conversation ownership", () => {
 });
 
 describe("native DSH text submission", () => {
+  it.each(["queue", "steer"] as const)(
+    "dispatches the explicit %s mode exactly once without a separate cancellation",
+    async (mode) => {
+      const f = await fileRuntime();
+      const entered = fileDeferred<void>();
+      const reply = fileDeferred<unknown>();
+      f.host.replyToPrompt(() => {
+        entered.resolve();
+        return reply.promise;
+      });
+      try {
+        f.prompt.setText("Preserve this instruction");
+        const pending = f.prompt.send(mode);
+        await entered.promise;
+        expect(f.prompt.send(mode === "queue" ? "steer" : "queue")).toBe(pending);
+        expect(f.host.prompts).toHaveLength(1);
+        expect(f.host.prompts[0]).toMatchObject({
+          mode,
+          content: [{ type: "text", text: "Preserve this instruction" }],
+        });
+        reply.resolve({ ok: true, value: { accepted: true } });
+        expect(await pending).toBe(true);
+        expect(f.host.calls).not.toContain("session/cancel");
+      } finally {
+        reply.resolve({ ok: true, value: { accepted: true } });
+        await f.runtime.dispose();
+      }
+    },
+  );
   it("sends one exact queued prompt and clears only a Host-accepted draft", async () => {
     const host = conversationHost();
     const runtime = await createDshHostRuntime(host.options);
@@ -2465,6 +2494,32 @@ function selectSources(
 }
 
 describe("local file selection and whole-intent Send", () => {
+  it.each(["queue", "steer"] as const)(
+    "retains the captured %s mode across file preparation and coalesced sends",
+    async (mode) => {
+      const f = await fileRuntime();
+      const held = fileDeferred<string>();
+      const source = selectedSource();
+      source.read.mockReturnValueOnce(held.promise);
+      try {
+        f.prompt.setText("Read the selected file");
+        expect(selectSources(f.prompt, [source])).toBe(true);
+        const pending = f.prompt.send(mode);
+        expect(source.read).toHaveBeenCalledTimes(1);
+        expect(f.prompt.send(mode === "queue" ? "steer" : "queue")).toBe(pending);
+        expect(f.host.prompts).toHaveLength(0);
+        held.resolve("YQ==");
+        expect(await pending).toBe(true);
+        expect(f.host.uploads).toHaveLength(1);
+        expect(f.host.prompts).toHaveLength(1);
+        expect(f.host.prompts[0]).toMatchObject({ mode });
+        expect(f.host.calls).not.toContain("session/cancel");
+      } finally {
+        held.resolve("YQ==");
+        await f.runtime.dispose();
+      }
+    },
+  );
   it("does not let a new file selection or manual upload join an existing text prompt", async () => {
     const f = await fileRuntime();
     const held = fileDeferred<unknown>();

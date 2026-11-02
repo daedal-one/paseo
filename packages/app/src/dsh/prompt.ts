@@ -56,6 +56,8 @@ export interface DshPromptImage {
   readonly name?: string;
 }
 
+export type DshPromptMode = Parameters<SessionFace["prompt"]>[1];
+
 type PromptContent = Parameters<SessionFace["prompt"]>[0];
 type PromptContentPart = PromptContent[number];
 let selectionEpochSequence = 0;
@@ -77,6 +79,7 @@ function sameImages(left: readonly DshPromptImage[], right: readonly DshPromptIm
 }
 
 interface PromptAttempt {
+  readonly mode: DshPromptMode;
   readonly requestId: SessionRequestId;
   readonly text: string;
   readonly images: readonly DshPromptImage[];
@@ -98,6 +101,7 @@ interface SelectedFile {
   readonly source: DshPromptFileSource | null;
 }
 interface FileIntent {
+  readonly mode: DshPromptMode;
   readonly text: string;
   readonly images: readonly DshPromptImage[];
   readonly generation: ReturnType<ConnectionHandle["generation"]["getSnapshot"]>;
@@ -497,7 +501,8 @@ export class DshPrompt {
     return true;
   }
 
-  send(): Promise<boolean> {
+  /** Capture Queue or Steer with the draft; a pending send cannot change its mode. */
+  send(mode: DshPromptMode = "queue"): Promise<boolean> {
     if (this.pending !== null) return this.pending;
     if (this.closed || !this.snapshot.canSend || this.upload !== null)
       return Promise.resolve(false);
@@ -510,6 +515,7 @@ export class DshPrompt {
     let intent: FileIntent | null = null;
     if (this.selected.length > 0) {
       intent = {
+        mode,
         text: this.snapshot.text,
         images: this.snapshot.images,
         generation: this.generation,
@@ -523,7 +529,7 @@ export class DshPrompt {
       this.intent = intent;
       this.publish({ fileSubmission: { kind: "preparing" } });
     }
-    const running = intent === null ? this.dispatchPrompt() : this.runFileIntent(intent);
+    const running = intent === null ? this.dispatchPrompt(mode) : this.runFileIntent(intent);
     void running.then((accepted) => {
       if (this.pending === done) {
         if (this.intent === intent) this.intent = null;
@@ -602,14 +608,15 @@ export class DshPrompt {
       }
     }
     if (!this.currentIntent(intent)) return false;
-    return this.dispatchPrompt(intent);
+    return this.dispatchPrompt(intent.mode, intent);
   }
 
-  private dispatchPrompt(intent?: FileIntent): Promise<boolean> {
+  private dispatchPrompt(mode: DshPromptMode, intent?: FileIntent): Promise<boolean> {
     const generation = intent?.generation ?? this.connection.generation.getSnapshot();
     const requestId = this.createRequestId();
     const admission = new PromptAdmission(this.binding, requestId);
     const attempt: PromptAttempt = {
+      mode,
       requestId,
       text: intent?.text ?? this.snapshot.text,
       images: intent?.images ?? this.snapshot.images,
@@ -724,7 +731,7 @@ export class DshPrompt {
       if (this.closed) return false;
       attempt.dispatched = true;
       if (intent !== undefined) intent.promptStarted = true;
-      result = await this.binding.session.prompt(content, "queue", signal, attempt.requestId);
+      result = await this.binding.session.prompt(content, attempt.mode, signal, attempt.requestId);
     } catch {
       if (this.acceptObserved(attempt)) return true;
       return this.markUnknown(attempt);

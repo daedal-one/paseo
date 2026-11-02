@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useIsFocused } from "@react-navigation/native";
@@ -10,7 +10,9 @@ import type { DshDirectory } from "../directory";
 import { AccessError, HostRow, Pairing } from "./host-pairing";
 import { HostDiscovery } from "./host-discovery";
 import { DirectoryView } from "./workspace-screen";
-import { WebConversation } from "./web-conversation";
+import type { ConnectionHostId } from "@deepseek-ai/dsh-client";
+import { desktopDshRequest } from "../desktop/bridge";
+import { createDshCreationStorage } from "../creation-storage.web";
 import { styles } from "./styles";
 
 function EnrollmentEntry({ model }: { model: DshDirectory }) {
@@ -45,21 +47,20 @@ function EnrollmentEntry({ model }: { model: DshDirectory }) {
   );
 }
 
-function DesktopContent({ model }: { model: DshDirectory }) {
+function DesktopContent({
+  model,
+  onConnect,
+}: {
+  model: DshDirectory;
+  onConnect(hostId: ConnectionHostId): Promise<void>;
+}) {
   const { t } = useTranslation();
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const scan = useCallback(() => model.scan(), [model]);
   const reload = useCallback(() => model.reload(), [model]);
   const idle = state.pairing.status === "idle";
-  const conversation = useMemo(
-    () =>
-      state.runtime !== null && state.conversation !== null ? (
-        <WebConversation model={model} state={state} />
-      ) : null,
-    [model, state],
-  );
   return (
-    <DirectoryView model={model} state={state} conversation={conversation}>
+    <DirectoryView model={model} state={state} conversation={null}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.muted}>{t("nativeDsh.desktopAccess")}</Text>
         {state.error !== null && <AccessError code={state.error} />}
@@ -87,7 +88,13 @@ function DesktopContent({ model }: { model: DshDirectory }) {
         {idle &&
           state.directory.status === "ready" &&
           state.directory.hosts.map((host) => (
-            <HostRow key={host.hostId} model={model} host={host} busy={state.busy} />
+            <HostRow
+              key={host.hostId}
+              model={model}
+              host={host}
+              busy={state.busy}
+              onConnect={onConnect}
+            />
           ))}
         {idle && (
           <Button variant="ghost" disabled={state.busy} onPress={reload}>
@@ -104,6 +111,7 @@ function DesktopContent({ model }: { model: DshDirectory }) {
 
 export default function DesktopDshDirectoryScreen() {
   const focused = useIsFocused();
+  const [epoch, setEpoch] = useState(0);
   const [model, setModel] = useState<DshDirectory | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -129,12 +137,27 @@ export default function DesktopDshDirectoryScreen() {
       setModel(null);
       if (owned !== null) void owned.dispose().catch(() => setFailed(true));
     };
-  }, [focused]);
+  }, [focused, epoch]);
+  const connect = useCallback(
+    async (hostId: ConnectionHostId) => {
+      if (model === null) return;
+      try {
+        await model.dispose();
+        const legacy = await createDshCreationStorage().transact(hostId, (text) => text);
+        await desktopDshRequest({ type: "canonical-open", hostId, legacyCreation: legacy.after });
+      } catch {
+        setFailed(true);
+      } finally {
+        setEpoch((value) => value + 1);
+      }
+    },
+    [model],
+  );
   return (
     <View style={styles.screen}>
       <ProductHeader model={model} />
       {failed && <AccessError code="runtime-unavailable" />}
-      {focused && model !== null && <DesktopContent model={model} />}
+      {focused && model !== null && <DesktopContent model={model} onConnect={connect} />}
     </View>
   );
 }

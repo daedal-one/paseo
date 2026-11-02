@@ -3,33 +3,25 @@ version: 1
 slug: "packages-app-src-dsh-ui-workspace-screen-tsx"
 primary_target: "packages/app/src/dsh/ui/workspace-screen.tsx"
 related_targets:
-  [
-    "packages/app/src/dsh/ui/sessions.tsx",
-    "packages/app/src/dsh/ui/workspace-contents.tsx",
-    "packages/app/src/dsh/ui/workspace-work.tsx",
-    "packages/app/src/dsh/ui/workspace-files.tsx",
-    "packages/app/src/dsh/ui/workspace-memory.tsx",
-    "packages/app/src/dsh/ui/workspace-styles.ts",
-    "packages/app/src/dsh/ui/product-header.tsx",
-  ]
+  ["packages/client/ui-layout", "packages/client/ui-workspace", "packages/client/ui-theme"]
 ---
 
-# Workspace product shell
+# Canonical workspace and Session interface
 
-SEED: accepted-workspace-dense-inspection
+Mode: Operate. The same canonical DSH browser contribution graph serves Web, desktop and iPhone; native shells own transport and credentials only. Durable Work leads, with Files and Memory in the workspace and every configured Session capability retained.
 
-SCOPE: Extend the accepted workspace-first browser, desktop and iPhone surface with durable Work, registered Workspace Files and scoped Memory. Preserve the existing identity and primitives. Android connection qualification remains deferred.
+## Direction contract
 
-THESIS: Give each outcome a lasting home, with its files, knowledge and executions close at hand.
+THESIS: A dispatch board keeps durable Work beside its canonical conversation and inspection; no dashboard tiles or stacked introduction panels.
 
-OWN-WORLD: A quiet, dense workbench in the existing dark forest palette. Workspace navigation gives stable orientation; status, readable content and evidence carry emphasis. Existing theme tokens and controls remain authoritative.
+OWN-WORLD: A short charcoal forest header, neutral reading field, emerald actions, ruled rows, compact sans typography and explicit state labels. Dark mode preserves the same geometry and contrast roles.
 
-STORY: Choose a workspace, create a durable brief, link or start an execution, and return to the same work after execution ends. Browse the registered source files and review memory with its provenance. Inspect every execution through its complete recorded details.
+STORY: Select a workspace and work item, read its brief, create or link an execution, inspect the canonical Session, and return with the work selection intact.
 
-FIRST VIEWPORT: A compact workspace picker and New work action sit above one horizontal Overview, Work, Files and Memory rail. Work owns the main overview column; Files and Memory sit alongside it on desktop and below it on phones. Execution history follows as supporting detail. No duplicate workspace hero or metric tiles. Work detail replaces the canvas, with Back beside the title. Query and link controls stay grouped; registration and execution-history refresh belong to Overview. The inspector still replaces the full content region: at 1280 by 800 its data begins within 150 pixels of the viewport top and has at least 600 pixels of height.
+FIRST VIEWPORT: Forty-eight-pixel header with workspace selection and labeled Tools drawer; 38-pixel four-destination navigation; roughly 56 percent Work board and 44 percent selected detail. Dense rows show real state and revisions. Inspect places the existing complete canonical Session beside the Work board, with the attributed Work title, visible brief, actions and execution picker above it; desktop shows its canonical Chat and selected inspection together. Expand gives that same mounted Session the full canvas; Show work restores its surrounding board without replacing its draft or inspection state. Phone and constrained main panes show one Session pane with a clear return action, preserving selected Work and all four workspace destinations; phone navigation targets are 44 pixels. Files and Memory reuse the board/detail grammar.
 
-FORM: Operate. A shared adaptive React Native surface with native safe areas and desktop window chrome. Work creation and editing are inline; the existing execution-creation sheet retains protected focus. Rows align on common rails, status colors encode actual persisted states, and controls have phone-sized touch targets. Preserve all six inspection tabs, request selection, tools, approvals, usage and raw events. Resizing preserves the connection, selection and session draft.
+FORM: Dispatch board, the challenger selected by the user. Direction exploration seed `3f5ccf74` is recorded in `.impeccable/planning/direction-analysis.md`; it is not an image-generation seed. Approved composition: `.impeccable/mocks/dispatch-board-beside.webp` (Board beside detail), with image provenance and approval in its adjacent JSON; this preserves the original decision asset `.impeccable/mocks/decision/challenger-dispatch.webp`. Signature interaction: selecting a stable row reveals its detail without reordering the board; transient execution state never replaces durable Work state. Motion follows panel selection and respects reduced motion.
 
-PROOF: Real Host flows must cover durable creation and edits, restart readback, execution linking, registered file previews, memory provenance and review, plus all six inspector tabs at desktop and phone widths. Browser captures establish browser responsiveness; iPhone and desktop exports establish compilation only. Device, packaged application and deployment qualification remain separate evidence.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-CONSTRAINTS: Work is owned by DSH, and human completion never implies protected evidence acceptance. Creating Work does not submit a model prompt. Files address the registered source directory, never an arbitrarily selected execution filesystem. Memory retains its scope, status, exact revision and evidence. Unsupported, offline, loading, failed, empty and uncertain mutation outcomes remain distinct. No private Vision implementation or specification is included. Existing global PRODUCT/DESIGN documentation has inherited Paseo scope; do not rewrite that system as part of this extension.
+Constraints: source facts outrank generated sample copy. Work is Open/Completed/Cancelled, not Running; only execution status describes running. No invented global search, avatar, file timestamps, generic model-context summary or control. Existing sidebar/global plugin contributions remain reachable through Tools; all main, rightbar and overlay slots retain their owners. Canonical Session views are reused, never copied or embedded through a link/iframe substitute. Loading, unavailable, failure and uncertain mutation outcomes stay explicit. Browser captures qualify responsive browser behavior; native/device qualification stays separate.

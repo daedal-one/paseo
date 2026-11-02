@@ -874,7 +874,12 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
       pathname === "/schedules" ||
       routeHasKnownHost);
 
-  if (pathname === "/" || pathname === "/workspace" || pathname === "/dsh-hosts") {
+  if (
+    pathname === "/" ||
+    pathname === "/workspace" ||
+    pathname === "/dsh-hosts" ||
+    pathname === "/dsh-canonical"
+  ) {
     return (
       <View style={layoutStyles.surfaceFill}>
         <WindowChromeRegion corners="both">
@@ -908,6 +913,7 @@ function RootStack() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="dsh-hosts" />
+      <Stack.Screen name="dsh-canonical" />
       <Stack.Screen name="workspace" />
       <Stack.Protected guard={storeReady}>
         <Stack.Screen name="welcome" />

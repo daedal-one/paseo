@@ -325,7 +325,10 @@ export class DesktopDshAccess {
     return;
   }
 
-  async run(windowId: number, command: DesktopDshCommand): Promise<unknown> {
+  async run(
+    windowId: number,
+    command: Exclude<DesktopDshCommand, { type: "canonical-open" }>,
+  ): Promise<unknown> {
     switch (command.type) {
       case "discover-companions":
         return this.discoverCompanions();

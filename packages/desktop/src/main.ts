@@ -551,6 +551,10 @@ ipcMain.handle("paseo:browser:copy-element", (_event, payload: unknown) =>
 
 protocol.registerSchemesAsPrivileged([
   {
+    scheme: "dshremote",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+  },
+  {
     scheme: APP_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },

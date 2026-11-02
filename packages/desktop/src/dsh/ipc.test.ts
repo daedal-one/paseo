@@ -4,7 +4,12 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { DesktopDshIpc } from "./ipc";
 import { DesktopDshDeviceStore } from "./device-store";
 import { DshAccessError, type DesktopDshReply } from "@getpaseo/protocol/dsh-access";
-const electron = vi.hoisted(() => ({ handle: vi.fn(), removeHandler: vi.fn() }));
+const electron = vi.hoisted(() => ({
+  handle: vi.fn(),
+  removeHandler: vi.fn(),
+  on: vi.fn(),
+  removeAllListeners: vi.fn(),
+}));
 const discovery = vi.hoisted(() => vi.fn());
 vi.mock("electron", () => ({ ipcMain: electron }));
 vi.mock("@getpaseo/server/companion-discovery", () => ({
@@ -40,10 +45,9 @@ function fixture() {
   });
   // Only the WebContents fields used by this facade are represented by the test emitter.
   facade.attach(contents as unknown as WebContents, "paseo://app");
-  const handler = electron.handle.mock.calls[0][1] as (
-    event: IpcMainInvokeEvent,
-    input: unknown,
-  ) => Promise<DesktopDshReply>;
+  const handler = electron.handle.mock.calls.find(
+    ([channel]) => channel === "daedal:dsh:request",
+  )![1] as (event: IpcMainInvokeEvent, input: unknown) => Promise<DesktopDshReply>;
   const request = (input: unknown, sender = contents, senderFrame: unknown = contents.mainFrame) =>
     handler({ sender, senderFrame } as IpcMainInvokeEvent, input);
   return { facade, contents, list, request };

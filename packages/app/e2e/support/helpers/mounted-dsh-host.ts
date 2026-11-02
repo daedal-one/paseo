@@ -57,7 +57,10 @@ function workspaceProvenancePlugin(resultPath: string): string {
 
 /** Preserve the recorded main turn and add one keyless response for the real naming helper. */
 function workspaceNamingReplay(): string {
-  const text = JSON.stringify({ HEAD: "fix-recovery", "refs/heads/main": "fix-recovery" });
+  const text = JSON.stringify({
+    HEAD: "fix-recovery",
+    "refs/heads/main": "fix-recovery",
+  });
   return JSON.stringify({
     patches: [
       {
@@ -133,6 +136,8 @@ const imageObjectIdSchema = z.string().regex(/^sha256:([a-f0-9]{64})$/);
 
 interface MountedDshHostOptions {
   fixture?: string;
+  /** Serve the Host's complete canonical interface without a shadowing companion mount. */
+  canonicalInterface?: boolean;
   /** Hold a real model turn until teardown so queue assertions need no timing window. */
   holdTurn?: boolean;
   /** Serialized provider replay entries, written only inside this test Host's private home. */
@@ -186,7 +191,11 @@ class MountedHostProcess {
   private closedAt: number | undefined;
   private forced = false;
   private readonly errors: string[] = [];
-  private readonly signals: { signal: NodeJS.Signals; sent: boolean; at: number }[] = [];
+  private readonly signals: {
+    signal: NodeJS.Signals;
+    sent: boolean;
+    at: number;
+  }[] = [];
   private output = "";
   private readonly partial = { stdout: "", stderr: "" };
   private readonly discarding = { stdout: false, stderr: false };
@@ -347,6 +356,15 @@ async function durableWorkspaceOverlay(
   return fixture.prepareWorkspaceTest(home, cwd, { existingWork });
 }
 
+function mountedFixturePath(options: MountedDshHostOptions): string {
+  return path.join(
+    repository,
+    "snapshots",
+    options.fixture ??
+      (options.workspaceProvenance ? "sdk/workspace-provenance/session.v3.jsonl" : testFixture),
+  );
+}
+
 export async function launchMountedDshHost(options: MountedDshHostOptions = {}) {
   const dist = path.resolve(companionRepoRoot(), ".dev/dsh-web/index.html");
   const home = await mkdtemp(path.join(os.tmpdir(), "paseo-mount-dsh-"));
@@ -371,12 +389,7 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
     return closeTask;
   };
   try {
-    const fixture = path.join(
-      repository,
-      "snapshots",
-      options.fixture ??
-        (options.workspaceProvenance ? "sdk/workspace-provenance/session.v3.jsonl" : testFixture),
-    );
+    const fixture = mountedFixturePath(options);
     const cwd = path.join(home, "workspace");
     const marker = path.join(cwd, APPROVAL_MARKER_NAME);
     const override = path.join(home, "replay.override.json");
@@ -397,14 +410,17 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       "  disabled: true",
       "- id: session-telemetry-otel",
       "  disabled: true",
-      "- insert:",
-      "    - id: daedal-browser-preview",
-      "      name: '@deepseek-ai/dsh-host-frontend-static'",
-      "      config:",
-      `        distIndex: ${dist}`,
-      "        mountPath: /daedal",
-      "        indexPaths: [/dsh-hosts, /workspace]",
     ];
+    if (!options.canonicalInterface)
+      overlayRows.push(
+        "- insert:",
+        "    - id: daedal-browser-preview",
+        "      name: '@deepseek-ai/dsh-host-frontend-static'",
+        "      config:",
+        `        distIndex: ${dist}`,
+        "        mountPath: /daedal",
+        "        indexPaths: [/dsh-hosts, /workspace]",
+      );
     if (options.requireMarkerApproval) {
       overlayRows.push(
         "- insert:",
@@ -473,7 +489,9 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
     const origin = new URL(loginUrl).origin;
     const cookie = login.headers.getSetCookie()[0].split(";", 1)[0];
     const cookieFile = path.join(home, "companion-auth.json");
-    await writeFile(cookieFile, JSON.stringify({ origin, cookie }), { mode: 0o600 });
+    await writeFile(cookieFile, JSON.stringify({ origin, cookie }), {
+      mode: 0o600,
+    });
     await mkdir(cwd, { recursive: true });
     // Keep setup within the owned process cleanup boundary; creation opts into this Git workspace.
     await new Promise<void>((resolve, reject) => {
@@ -498,7 +516,7 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
     return {
       config: { url: origin, cookieFile },
       /** The companion route served by the Host at its own origin. */
-      companionUrl: `${origin}/daedal/dsh-hosts`,
+      companionUrl: `${origin}/daedal/${options.canonicalInterface ? "workspace" : "dsh-hosts"}`,
       /** Scratch working directory this Host owns, usable as a Session target. */
       workspaceDir: cwd,
       /** The recorded prompt the replay fixture answers, for driving one completed turn. */
@@ -616,7 +634,10 @@ export async function launchMountedDshHost(options: MountedDshHostOptions = {}) 
       async readWorkspaceNaming() {
         if (!existsSync(workspaceNamingResult)) return null;
         return z
-          .object({ HEAD: z.literal("fix-recovery"), "refs/heads/main": z.literal("fix-recovery") })
+          .object({
+            HEAD: z.literal("fix-recovery"),
+            "refs/heads/main": z.literal("fix-recovery"),
+          })
           .strict()
           .parse(JSON.parse(await readFile(workspaceNamingResult, "utf8")));
       },
@@ -710,7 +731,9 @@ export async function attachDshSession(
   context: BrowserContext,
   config: { url: string; cookieFile: string },
 ): Promise<void> {
-  const auth = JSON.parse(await readFile(config.cookieFile, "utf8")) as { cookie: string };
+  const auth = JSON.parse(await readFile(config.cookieFile, "utf8")) as {
+    cookie: string;
+  };
   const [name, value] = auth.cookie.split("=", 2);
   await context.addCookies([
     { name, value, url: config.url, httpOnly: true, sameSite: "Lax" as const },

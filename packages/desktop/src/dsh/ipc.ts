@@ -4,6 +4,7 @@ import {
   desktopDshCommandSchema,
   type DesktopDshReply,
 } from "@getpaseo/protocol/dsh-access";
+import { CanonicalDshWindows } from "./canonical/windows.js";
 import { DesktopDshAccess } from "./access.js";
 import type { DesktopDshDeviceStore } from "./device-store.js";
 
@@ -18,7 +19,9 @@ interface AppWindow {
 export class DesktopDshIpc {
   private readonly windows = new Map<number, AppWindow>();
   private readonly access: DesktopDshAccess;
+  private readonly canonical: CanonicalDshWindows;
   constructor(store: DesktopDshDeviceStore) {
+    this.canonical = new CanonicalDshWindows(store);
     this.access = new DesktopDshAccess(store, (id, event) => {
       const window = this.windows.get(id);
       if (
@@ -50,6 +53,12 @@ export class DesktopDshIpc {
       await window.closing;
       if (window.epoch !== epoch || this.windows.get(event.sender.id) !== window)
         throw new DshAccessError("request-cancelled");
+      if (parsed.data.type === "canonical-open") {
+        await this.access.closeWindow(event.sender.id);
+        await this.canonical.open(parsed.data.hostId, parsed.data.legacyCreation);
+        return { ok: true, value: null };
+      }
+      if (parsed.data.type === "forget") await this.canonical.forget(parsed.data.hostId);
       return { ok: true, value: await this.access.run(event.sender.id, parsed.data) };
     } catch (error) {
       return {
@@ -85,6 +94,6 @@ export class DesktopDshIpc {
     ipcMain.removeHandler("daedal:dsh:request");
     const pending = [...this.windows.values()].map((window) => window.closing);
     this.windows.clear();
-    await Promise.all([...pending, this.access.dispose()]);
+    await Promise.all([...pending, this.access.dispose(), this.canonical.dispose()]);
   }
 }

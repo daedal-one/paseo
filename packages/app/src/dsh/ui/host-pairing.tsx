@@ -78,8 +78,9 @@ interface HostRowProps {
   model: DshDirectory;
   host: DshDirectoryHost;
   busy: boolean;
+  onConnect?: (hostId: DshDirectoryHost["hostId"]) => Promise<void>;
 }
-export function HostRow({ model, host, busy }: HostRowProps) {
+export function HostRow({ model, host, busy, onConnect }: HostRowProps) {
   const { t } = useTranslation();
   const forget = useCallback(async () => {
     const confirmed = await confirmDialog({
@@ -91,7 +92,10 @@ export function HostRow({ model, host, busy }: HostRowProps) {
     });
     if (confirmed) await model.forget(host.hostId);
   }, [model, host.hostId, t]);
-  const connect = useCallback(() => model.connect(host.hostId), [model, host.hostId]);
+  const connect = useCallback(
+    () => (onConnect === undefined ? model.connect(host.hostId) : onConnect(host.hostId)),
+    [model, host.hostId, onConnect],
+  );
   return (
     <View style={styles.row}>
       {host.status === "paired" ? (
